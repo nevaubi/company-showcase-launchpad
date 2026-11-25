@@ -4,9 +4,13 @@
  *   bun scripts/source-import.ts --snapshot=<sha256> [--retry-failed]
  * Failed definitions are quarantined. Explicit --retry-failed is required to reconsider them.
  * Interrupted runs retain a verified contiguous prefix; publication is atomic in PostgreSQL.
+ * --receipt=<file> (the worker passes it): what the run did, as JSON, for job_runs. The run also lists
+ * staging snapshots claimed HELD_AFTER times or more without being published: from migration 0069 an
+ * unnamed claim leaves them alone (review rev-workers S3); --snapshot=<id> still takes one.
  */
 import { randomUUID } from "node:crypto";
 import { importSourceSnapshot, SourceDataError, SourcePaused } from "./lib/source-import";
+import { receiptText, writeRunReceipt } from "./lib/run-receipt";
 import type { SourceFileManifest, SourceSnapshot } from "../src/lib/sources/schema";
 
 const args=Object.fromEntries(process.argv.slice(2).map(a=>{const [k,...v]=a.replace(/^--/,"").split("=");return [k,v.join("=")||"true"];}));
@@ -31,9 +35,13 @@ async function rpc<T>(name:string,params:Record<string,unknown>):Promise<T>{
   return data as T;
 }
 let published=0; let failed=0; let paused=false;
+/** The claim count at which source_claim_snapshot (0069) stops taking a snapshot by itself. */
+const HELD_AFTER=12;
+let firstError:string|null=null;
 for(let n=0;n<max && Date.now()<deadline;n++){
   await dbGate("official-source-claim");
-  const snapshot=await rpc<SourceSnapshot|null>("source_claim_snapshot",{_owner:owner,_snapshot_id:args.snapshot??null,_ttl_seconds:180,_retry_failed:args["retry-failed"]==="true"});
+  // The claimed row also carries how often it was claimed (attempts, counted by the claim itself).
+  const snapshot=await rpc<(SourceSnapshot&{attempts?:number})|null>("source_claim_snapshot",{_owner:owner,_snapshot_id:args.snapshot??null,_ttl_seconds:180,_retry_failed:args["retry-failed"]==="true"});
   if(!snapshot)break;
   let active=true; let renewing=false;
   const heartbeat=setInterval(async()=>{
@@ -71,10 +79,19 @@ for(let n=0;n<max && Date.now()<deadline;n++){
     const quarantine=e instanceof SourceDataError || /incorrect header check|invalid.*compressed|unexpected end of file/i.test(message);
     await rpc("source_release_snapshot",{_snapshot_id:snapshot.id,_owner:owner,_failed:quarantine,_error:message}).catch(()=>undefined);
     if(e instanceof SourcePaused){paused=true;log({event:"source_import_paused",snapshot_id:snapshot.id,reason:message});break;}
-    failed++;log({event:quarantine?"source_snapshot_quarantined":"source_import_retry_later",snapshot_id:snapshot.id,error:message});
+    failed++;firstError??=`${snapshot.id.slice(0,12)} (${snapshot.dataset_id}, claim ${snapshot.attempts}): ${receiptText(message,200)}`;
+    log({event:quarantine?"source_snapshot_quarantined":"source_import_retry_later",snapshot_id:snapshot.id,attempts:snapshot.attempts,error:message});
     // Do not spin on a transient outage or on the same explicitly selected failed definition.
     if(!quarantine||args.snapshot)break;
   } finally {clearInterval(heartbeat);}
 }
+// Snapshots the queue leaves alone: listed on every run until someone names one or it is replaced.
+const held=await sb.from("source_snapshots").select("id,dataset_id,attempts,last_error,created_at").eq("status","staging")
+  .gte("attempts",HELD_AFTER).order("created_at").limit(20);
+const heldList=held.error?null:(held.data??[]).map(h=>({id:h.id,dataset_id:h.dataset_id,attempts:h.attempts,last_error:receiptText(h.last_error??"",200)}));
+if(heldList?.length)log({event:"source_import_held",count:heldList.length,held:heldList,retry:"bun scripts/source-import.ts --snapshot=<id>"});
 log({event:"source_import_finished",published,failed,paused});
+writeRunReceipt(args.receipt,{script:"source-import",items:published,published,failed,paused,
+  ...(heldList?.length?{held:heldList}:{}),...(held.error?{held_unknown:receiptText(held.error.message,120)}:{}),
+  ...(failed&&firstError?{error:firstError}:{})});
 if(failed)process.exitCode=1;

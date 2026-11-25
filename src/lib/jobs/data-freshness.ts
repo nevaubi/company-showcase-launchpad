@@ -71,9 +71,12 @@ export function dataFreshness(rows: { key: string; newest: string | null }[], no
 /**
  * Rows in job_state that are bookkeeping, not pauses a person acts on: per-item receipts, provider
  * circuits (shown on their own), alert episodes, remedy receipts, loop requests and the
- * filing-steps accession marker.
+ * filing-steps accession marker. The official-source worker keeps its per-dataset refresh state
+ * (JSON) and collection locks, the FRED probe time and the leases of its three lanes in the same
+ * column; none of them is a pause. An open refresh family circuit (`source-refresh-family:<family>`,
+ * "transient: ... [n=2]") is one, and stays visible.
  */
-export const BOOKKEEPING_JOB_RE = /^(filing-steps-fail:|config-strike:|registrant-drift:|form4-fail:|form4-repair$|form4-seen:|reports-due-fail:|provider:|alert:|alert-digest$|remedy:|loop-request:|supply-intel-request$|estimates-none:|filing-steps-accn$|earnings-repair$|options-night$|options-tail$|[a-z-]+-slice$)/;
+export const BOOKKEEPING_JOB_RE = /^(filing-steps-fail:|config-strike:|registrant-drift:|form4-fail:|form4-repair$|form4-seen:|reports-due-fail:|provider:|alert:|alert-digest$|remedy:|loop-request:|supply-intel-request$|estimates-none:|filing-steps-accn$|earnings-repair$|options-night$|options-tail$|source-refresh-state:|source-refresh-lock:|source-refresh-probe:|official-sources-runner$|official-source-refresh$|abs-bulk-runner$|[a-z-]+-slice$)/;
 /** Reasons that are normal operation (owner choices, vendor pacing). */
 export const ROUTINE_REASON_RE = /^(owner|pacing):/;
 

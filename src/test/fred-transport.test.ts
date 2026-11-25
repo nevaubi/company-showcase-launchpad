@@ -17,6 +17,9 @@ mode=MODE
 if any(key in os.environ for key in ("SUPABASE_SERVICE_ROLE_KEY","FRED_TEST_UNRELATED_SECRET")):
  print(json.dumps({"version":1,"ok":False,"error":{"code":"environment_leak","message":"Unexpected unrelated environment"}}))
  sys.exit(1)
+if mode=="cap" and request["timeout_ms"]!=20000:
+ print(json.dumps({"version":1,"ok":False,"error":{"code":"invalid_request","message":"timeout_ms was %d" % request["timeout_ms"]}}))
+ sys.exit(1)
 if mode=="hang":
  signal.signal(signal.SIGTERM,signal.SIG_IGN)
  os.write(3,b"partial")
@@ -43,8 +46,12 @@ if mode=="wrong-length":response["bytes"]+=1
 if mode=="wrong-url":response["resolved_url"]="https://example.invalid/graph/fredgraph.csv?id=CCSA"
 if mode=="failure":
  response={"version":1,"ok":False,"error":{"code":"network_error","message":"Official FRED request failed"}}
+if mode=="refused":
+ response={"version":1,"ok":False,"error":{"code":"http_status","message":"The source did not return a complete successful response.","status":429}}
+if mode=="bad-status":
+ response={"version":1,"ok":False,"error":{"code":"http_status","message":"x","status":"429; injected"}}
 print(json.dumps(response,separators=(",",":")))
-sys.exit(1 if mode=="failure" else 0)
+sys.exit(1 if mode in ("failure","refused","bad-status") else 0)
 `;
 beforeEach(async () => {
   folder = await mkdtemp(join(tmpdir(), "fred-process-test-"));
@@ -123,6 +130,34 @@ describe("bounded Python FRED process transport", () => {
     expect(Date.now() - started).toBeLessThan(2500);
     expect(() => process.kill(launched!.pid!, 0)).toThrow();
     await expect(readFile(join(folder, "response.csv"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it("caps one transfer at 20 seconds however much of the run is left, for parent and child alike", async () => {
+    // 120 seconds a transfer let four silent series use a whole 480 second run
+    const { FRED_TRANSFER_TIMEOUT_MS } = await import("../../scripts/lib/fred-transport");
+    expect(FRED_TRANSFER_TIMEOUT_MS).toBe(20_000);
+    mode = "cap";
+    await expect(run({ deadline: Date.now() + 480_000 })).resolves.toMatchObject({ notModified: false });
+  });
+  it("passes on less than the cap when the run has less left", async () => {
+    mode = "cap";
+    await expect(run({ deadline: Date.now() + 5000 })).rejects.toThrow(/invalid_request/);
+  });
+  it("says with a code whether FRED gave no answer or a bad one", async () => {
+    mode = "hang";
+    const silent = await run({ deadline: Date.now() + 100 }).then(() => null, error => error);
+    expect(silent).toMatchObject({ name: "FredTransportError", code: "deadline", message: "FRED download deadline exceeded" });
+    mode = "failure";
+    const refused = await run().then(() => null, error => error);
+    expect(refused).toMatchObject({ name: "FredTransportError", code: "network_error" });
+    await expect(run({ deadline: Date.now() - 1 })).rejects.toMatchObject({ name: "FredTransportError", code: "deadline" });
+  });
+  it("carries the status of a refused answer, and only a plain status number", async () => {
+    // a FRED 403 or 429 must count against the publisher, not against each of 120 series in turn
+    mode = "refused";
+    await expect(run()).rejects.toMatchObject({ name: "FredTransportError", code: "http_status", status: 429,
+      message: "FRED request failed (http_status 429): The source did not return a complete successful response." });
+    mode = "bad-status";
+    await expect(run()).rejects.toThrow("FRED Python transport returned an invalid bounded receipt");
   });
   it("kills an overlong child output before collecting an unbounded log", async () => {
     mode = "flood";

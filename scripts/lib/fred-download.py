@@ -48,8 +48,11 @@ ERRORS = {
 
 
 class DownloadError(Exception):
-    def __init__(self, code):
+    def __init__(self, code, status=None):
         self.code = code if code in ERRORS else "internal_error"
+        # The HTTP status of a refused answer, so the parent can tell "not now or not you" (403, 429,
+        # 5xx) from "not this file". Only a plain status number ever leaves this process.
+        self.status = status if type(status) is int and 100 <= status <= 599 else None
         super().__init__(ERRORS[self.code])
 
 
@@ -292,7 +295,7 @@ def download(request, binary_sink, *, opener=None, clock=time.monotonic):
                     budget.remaining()
                     return common
                 if status != 200:
-                    raise DownloadError("http_status")
+                    raise DownloadError("http_status", status)
                 content_type, length = _transport_headers(response, request["max_bytes"])
                 total = 0
                 digest = hashlib.sha256()
@@ -364,9 +367,12 @@ def _unique_object(pairs):
     return result
 
 
-def _error(code):
+def _error(code, status=None):
     code = code if code in ERRORS else "internal_error"
-    return {"version": 1, "ok": False, "error": {"code": code, "message": ERRORS[code]}}
+    error = {"code": code, "message": ERRORS[code]}
+    if code == "http_status" and type(status) is int and 100 <= status <= 599:
+        error["status"] = status
+    return {"version": 1, "ok": False, "error": error}
 
 
 def main():
@@ -384,7 +390,7 @@ def main():
             _validate_request(request)
             result = download(request, _DescriptorSink())
     except DownloadError as error:
-        result = _error(error.code)
+        result = _error(error.code, error.status)
     except KeyboardInterrupt:
         result = _error("cancelled")
     except BaseException:

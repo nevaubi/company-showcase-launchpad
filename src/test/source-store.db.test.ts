@@ -57,7 +57,11 @@ describe.skipIf(!local && !wasm)("official source store on PostgreSQL", () => {
       const { PGlite } = await import(/* @vite-ignore */ wasm);
       db = new PGlite() as Db;
     } else {
-      const sql=postgres(url,{max:1,onnotice:()=>undefined});
+      // The cases pass JSON parameters as text (JSON.stringify), which PGlite and PostgreSQL read as
+      // JSON. postgres.js would serialize such a string a second time into a JSON string scalar, and
+      // source_files_check refused the seed row: a string is sent as the JSON text it already is.
+      const jsonText={to:114,from:[114,3802],serialize:(x:unknown)=>typeof x==="string"?x:JSON.stringify(x),parse:(x:string)=>JSON.parse(x)};
+      const sql=postgres(url,{max:1,onnotice:()=>undefined,types:{json:jsonText}});
       db={exec:s=>sql.unsafe(s),query:async(s,p=[])=>({rows:await sql.unsafe(s,p as never[])}),close:()=>sql.end()};
     }
     await db.exec(STUBS);

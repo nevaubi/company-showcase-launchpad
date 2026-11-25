@@ -8,6 +8,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { NativeCsvReader } from "../../src/lib/sources/csv.ts";
+import { OFFICIAL_USER_AGENT } from "../../src/lib/sources/refresh-plan";
 import type { SourceColumn, SourceIngest, SourceJson } from "../../src/lib/sources/schema";
 
 const FINANCIALS = "https://api.fdic.gov/banks/financials";
@@ -467,7 +468,7 @@ async function makeCollector(workDir: string, signal: AbortSignal) {
           headers: {
             Accept: accept,
             "Accept-Encoding": "identity",
-            "User-Agent": "FiledUnder official-source collector",
+            "User-Agent": OFFICIAL_USER_AGENT,
           },
           signal: requestSignal,
           redirect: "error",

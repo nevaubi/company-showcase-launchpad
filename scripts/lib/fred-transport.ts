@@ -15,6 +15,12 @@ import { authoritativeCsvUrl, safeRefreshRedirect } from "../../src/lib/sources/
 import type { SourceJson } from "../../src/lib/sources/schema";
 
 const MAX_BYTES = 256 * 1024 * 1024;
+/**
+ * The longest one FRED transfer may take, child process included. The series are small files that
+ * arrive in about a second; when FRED does not answer, 20 seconds is where waiting stops, so one
+ * silent publisher cannot use up a refresh run.
+ */
+export const FRED_TRANSFER_TIMEOUT_MS = 20_000;
 const MAX_STDOUT = 32 * 1024;
 const MAX_STDERR = 8 * 1024;
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "fred-download.py");
@@ -32,6 +38,7 @@ const receiptSchema = z.union([
   z.object({ ...common, status: z.literal(304) }).strict(),
   z.object({ version: z.literal(1), ok: z.literal(false), error: z.object({
     code: z.string().regex(/^[a-z_]{1,64}$/), message: z.string().max(512).regex(/^[\x20-\x7e]*$/),
+    status: z.number().int().min(100).max(599).optional(),
   }).strict() }).strict(),
 ]);
 
@@ -44,6 +51,19 @@ export type FredDownloadResult =
   | { notModified: true; url: string; etag?: string; lastModified?: string; transport: FredTransportEvidence }
   | { notModified: false; filePath: string; bytes: number; url: string; resolvedUrl: string;
       retrievedAt: string; contentType: string; etag?: string; lastModified?: string; transport: FredTransportEvidence };
+
+/**
+ * A failed transfer with the reason as a short code: the child's own codes (`deadline`,
+ * `network_error`, `http_status`, ...) or `deadline` when the parent's timer ended the attempt.
+ * `status` is the HTTP status of a refused answer (`http_status` only). The refresh run reads both
+ * to tell a publisher that does not answer, or turns this client away, from a bad response.
+ */
+export class FredTransportError extends Error {
+  constructor(message: string, readonly code: string, readonly status?: number) {
+    super(message);
+    this.name = "FredTransportError";
+  }
+}
 
 function stopped(signal: AbortSignal): Error {
   return signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason ?? "FRED download stopped"));
@@ -135,8 +155,9 @@ export async function downloadFred(input: FredDownloadInput): Promise<FredDownlo
   check(input.signal);
   const trusted = authoritativeCsvUrl(input.url);
   if (trusted?.family !== "fred" || input.url.length > 8192) throw new Error("FRED transport requires the reviewed official endpoint");
-  const timeoutMs = Math.floor(Math.min(120_000, input.deadline - Date.now()));
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new Error("FRED download deadline exceeded");
+  // One value bounds the parent's timer and the child's own deadline: they cannot disagree.
+  const timeoutMs = Math.floor(Math.min(FRED_TRANSFER_TIMEOUT_MS, input.deadline - Date.now()));
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new FredTransportError("FRED download deadline exceeded", "deadline");
   if (!header.safeParse(input.userAgent).success || !input.userAgent.trim()) throw new Error("Invalid FRED User-Agent");
   for (const value of [input.etag, input.lastModified]) {
     if (value !== undefined && !header.safeParse(value).success) throw new Error("Invalid FRED conditional validator");
@@ -150,7 +171,7 @@ export async function downloadFred(input: FredDownloadInput): Promise<FredDownlo
   const forwardAbort = () => operation.abort(stopped(input.signal));
   input.signal.addEventListener("abort", forwardAbort, { once: true });
   if (input.signal.aborted) forwardAbort();
-  const timer = setTimeout(() => operation.abort(new Error("FRED download deadline exceeded")), timeoutMs);
+  const timer = setTimeout(() => operation.abort(new FredTransportError("FRED download deadline exceeded", "deadline")), timeoutMs);
   timer.unref();
   let handle: FileHandle | undefined, keep = false;
   try {
@@ -165,7 +186,10 @@ export async function downloadFred(input: FredDownloadInput): Promise<FredDownlo
     const parsed = receiptSchema.safeParse(raw);
     if (!parsed.success) throw new Error("FRED Python transport returned an invalid bounded receipt");
     const receipt = parsed.data;
-    if (!receipt.ok) throw new Error("FRED request failed (" + receipt.error.code + "): " + receipt.error.message);
+    if (!receipt.ok) {
+      const { code, message, status } = receipt.error;
+      throw new FredTransportError(`FRED request failed (${code}${status ? ` ${status}` : ""}): ${message}`, code, status);
+    }
     if (completed.code !== 0) throw new Error("FRED Python transport exited without a successful receipt");
     if (receipt.url !== input.url || !safeRefreshRedirect(input.url, receipt.resolved_url)) {
       throw new Error("FRED response changed the reviewed endpoint or series identity");

@@ -20,6 +20,41 @@ export type RefreshState = {
 };
 const DAY = 24 * 60 * 60_000;
 
+/**
+ * The one identification every official-source collector sends to a publisher: who is asking and
+ * where to write. The SEC lane sends the same line (`SEC_UA`); a test holds the two together.
+ */
+export const OFFICIAL_USER_AGENT = "FiledUnder Research research@filedunder.ai";
+
+/** A refreshed family: the three direct CSV families and the two native adapters. */
+export type RefreshSwitchFamily = RefreshFamily | "fdic" | "taiwan";
+
+/** The worker environment variable that stops one family and leaves the others running. */
+export const REFRESH_FAMILY_SWITCH: Record<RefreshSwitchFamily, string> = {
+  fred: "OFFICIAL_FRED_ENABLED",
+  eia_mer: "OFFICIAL_EIA_MER_ENABLED",
+  fhfa: "OFFICIAL_FHFA_ENABLED",
+  fdic: "OFFICIAL_FDIC_NATIVE_ENABLED",
+  taiwan: "OFFICIAL_TAIWAN_REVENUE_ENABLED",
+};
+
+/**
+ * A family is on unless its variable is a clear no: 0, false, off or no (any case, spaces ignored).
+ * Unset and every other value are on. The FDIC and Taiwan variables existed before with the rule
+ * "off only at 0" (docs/official-sources.md), so a value already set on the worker keeps its meaning.
+ */
+export function refreshFamilyEnabled(family: RefreshSwitchFamily, env: Record<string, string | undefined>): boolean {
+  const value = env[REFRESH_FAMILY_SWITCH[family]];
+  return value === undefined || !/^(0|false|off|no)$/i.test(value.trim());
+}
+
+/** The sentence a plan or receipt gives for a family that is switched off; null while it is on. */
+export function refreshFamilyDisabledReason(family: RefreshSwitchFamily, env: Record<string, string | undefined>): string | null {
+  if (refreshFamilyEnabled(family, env)) return null;
+  const name = REFRESH_FAMILY_SWITCH[family];
+  return `Refresh of this family is switched off by ${name}=${String(env[name]).trim().slice(0, 20)}.`;
+}
+
 /** Paths were retained in the acquired official provenance, not supplied on a CLI. */
 export function authoritativeCsvUrl(value: string): { family: RefreshFamily; url: URL } | null {
   let url: URL;
@@ -91,6 +126,15 @@ export function refreshFailure(state: RefreshState, now: Date, error: string): R
   const failures = Math.min(16, (state.failures ?? 0) + 1);
   return { ...state, last_attempt_at: now.toISOString(), failures, last_error: error.slice(0, 1000),
     next_due_at: new Date(now.getTime() + Math.min(DAY, 30 * 60_000 * 2 ** (failures - 1))).toISOString() };
+}
+
+/**
+ * A collection held for review (a changed native header, an empty response): a person has to look,
+ * and collecting the same file again in 30 minutes only registers another held snapshot and uploads
+ * its bytes again. The next try is a day later; the failure count and the reason are kept.
+ */
+export function refreshHeld(state: RefreshState, now: Date, reason: string): RefreshState {
+  return { ...refreshFailure(state, now, reason), next_due_at: new Date(now.getTime() + DAY).toISOString() };
 }
 
 export function refreshChecked(state: RefreshState, now: Date, intervalMs: number, result: {

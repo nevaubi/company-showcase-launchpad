@@ -1,5 +1,5 @@
 /** Evict only disposable files from this worker's own SEC cache, never followed symlinks. */
-import { lstatSync, readdirSync, unlinkSync } from "node:fs";
+import { lstatSync, readdirSync, rmSync, unlinkSync } from "node:fs";
 import { resolve, join } from "node:path";
 
 export function trimSourceCache(
@@ -34,4 +34,36 @@ export function trimSourceCache(
     removed++;
   }
   return { bytes, removed };
+}
+
+/** Evidence folders of failed or held refresh collections are kept this long, then swept at worker start. */
+export const REFRESH_EVIDENCE_KEEP_MS = 7 * 24 * 3600_000;
+
+/**
+ * Removes the work folders a refresh collection left behind (`refresh-*` directly in `workDir`: the
+ * response bodies of a failed or held collection, kept as evidence) once they are older than
+ * `REFRESH_EVIDENCE_KEEP_MS`. Never follows a link, never touches anything else (the SEC cache, the
+ * receipts), and never a folder a collection could still be using: those are minutes old.
+ */
+export function sweepRefreshFolders(workDir: string, now = Date.now(), keepMs = REFRESH_EVIDENCE_KEEP_MS): string[] {
+  const removed: string[] = [];
+  let names: string[];
+  try {
+    names = readdirSync(workDir);
+  } catch {
+    return removed;
+  }
+  for (const name of names) {
+    if (!/^refresh-[A-Za-z0-9_-]+$/.test(name)) continue;
+    const path = join(workDir, name);
+    try {
+      const st = lstatSync(path);
+      if (!st.isDirectory() || st.isSymbolicLink() || now - st.mtimeMs < keepMs) continue;
+      rmSync(path, { recursive: true, force: true });
+      removed.push(name);
+    } catch {
+      /* gone already, or not ours to remove */
+    }
+  }
+  return removed;
 }

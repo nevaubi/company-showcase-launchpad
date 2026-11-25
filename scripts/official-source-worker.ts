@@ -6,10 +6,9 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sb, dbGate, log, sleep } from "./lib/supa";
-import { ABS_WATCH, type AbsWatch } from "../src/lib/abs/watch";
 import {
   SOURCE_WORKER_JOB,
   SOURCE_REFRESH_JOB,
@@ -17,14 +16,38 @@ import {
   WORKER_LEASE_MS,
   RESOURCE_WAIT_EXIT,
   canStartOfficialChild,
-  advanceCursor,
   enabled,
   retryDelay,
   safeError,
+  childReceipt,
+  ABS_MOVE_PAUSE_MS,
+  absAfterRun,
+  absLeftFromReceipt,
+  absNextTurn,
+  type AbsSeen,
+  type AbsStay,
 } from "./lib/official-worker-plan";
-import { trimSourceCache } from "./lib/source-cache";
+import { absWatchList } from "./lib/abs-watch-list";
+import { sweepRunReceipts, takeRunReceipt } from "./lib/run-receipt";
+import { sweepRefreshFolders, trimSourceCache } from "./lib/source-cache";
+import { snapshotStatsStep, statsOnlyRow, type StatsOutcome } from "./lib/snapshot-stats";
 
 const owner = `official:${process.env.RENDER_INSTANCE_ID ?? "worker"}:${randomUUID()}`;
+const WORK = process.env.OFFICIAL_SOURCE_WORK_DIR ?? "/var/data/official-sources";
+/** Where a child leaves its account of a run for the worker to store with the run's receipt. */
+const RECEIPTS = join(WORK, "receipts");
+try {
+  mkdirSync(RECEIPTS, { recursive: true });
+  // Receipts a previous worker process never read (it was stopped while a child ran).
+  const swept = sweepRunReceipts(RECEIPTS);
+  if (swept) log("official-source-worker", `removed ${swept} unread receipt files older than a day`);
+  // Response bodies of failed or held refresh collections, kept as evidence for a week (review S5).
+  const old = sweepRefreshFolders(WORK);
+  if (old.length) log("official-source-worker", `removed ${old.length} refresh evidence folders older than 7 days`, old.slice(0, 5).join(", "));
+} catch (e) {
+  // Without the folder the children still run; their receipts then say only how each process ended.
+  log("official-source-worker", "receipt folder unavailable", safeError(e));
+}
 const children = new Set<ChildProcess>();
 let stopped = false;
 for (const signal of ["SIGTERM", "SIGINT"] as const)
@@ -97,18 +120,26 @@ async function claim(job: string): Promise<Lease | null> {
   };
 }
 
+type ChildEnd = { code: number | null; told: Record<string, unknown> | null };
+
 async function childRun(
   lease: Lease,
   script: string,
   args: string[],
   maxMs: number,
-): Promise<number | null> {
+  /** work the lane does right after the child, recorded in the same job_runs row; never throws */
+  after?: () => Promise<Record<string, unknown>>,
+): Promise<ChildEnd> {
   if (stopped || !hasMemoryHeadroom()) {
     log(lease.job, "waiting for memory headroom before starting new work");
-    return RESOURCE_WAIT_EXIT;
+    return { code: RESOURCE_WAIT_EXIT, told: null };
   }
   const started = new Date().toISOString();
-  const child = spawn("bun", [script, ...args], { stdio: "inherit", env: process.env });
+  const receiptFile = join(RECEIPTS, `${lease.job}-${randomUUID()}.json`);
+  const child = spawn("bun", [script, ...args, `--receipt=${receiptFile}`], {
+    stdio: "inherit",
+    env: process.env,
+  });
   children.add(child);
   let killed = false;
   let renewing = false;
@@ -138,24 +169,43 @@ async function childRun(
   clearInterval(heartbeat);
   children.delete(child);
   const result = killed ? 124 : code;
+  // What the child says it did (datasets checked, filings stored, what failed and why) goes into the
+  // row beside how the process ended. Rows of data are still counted only by committed snapshots and loads.
+  const told = takeRunReceipt(receiptFile);
+  const row = childReceipt({
+    child: script,
+    exitCode: result,
+    killed,
+    seconds: (Date.now() - Date.parse(started)) / 1000,
+    told,
+  });
+  if (after) Object.assign(row.detail, await after().catch((e: unknown) => ({ after_error: safeError(e) })));
   const receipt = await sb.from("job_runs").insert({
     job: lease.job,
     started_at: started,
     finished_at: new Date().toISOString(),
-    ok: result === 0,
-    items: 0,
-    detail: {
-      child: script,
-      exit_code: result,
-      note: "Process receipt; source rows are counted only by committed snapshots or ABS loads.",
-    },
+    ok: row.ok,
+    items: row.items,
+    detail: row.detail,
   });
   if (receipt.error) log(lease.job, "receipt failed", safeError(receipt.error));
-  return result;
+  return { code: result, told };
 }
 
 async function sourceLoop() {
   let failures = 0;
+  // Snapshot statistics after each pass (source_compute_missing_stats, migration 0069): a quiet no-op until
+  // the function exists, bounded in time, and never a reason to back off this lane (scripts/lib/snapshot-stats.ts).
+  const stats = snapshotStatsStep({
+    rpc: (fn, args, signal) => sb.rpc(fn, args).abortSignal(signal),
+    log: (line) => log(SOURCE_WORKER_JOB, line),
+  });
+  const statsPass = async (lease: Lease): Promise<StatsOutcome> => {
+    await dbGate("official-source-stats");
+    // An import child may have run for minutes: the lease must outlast this call too.
+    if (!(await lease.renew().catch(() => false))) return { status: "skipped", reason: "the lane's lease could not be renewed" };
+    return await stats();
+  };
   while (!stopped) {
     let lease: Lease | null = null;
     try {
@@ -164,6 +214,7 @@ async function sourceLoop() {
         await sleep(30_000);
         continue;
       }
+      const held = lease;
       const pending = await sb
         .from("source_snapshots" as never)
         .select("id")
@@ -171,14 +222,24 @@ async function sourceLoop() {
         .limit(1);
       if (pending.error) throw new Error(pending.error.message);
       if (pending.data?.length) {
-        const code = await childRun(
-          lease,
+        const { code } = await childRun(
+          held,
           "scripts/source-import.ts",
           ["--all", "--max-snapshots=25", "--max-runtime-seconds=480"],
           570_000,
+          async () => ({ stats: await statsPass(held) }),
         );
         failures = code === 0 || code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
-      } else failures = 0;
+      } else {
+        failures = 0;
+        const started = new Date().toISOString();
+        const row = statsOnlyRow(await statsPass(held));
+        if (row) {
+          const written = await sb.from("job_runs").insert({ job: SOURCE_WORKER_JOB, started_at: started,
+            finished_at: new Date().toISOString(), ...row });
+          if (written.error) log(SOURCE_WORKER_JOB, "statistics receipt failed", safeError(written.error));
+        }
+      }
     } catch (e) {
       failures++;
       log(SOURCE_WORKER_JOB, safeError(e));
@@ -199,7 +260,7 @@ async function refreshLoop() {
         await sleep(30_000);
         continue;
       }
-      const code = await childRun(
+      const { code } = await childRun(
         lease,
         "scripts/source-refresh.ts",
         ["--all", "--max-datasets=8", "--max-runtime-seconds=480"],
@@ -217,30 +278,20 @@ async function refreshLoop() {
   }
 }
 
-function watches(): AbsWatch[] {
+async function absLoop() {
   // These optional CIKs are discovery candidates from the supplied workbook, not company ties.
   // The existing SEC reader verifies the filing's real issuer/depositor and file family.
-  const file = join(import.meta.dir, "data", "abs-candidate-watch.json");
-  const extra = existsSync(file)
-    ? (JSON.parse(readFileSync(file, "utf8")).candidates as AbsWatch[])
-    : [];
-  return [
-    ...new Map(
-      [
-        ...ABS_WATCH,
-        ...extra.filter((w) => Number.isInteger(w.cik) && w.cik > 0 && typeof w.name === "string"),
-      ].map((w) => [w.cik, w]),
-    ).values(),
-  ];
-}
-
-async function absLoop() {
-  const watch = watches();
-  const cache = join(process.env.OFFICIAL_SOURCE_WORK_DIR ?? "/var/data/official-sources", "sec");
+  const watch = absWatchList();
+  const cache = join(WORK, "sec");
   mkdirSync(cache, { recursive: true });
   let failures = 0;
+  // What this process knows of each watched CIK, by index: when it was last worked and what it had
+  // left (rules: absNextTurn, absAfterRun). Lost on restart, which only means one more look at each.
+  const seen = new Map<number, AbsSeen>();
+  let stay: AbsStay | null = null;
   while (!stopped && watch.length) {
     let lease: Lease | null = null;
+    let pause: number | null = null;
     try {
       lease = await claim(ABS_WORKER_JOB);
       if (!lease) {
@@ -250,34 +301,52 @@ async function absLoop() {
       const state = await sb.from("job_state").select("cursor").eq("job", ABS_WORKER_JOB).single();
       if (state.error) throw new Error(state.error.message);
       const cursor = Math.max(0, Number(state.data.cursor ?? 0)) % watch.length;
-      const w = watch[cursor]!;
-      const args = [
-        "run",
-        `--cik=${w.cik}`,
-        "--max-filings=3",
-        "--retry-skipped",
-        `--cache=${cache}`,
-        ...(w.from ? [`--from=${w.from}`] : []),
-      ];
-      const code = await childRun(lease, "scripts/abs-ee.ts", args, 25 * 60_000);
-      // The durable provenance is in abs_*; these are re-fetchable copies owned by this worker.
-      // Pruning occurs only after the child exits, so no active reader loses its file.
-      const cacheState = trimSourceCache(
-        cache,
-        Number(process.env.OFFICIAL_SEC_CACHE_BYTES ?? 2 * 1024 ** 3),
-      );
-      if (cacheState.removed) log(ABS_WORKER_JOB, "cache trimmed", cacheState);
-      failures = code === 0 || code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
-      if (code === 0) {
-        const updated = await sb
-          .from("job_state")
-          .update({
-            cursor: advanceCursor(cursor, watch.length, code),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("job", ABS_WORKER_JOB)
-          .eq("paused_reason", owner);
-        if (updated.error) throw new Error(updated.error.message);
+      const turn = absNextTurn({ count: watch.length, cursor, seen, stay, now: Date.now() });
+      if ("waitMs" in turn) pause = turn.waitMs;
+      else {
+        const w = watch[turn.index]!;
+        // `load` while staying on a CIK: its listing was read at the start of this visit.
+        const args = [
+          turn.command,
+          `--cik=${w.cik}`,
+          "--max-filings=3",
+          "--retry-skipped",
+          `--cache=${cache}`,
+          ...(w.from ? [`--from=${w.from}`] : []),
+        ];
+        // One importer process at a time, under this lane's lease; it keeps SEC at two requests a second.
+        const { code, told } = await childRun(lease, "scripts/abs-ee.ts", args, 25 * 60_000);
+        // The durable provenance is in abs_*; these are re-fetchable copies owned by this worker.
+        // Pruning occurs only after the child exits, so no active reader loses its file.
+        const cacheState = trimSourceCache(
+          cache,
+          Number(process.env.OFFICIAL_SEC_CACHE_BYTES ?? 2 * 1024 ** 3),
+        );
+        if (cacheState.removed) log(ABS_WORKER_JOB, "cache trimmed", cacheState);
+        if (code === RESOURCE_WAIT_EXIT) failures = 0;
+        else {
+          const after = absAfterRun({
+            count: watch.length,
+            index: turn.index,
+            exitCode: code,
+            left: absLeftFromReceipt(told, w.cik),
+            stay,
+            now: Date.now(),
+          });
+          if (after.seen) seen.set(turn.index, after.seen);
+          else seen.delete(turn.index);
+          stay = after.stay;
+          pause = after.pauseMs;
+          failures = code === 0 ? 0 : failures + 1;
+          if (code === 0 && after.cursor !== cursor) {
+            const updated = await sb
+              .from("job_state")
+              .update({ cursor: after.cursor, updated_at: new Date().toISOString() })
+              .eq("job", ABS_WORKER_JOB)
+              .eq("paused_reason", owner);
+            if (updated.error) throw new Error(updated.error.message);
+          }
+        }
       }
     } catch (e) {
       failures++;
@@ -285,8 +354,9 @@ async function absLoop() {
     } finally {
       await lease?.release();
     }
-    // At most one CIK a minute. Listing and asset downloads also use the SEC reader's rate limit.
-    if (!stopped) await sleep(failures ? retryDelay(failures) : 60_000);
+    // A failed run (an SEC outage among them) backs off from a minute up to an hour; a clean run pauses
+    // a minute before the next CIK, or a few seconds before the next batch of the same CIK.
+    if (!stopped) await sleep(failures ? Math.max(ABS_MOVE_PAUSE_MS, retryDelay(failures)) : (pause ?? ABS_MOVE_PAUSE_MS));
   }
 }
 
