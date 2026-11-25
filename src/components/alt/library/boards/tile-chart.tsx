@@ -43,6 +43,15 @@ const COLOR = "var(--chart-1)";
 const shortLabel = (label: string) => label.replace(/^Q(\d) \d{2}(\d{2})$/, "Q$1 $2");
 const MINUS = "−";
 
+/**
+ * Decimal places that show a tick step: none for whole steps, one for tenths, two below. A step computed in
+ * floating point (1.2 - 1.1 = 0.0999...) counts as the step it stands for.
+ */
+function stepPlaces(step: number): number {
+  const s = Math.abs(step) * (1 + 1e-9);
+  return s >= 1 ? 0 : s >= 0.1 ? 1 : 2;
+}
+
 /** Axis ticks: in full below 10,000, compact (K, M, B, T) above, with a true minus sign. */
 export function tickFormat(v: number, step: number): string {
   const abs = Math.abs(v);
@@ -57,12 +66,11 @@ export function tickFormat(v: number, step: number): string {
     for (const [size, suffix] of units) {
       if (abs >= size) {
         const scaled = abs / size;
-        const places = step / size >= 1 ? 0 : step / size >= 0.1 ? 1 : 2;
-        return `${sign}${scaled.toFixed(places).replace(/\.0+$/, "")}${suffix}`;
+        return `${sign}${scaled.toFixed(stepPlaces(step / size)).replace(/\.0+$/, "")}${suffix}`;
       }
     }
   }
-  const places = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+  const places = stepPlaces(step);
   return `${sign}${abs.toLocaleString("en-US", { minimumFractionDigits: places, maximumFractionDigits: places })}`;
 }
 
