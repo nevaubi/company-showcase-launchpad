@@ -11,6 +11,34 @@ import {
   type RecordPageQuery,
 } from "./record-read";
 import { fakeReadClient, parseOr } from "./record-read.fake";
+import type { ReadClient } from "./record-read";
+
+/** The client with every builder call written down, one list per request: ["source_records", 'eq("snapshot_id",...)', ...]. */
+function recording(db: ReadClient): { client: ReadClient; log: string[][] } {
+  const log: string[][] = [];
+  const wrap = (target: object, entry: string[]): unknown =>
+    new Proxy(target, {
+      get(t, prop) {
+        const v = (t as Record<string | symbol, unknown>)[prop];
+        if (typeof v !== "function") return v;
+        if (prop === "then") return v.bind(t);
+        return (...args: unknown[]) => {
+          entry.push(`${String(prop)}(${args.filter((a) => !(a instanceof AbortSignal)).map((a) => JSON.stringify(a)).join(",")})`);
+          return wrap(v.apply(t, args) as object, entry);
+        };
+      },
+    });
+  return {
+    log,
+    client: {
+      from(table: string) {
+        const entry = [table];
+        log.push(entry);
+        return wrap(db.from(table), entry) as ReturnType<ReadClient["from"]>;
+      },
+    },
+  };
+}
 
 const S = "a".repeat(64);
 const OTHER = "b".repeat(64);
@@ -77,15 +105,32 @@ describe("records in file order", () => {
     expect(start.previous).toBeNull();
   });
 
-  it("filters by an entity id or name with one or-list, and probes before saying there is a previous page", async () => {
-    const db = fakeReadClient({ source_records: panel() });
+  it("filters by an entity id or name through one column's index, never an or-list, and probes before saying there is a previous page", async () => {
+    const fake = fakeReadClient({ source_records: panel() });
+    const { client: db, log } = recording(fake);
     const page = await readRecordPage(db, q({ filter: { entity: "3510" }, after: 6 }));
     expect(page.rows.map((r) => r.row)).toEqual([7, 8, 9, 10, 11]);
     // rows 1 to 6 belong to another certificate: no previous page
     expect(page.previous).toBeNull();
     expect(page.next).toBe(11);
+    // the probe, the page and the earlier-rows probe: each on entity_id alone (review int-code S4)
+    expect(log).toHaveLength(3);
+    expect(log.every((call) => call.includes('eq("entity_id","3510")') && !call.some((c) => c.startsWith("or(") || c.startsWith('eq("entity_name"')))).toBe(true);
+    expect(log[0]).toContain("limit(1)");
+    log.length = 0;
     const byName = await readRecordPage(db, q({ filter: { entity: "JPMORGAN CHASE BANK NA" } }));
     expect(byName.rows.map((r) => r.row)).toEqual([1, 2, 3, 4, 5]);
+    // no record carries the name as its id: the page reads entity_name alone
+    expect(log[0]).toContain('eq("entity_id","JPMORGAN CHASE BANK NA")');
+    expect(log.slice(1).every((call) => call.includes('eq("entity_name","JPMORGAN CHASE BANK NA")') && !call.some((c) => c.startsWith("or(") || c.startsWith('eq("entity_id"')))).toBe(true);
+  });
+
+  it("a table with only names or only ids filters that column without a probe", async () => {
+    const { client: db, log } = recording(fakeReadClient({ source_records: panel() }));
+    const page = await readRecordPage(db, q({ dims: { ...dims, entityId: false }, filter: { entity: "BANK 3510" } }));
+    expect(page.rows.map((r) => r.row)).toEqual([7, 8, 9, 10, 11]);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toContain('eq("entity_name","BANK 3510")');
   });
 
   it("an empty page past the end offers the rows before it", async () => {

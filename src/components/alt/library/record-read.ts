@@ -4,7 +4,8 @@
  * `snapshot_id` and is served by an index: the primary key (snapshot_id, row_number) for row ranges, the period
  * index (snapshot_id, period, row_number) for newest-first order, the entity and place indexes for filters.
  * Single fields are read as `values->>N`; the whole `values` array only for one record. At most 25 rows a page,
- * at most five calls a page. Values are the stored strings: nothing is parsed here.
+ * at most five calls a page (with a filter on a table that fills both an identifier and a name, one of them is the
+ * probe that tells which the value is). Values are the stored strings: nothing is parsed here.
  *
  * Why not `source_query_records`: it can only read in file order, and its free-text test reads the whole
  * snapshot when matches are rare (rev-app M4). Here a name search reads at most 50,000 rows a press, in windows
@@ -143,19 +144,35 @@ async function rows(q: Select): Promise<Record<string, unknown>[]> {
   return data as Record<string, unknown>[];
 }
 
+/** The column an entity or place filter reads: one indexed column, never an or-list across two (review int-code S4). */
+type FilterColumns = { entity: "entity_id" | "entity_name" | null; geography: "geo_code" | "geo_name" | null };
+
+/**
+ * Which column each filter value is: on a table that fills both an identifier and a name, the identifier when one
+ * row of the snapshot carries the value there (one probe of the identifier's index; the pickers and the record
+ * sheet give identifiers), otherwise the name. Each page then reads through that column's own index: an or-list
+ * across the two could make Postgres walk the whole snapshot by row number for a value common elsewhere.
+ */
+async function filterColumns(db: ReadClient, query: RecordPageQuery): Promise<FilterColumns> {
+  const pick = async <I extends string, N extends string>(value: string | undefined, idCol: I, nameCol: N, hasId: boolean, hasName: boolean): Promise<I | N | null> => {
+    if (!value) return null;
+    if (!(hasId && hasName)) return hasName ? nameCol : idCol;
+    let probe = db.from("source_records").select("row_number").eq("snapshot_id", query.snapshotId).eq(idCol, value);
+    if (query.signal) probe = probe.abortSignal(query.signal);
+    return (await rows(probe.limit(1))).length ? idCol : nameCol;
+  };
+  const { dims, filter } = query;
+  return {
+    entity: await pick(filter.entity, "entity_id", "entity_name", dims.entityId, dims.entityName),
+    geography: await pick(filter.geography, "geo_code", "geo_name", dims.geoCode, dims.geoName),
+  };
+}
+
 /** Indexed equality filters for entity, place and period; the name search is added by the scan. */
-function filtered(q: Select, dims: RecordDims, filter: RecordFilter): Select {
+function filtered(q: Select, filter: RecordFilter, cols: FilterColumns): Select {
   let out = q;
-  if (filter.entity) {
-    if (dims.entityId && dims.entityName) out = out.or(`entity_id.eq.${orValue(filter.entity)},entity_name.eq.${orValue(filter.entity)}`);
-    else if (dims.entityName) out = out.eq("entity_name", filter.entity);
-    else out = out.eq("entity_id", filter.entity);
-  }
-  if (filter.geography) {
-    if (dims.geoCode && dims.geoName) out = out.or(`geo_code.eq.${orValue(filter.geography)},geo_name.eq.${orValue(filter.geography)}`);
-    else if (dims.geoName) out = out.eq("geo_name", filter.geography);
-    else out = out.eq("geo_code", filter.geography);
-  }
+  if (filter.entity && cols.entity) out = out.eq(cols.entity, filter.entity);
+  if (filter.geography && cols.geography) out = out.eq(cols.geography, filter.geography);
   if (filter.period) out = out.eq("period", filter.period);
   return out;
 }
@@ -172,18 +189,18 @@ export function searchColumns(dims: RecordDims): string[] {
 
 export const canSearchNames = (dims: RecordDims) => searchColumns(dims).length > 0;
 
-type Ctx = { db: ReadClient; query: RecordPageQuery; limit: number };
+type Ctx = { db: ReadClient; query: RecordPageQuery; limit: number; cols: FilterColumns };
 
 function base(ctx: Ctx): Select {
   const { db, query } = ctx;
   let q = db.from("source_records").select(recordSelect(query.columns)).eq("snapshot_id", query.snapshotId);
-  q = filtered(q, query.dims, query.filter);
+  q = filtered(q, query.filter, ctx.cols);
   return query.signal ? q.abortSignal(query.signal) : q;
 }
 
 async function exists(ctx: Ctx, edit: (q: Select) => Select): Promise<boolean> {
   const { db, query } = ctx;
-  let q = filtered(db.from("source_records").select("row_number").eq("snapshot_id", query.snapshotId), query.dims, query.filter);
+  let q = filtered(db.from("source_records").select("row_number").eq("snapshot_id", query.snapshotId), query.filter, ctx.cols);
   if (query.signal) q = q.abortSignal(query.signal);
   return (await rows(edit(q).limit(1))).length > 0;
 }
@@ -326,7 +343,7 @@ async function nameSearch(ctx: Ctx): Promise<RecordPage> {
 
 export async function readRecordPage(db: ReadClient, query: RecordPageQuery): Promise<RecordPage> {
   if (!query.columns.length) throw new ReadError("error", "Choose at least one field.");
-  const ctx: Ctx = { db, query, limit: Math.min(query.limit ?? PAGE_SIZE, 100) };
+  const ctx: Ctx = { db, query, limit: Math.min(query.limit ?? PAGE_SIZE, 100), cols: await filterColumns(db, query) };
   if (query.filter.q) return nameSearch(ctx);
   if (query.order === "new" && query.dims.period) return newestOrder(ctx);
   return fileOrder(ctx);
