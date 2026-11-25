@@ -94,33 +94,35 @@ function measureWidest(texts: readonly string[], font: string): number | null {
   return texts.reduce((widest, text) => Math.max(widest, ctx.measureText(text).width), 0);
 }
 
-type Font = { family: string; loaded: boolean };
+/** The chart's two faces: names in the sans, figures (`.num`) in the mono. */
+type Fonts = { sans: string; mono: string; loaded: boolean };
 
-/** The font family the chart's text is set in; a new value once the page's fonts have loaded, to measure again. */
-function useFont(el: HTMLElement | null): Font | null {
-  const [font, setFont] = useState<Font | null>(null);
+/** The font families the chart's text is set in; a new value once the page's fonts have loaded, to measure again. */
+function useFonts(el: HTMLElement | null): Fonts | null {
+  const [fonts, setFonts] = useState<Fonts | null>(null);
   useBrowserLayoutEffect(() => {
     if (!el) return;
-    const family = getComputedStyle(el).fontFamily;
-    if (!family) return;
+    const style = getComputedStyle(el);
+    const sans = style.fontFamily;
+    const mono = style.getPropertyValue("--font-mono").trim() || "monospace";
+    if (!sans) return;
     let live = true;
-    setFont({ family, loaded: false });
+    setFonts({ sans, mono, loaded: false });
     // A fallback font measures other widths than the web font it stands in for.
     document.fonts?.ready.then(() => {
-      if (live) setFont({ family, loaded: true });
+      if (live) setFonts({ sans, mono, loaded: true });
     });
     return () => {
       live = false;
     };
   }, [el]);
-  return font;
+  return fonts;
 }
 
-/** Width of the widest of these texts at this size; tabular digits are measured as zeros. */
-function widestText(texts: readonly string[], size: number, font: Font | null, tabular: boolean): number {
-  const shown = tabular ? texts.map((t) => t.replace(/\d/g, "0")) : texts;
-  const measured = font ? measureWidest(shown, `${size}px ${font.family}`) : null;
-  return measured ?? shown.reduce((widest, text) => Math.max(widest, estimateTextWidth(text, size)), 0);
+/** Width of the widest of these texts at this size in this family (estimated when nothing can measure). */
+function widestText(texts: readonly string[], size: number, family: string | null): number {
+  const measured = family ? measureWidest(texts, `${size}px ${family}`) : null;
+  return measured ?? texts.reduce((widest, text) => Math.max(widest, estimateTextWidth(text, size)), 0);
 }
 
 function Tooltip({ point, unit, x, width }: { point: TilePoint; unit: string; x: number; width: number }) {
@@ -320,10 +322,10 @@ function ColumnChart({ points, unit, label, recordHref, onOpen, height = TILE_CH
 
 function RankedBars({ points, unit, label, recordHref, onOpen, height = TILE_CHART_HEIGHT, labelOf }: ChartProps) {
   const [ref, width, el] = useWidth(220);
-  const font = useFont(el);
+  const fonts = useFonts(el);
   const values = useMemo(() => points.map(labelOf), [points, labelOf]);
-  const labelWidth = useMemo(() => widestText(points.map((p) => p.label), 11, font, false), [points, font]);
-  const valueWidth = useMemo(() => widestText(values, 10, font, true), [values, font]);
+  const labelWidth = useMemo(() => widestText(points.map((p) => p.label), 11, fonts?.sans ?? null), [points, fonts]);
+  const valueWidth = useMemo(() => widestText(values, 10, fonts?.mono ?? null), [values, fonts]);
   const layout = rankLayout({ width, labelWidth, valueWidth, count: points.length, height });
   const max = d3.max(points, (p) => p.value ?? 0) ?? 1;
   // Bars from a shared zero; a figure that is not above zero draws no bar.
