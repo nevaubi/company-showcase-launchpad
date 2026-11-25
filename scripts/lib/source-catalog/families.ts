@@ -2,6 +2,7 @@
 import type { Family } from "./types";
 import { fredFamily } from "./fred";
 import { merFamily } from "./mer";
+import { usgsFamily } from "./usgs";
 import { z1Family } from "./z1";
 
-export const FAMILIES: readonly Family[] = [z1Family, fredFamily, merFamily];
+export const FAMILIES: readonly Family[] = [z1Family, fredFamily, usgsFamily, merFamily];

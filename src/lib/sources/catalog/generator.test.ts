@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildFred, catalogueTitles, isCut, parseFredTitle } from "../../../../scripts/lib/source-catalog/fred";
 import { buildMer, parseMerListing } from "../../../../scripts/lib/source-catalog/mer";
 import { listingTitle } from "../../../../scripts/lib/source-catalog/text";
+import { USGS_LISTING, buildUsgs, commodityName, fileStem, parseUsgsFilePage, parseUsgsListing, usgsTitle } from "../../../../scripts/lib/source-catalog/usgs";
 import { buildZ1, parseZ1Listing, z1Stem, z1Title } from "../../../../scripts/lib/source-catalog/z1";
 import type { DatasetRow } from "../../../../scripts/lib/source-catalog/types";
 
@@ -153,5 +154,56 @@ describe("FRED series", () => {
       [amtmno.id]: { title: "Manufacturers' New Orders: Total Manufacturing", code: "AMTMNO", source: "https://fred.stlouisfed.org/series/AMTMNO" },
     });
     expect(buildFred([amtmno], new Map(), new Map()).unmatched).toHaveLength(1);
+  });
+});
+
+/** Rows of the USGS Data Series 140 listing as the page writes them. */
+const USGS_HTML = `<table class="usa-table"><thead><tr><th colspan="3"><h3>Supply-Demand Statistics</h3></th></tr></thead><tbody>
+<tr><td data-label="Supply-Demand Statistics"><strong>Commodity</strong></td><td><strong>Format</strong></td><td><strong>Update year</strong></td></tr>
+<tr><td data-label="Supply-Demand Statistics"><a name="abrasives-natural">Abrasives (natural)-(discontinued- see garnet, industrial)</a></td><td><a href="https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/mineral-pubs/historical-statistics/ds140-abran.xlsx">XLSX</a></td><td>2014</td></tr>
+<tr><td data-label="Supply-Demand Statistics"><a name="copper">Copper</a></td><td><a href="/media/files/copper-historical-statistics-data-series-140">XLSX</a></td><td>2020</td></tr>
+<tr><td data-label="Supply-Demand Statistics"><a name="nickel">Nickel</a></td><td><a href="/media/files/nickel-historical-statistics-data-series-140">XLSX</a></td><td>2019</td></tr>
+</tbody></table>`;
+
+describe("USGS Data Series 140 listing", () => {
+  it("reads commodity, workbook link and update year, without the discontinued note", () => {
+    expect(commodityName("Abrasives (natural)-(discontinued- see garnet, industrial)")).toBe("Abrasives (natural)");
+    expect(parseUsgsListing(USGS_HTML)).toEqual([
+      { commodity: "Abrasives (natural)", href: "https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/mineral-pubs/historical-statistics/ds140-abran.xlsx", year: "2014" },
+      { commodity: "Copper", href: "https://www.usgs.gov/media/files/copper-historical-statistics-data-series-140", year: "2020" },
+      { commodity: "Nickel", href: "https://www.usgs.gov/media/files/nickel-historical-statistics-data-series-140", year: "2019" },
+    ]);
+    expect(parseUsgsFilePage('<a href="https://d9-wret.s3.us-west-2.amazonaws.com/x/media/files/ds140-copper-2020.xlsx">Download</a>')).toBe(
+      "https://d9-wret.s3.us-west-2.amazonaws.com/x/media/files/ds140-copper-2020.xlsx",
+    );
+    expect(fileStem("https://x/ds140-construction-sand-and%20gravel-2022.xlsx")).toBe("ds140 construction sand and 20gravel 2022");
+  });
+
+  it("names the commodity alone where the sheet only restates it", () => {
+    expect(usgsTitle("Copper", "Copper")).toBe("Copper");
+    expect(usgsTitle("Lithium", "Lithium statistics")).toBe("Lithium");
+    expect(usgsTitle("Stone (crushed)", "Crushed stone")).toBe("Stone (crushed)");
+    expect(usgsTitle("Nickel", "Primary production")).toBe("Nickel: Primary production");
+  });
+
+  it("matches each stored sheet to its workbook by file name, through the file page", () => {
+    const sheet = (id: string, name: string): DatasetRow => ({ ...row(id, name), source_id: "USGS_DS140", sector: "07_materials" });
+    const copper = sheet("official_07_materials_csv_ds140_ds140_copper_2020_copper_fe7a2ceced", "DS140 ds140 copper 2020 Copper");
+    const nickel = sheet("official_07_materials_csv_ds140_ds140_nickel_2019_consumption_5da20e19e2", "DS140 ds140 nickel 2019 Consumption");
+    const abran = sheet("official_07_materials_csv_ds140_ds140_abran_tripoli_210edb484c", "DS140 ds140 abran Tripoli");
+    const other = sheet("official_07_materials_csv_ds140_ds140_tin_2021_tin_5a2c59d762", "DS140 ds140 tin 2021 Tin");
+    const page = (url: string, body: string) => [url, { url, status: 200, body }] as const;
+    const pages = new Map([
+      page(USGS_LISTING, USGS_HTML),
+      page("https://www.usgs.gov/media/files/copper-historical-statistics-data-series-140", '<a href="https://s3.example/ds140-copper-2020.xlsx">x</a>'),
+      page("https://www.usgs.gov/media/files/nickel-historical-statistics-data-series-140", '<a href="https://s3.example/ds140-nickel-2019.xlsx">x</a>'),
+    ]);
+    const result = buildUsgs([copper, nickel, abran, other], pages);
+    expect(result.titles).toEqual({
+      [copper.id]: { title: "Copper", code: "DS140 copper-2020", source: USGS_LISTING },
+      [nickel.id]: { title: "Nickel: Consumption", code: "DS140 nickel-2019", source: USGS_LISTING },
+      [abran.id]: { title: "Abrasives (natural): Tripoli", code: "DS140 abran", source: USGS_LISTING },
+    });
+    expect(result.unmatched.map((u) => u.id)).toEqual([other.id]);
   });
 });
