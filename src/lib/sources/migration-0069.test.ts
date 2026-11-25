@@ -7,6 +7,8 @@ const NEW_FUNCTIONS = [
   "source_snapshot_ref", "source_count_distinct", "source_compute_snapshot_stats", "source_compute_missing_stats",
   "source_get_snapshot_stats", "source_facets", "source_find", "source_library",
 ];
+/** Objects of the part appended from unit `abs` (new in this file as well). */
+const ABS_PART = ["abs_filing_periods", "abs_monitor", "abs_deal"];
 const MEMBER_READS = ["source_snapshot_ref", "source_get_snapshot_stats", "source_facets", "source_find", "source_library"];
 const fn = (text: string, name: string) => {
   const start = text.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
@@ -31,6 +33,13 @@ describe("migration 0069 (official reads)", () => {
     expect(s69.id).not.toBe(s68.id);
   });
 
+  it("appends the abs part verbatim, after everything of its own", () => {
+    const part = sql.slice(sql.indexOf('-- Part of migration 0069: what the "Securitized credit" view'));
+    expect(part.length).toBeGreaterThan(1000);
+    expect(sql.indexOf("-- Part from unit `abs` of round 4")).toBeGreaterThan(sql.indexOf("GRANT EXECUTE ON FUNCTION public.source_library() TO authenticated, service_role;"));
+    for (const name of ABS_PART) expect(part, name).toMatch(new RegExp(`CREATE OR REPLACE (VIEW|FUNCTION) public\\.${name}\\b`));
+  });
+
   it("is plain ASCII without long dashes", () => {
     const outside = [...sql].filter(ch => {
       const code = ch.charCodeAt(0);
@@ -52,7 +61,7 @@ describe("migration 0069 (official reads)", () => {
   it("revokes nothing that existed before it, and starts every new object from no access", () => {
     for (const line of sql.split("\n").filter(l => l.startsWith("REVOKE"))) {
       const target = /^REVOKE ALL ON (?:FUNCTION )?public\.(\w+)/.exec(line)?.[1];
-      expect([...NEW_FUNCTIONS, "source_snapshot_stats"], line).toContain(target);
+      expect([...NEW_FUNCTIONS, "source_snapshot_stats", ...ABS_PART], line).toContain(target);
     }
     for (const name of NEW_FUNCTIONS) {
       expect(sql, name).toMatch(new RegExp(`REVOKE ALL ON FUNCTION public\\.${name}\\([^)]*\\) FROM PUBLIC, anon, authenticated, service_role;`));

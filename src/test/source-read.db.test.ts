@@ -1,4 +1,4 @@
-// Runs migration 0069 on a real PostgreSQL: applied twice over 0068, every new read as a member under row-level
+// Runs migration 0069 on a real PostgreSQL: applied twice over 0067 and 0068 (its appended abs part reads 0067), every new read as a member under row-level
 // security and as the service role, the bounds, the scan limit continuation, unpublished snapshots, grants, the
 // storage policy, and the replacement records function against the 0068 one. Set SOURCE_DB_URL to a local database
 // whose name contains test or proof; nothing here connects to a hosted project.
@@ -32,6 +32,7 @@ CREATE POLICY "Members read datasets" ON storage.objects FOR SELECT TO authentic
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated,service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon,authenticated,service_role;
 `;
+const M67 = readFileSync("drizzle/migrations/0067_abs_ee.sql", "utf8");
 const M68 = readFileSync("drizzle/migrations/0068_official_sources.sql", "utf8");
 const M69 = readFileSync("drizzle/migrations/0069_official_reads.sql", "utf8");
 /** The 0068 records function under another name, to compare the replacement with. */
@@ -69,6 +70,7 @@ describe.skipIf(!local)("official reads of migration 0069 on PostgreSQL", () => 
   beforeAll(async () => {
     sql = postgres(url, { max: 1, onnotice: () => undefined });
     await sql.unsafe(STUBS);
+    await sql.unsafe(M67);
     await sql.unsafe(M68);
     await sql.unsafe(M69);
     await sql.unsafe(M69);
