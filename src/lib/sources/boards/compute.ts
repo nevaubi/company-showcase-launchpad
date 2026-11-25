@@ -496,7 +496,7 @@ export function computeRankTile(
   const figure = formatDecimal(leader.value, { decimals: spec.decimals });
   return {
     ok: true,
-    headline: `${leader.cell.name ?? leader.cell.key} ${spec.verb ?? "had"} the largest ${spec.subject} of ${ranked.length} ${spec.entities} ${at(context.cadence, label)}: ${figure}${unitWords(spec.unit)}.`,
+    headline: `${leader.cell.name ?? leader.cell.key} ${spec.verb ?? "had"} the largest ${spec.subject} of ${ranked.length} ${spec.entities} ${at(context.cadence, label)}.`,
     figure,
     figureUnit: figureUnitOf(spec.unit),
     asOf: label,

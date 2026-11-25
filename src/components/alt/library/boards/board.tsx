@@ -12,12 +12,14 @@ export const boardQuery = (id: string) => ({
   retry: false,
 });
 
-const GRID = "grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3";
+/** Three columns on a wide page, two where four tiles would leave one alone on a row. */
+const grid = (count: number) =>
+  `grid grid-cols-1 gap-x-3 gap-y-3 @2xl:grid-cols-2 ${count === 4 || count === 2 ? "" : "@5xl:grid-cols-3"}`;
 
 /** The final layout while the board loads: tiles of the final height, so nothing moves when they fill. */
 function Skeleton({ count }: { count: number }) {
   return (
-    <div className={GRID} aria-hidden>
+    <div className={grid(count)} aria-hidden>
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="flex h-[25.5rem] flex-col gap-3 rounded-md border bg-card p-3.5 shadow-paper">
           <div className="h-3.5 w-2/3 animate-pulse rounded-sm bg-muted" />
@@ -39,7 +41,7 @@ function BoardBody({ data }: { data: BoardData }) {
   return (
     <>
       {data.tiles.length > 0 ? (
-        <div className={GRID}>
+        <div className={grid(data.tiles.length)}>
           {data.tiles.map((t) => (
             <Tile key={t.id} tile={t} />
           ))}

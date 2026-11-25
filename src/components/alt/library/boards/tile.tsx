@@ -47,7 +47,7 @@ export function Tile({ tile }: { tile: BoardTile }) {
   const isRank = tile.form === "ranked-bars";
 
   return (
-    <article data-section={tile.title} className="flex min-w-0 flex-col rounded-md border bg-card shadow-paper">
+    <article data-section={tile.title} className="row-span-4 grid min-w-0 grid-cols-1 grid-rows-subgrid gap-y-0 rounded-md border bg-card shadow-paper">
       <header className="flex items-start gap-2 px-3.5 pb-1 pt-3">
         <h3 className="min-w-0 flex-1 text-[13px] font-semibold leading-snug tracking-tight">{tile.title}</h3>
         <Segmented
@@ -70,7 +70,7 @@ export function Tile({ tile }: { tile: BoardTile }) {
           {!percent && result.figureUnit && <span className="text-[11px] text-muted-foreground">{result.figureUnit}</span>}
           <span className="ml-auto text-[11px] text-muted-foreground">{result.asOf}</span>
         </p>
-        <p className="mt-1 min-h-[3.4rem] text-[13px] leading-snug">{result.headline}</p>
+        <p className="mt-1 text-[13px] leading-snug">{result.headline}</p>
       </div>
       <div className="px-3.5 pt-2">
         {view === "chart" ? (
@@ -89,7 +89,7 @@ export function Tile({ tile }: { tile: BoardTile }) {
           <TileTable tile={tile} rowHref={rowHref} />
         )}
       </div>
-      <footer className="mt-auto space-y-1 border-t px-3.5 py-2 text-[11px] leading-snug text-muted-foreground">
+      <footer className="mt-2 space-y-1 self-end border-t px-3.5 py-2 text-[11px] leading-snug text-muted-foreground">
         {tile.note && <p>{tile.note}</p>}
         {result.gaps.count + result.gaps.noBase > 0 && (
           <p>
