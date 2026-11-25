@@ -16,7 +16,7 @@ export function CollectionCard({ card }: { card: CollectionCardModel }) {
       to="/app/alt-data/library/c/$collection"
       params={{ collection: collectionSlug(card.id) }}
       title={card.blurb}
-      className="group flex h-[118px] min-w-0 flex-col rounded-md border bg-card px-3 py-2.5 shadow-paper transition-shadow duration-150 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex h-[132px] min-w-0 flex-col rounded-md border bg-card px-3 py-2.5 shadow-paper transition-shadow duration-150 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="flex min-w-0 items-baseline gap-2">
         <h3 className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight group-hover:underline">{card.name}</h3>
@@ -24,12 +24,11 @@ export function CollectionCard({ card }: { card: CollectionCardModel }) {
       </div>
       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{publishers}</p>
       <ShapeBar counts={card.shapes} className="mt-auto" />
-      <div className="mt-2 flex min-w-0 items-baseline justify-between gap-2 text-[11px] text-muted-foreground">
-        <span className="num truncate" title={`${card.records.toLocaleString("en-US")} records in original tables${card.views ? `; ${plural(card.views, "view", "views")} of them not added` : ""}`}>
-          <span className="text-[13px] text-foreground">{fmtCompact(card.records)}</span> records
-        </span>
-        <span className="shrink-0">Collected {utcDayRange(card.collected.first, card.collected.last)}</span>
-      </div>
+      <p className="num mt-2 truncate text-[11px] text-muted-foreground" title={`${card.records.toLocaleString("en-US")} records in original tables; views repeat their parents' records and are not added`}>
+        <span className="text-[13px] text-foreground">{fmtCompact(card.records)}</span> records
+        {card.viewRecords > 0 && <> · {fmtCompact(card.viewRecords)} more in views</>}
+      </p>
+      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Collected {utcDayRange(card.collected.first, card.collected.last)}</p>
     </Link>
   );
 }
@@ -37,7 +36,7 @@ export function CollectionCard({ card }: { card: CollectionCardModel }) {
 /** A card's place while the library loads: same size, so nothing moves when it arrives. */
 export function CollectionCardSkeleton() {
   return (
-    <div aria-hidden className="flex h-[118px] flex-col rounded-md border bg-card px-3 py-2.5">
+    <div aria-hidden className="flex h-[132px] flex-col rounded-md border bg-card px-3 py-2.5">
       <Skeleton className="h-4 w-2/3" />
       <Skeleton className="mt-2 h-3 w-1/2" />
       <Skeleton className="mt-auto h-2 w-full rounded-full" />

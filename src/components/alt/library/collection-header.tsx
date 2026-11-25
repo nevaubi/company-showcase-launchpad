@@ -39,12 +39,12 @@ export function CollectionFacts({ facts, loading }: { facts: LibraryFactsModel |
     );
   return (
     <FactsRow section="Collection facts">
-      <Stat className="h-[64px]" label="Tables" value={n(facts.tables)} sub={facts.views ? `${n(facts.views)} are views of another table` : "each one a published file"} />
+      <Stat className="h-[64px]" label="Tables" value={n(facts.tables)} sub={facts.views ? `${n(facts.views)} are views of others` : "each a published file"} />
       <Stat
         className="h-[64px]"
         label="Records"
-        value={<span title={`${n(facts.records)} records`}>{fmtCompact(facts.records)}</span>}
-        sub={facts.viewRecords ? `in original tables; ${fmtCompact(facts.viewRecords)} more in views, not added` : "in original tables"}
+        value={<span title={`${n(facts.records)} records in original tables; views repeat their parents' records and are not added`}>{fmtCompact(facts.records)}</span>}
+        sub={facts.viewRecords ? `${fmtCompact(facts.viewRecords)} more in views` : "in original tables"}
       />
       <Stat className="h-[64px]" label="Publishers" value={n(facts.publishers)} sub={`${n(facts.registeredNames)} names as registered`} />
       <Stat className="h-[64px]" label="Refreshed by a job" value={n(facts.refreshed)} sub={`of ${n(facts.tables)} tables`} />
@@ -52,7 +52,7 @@ export function CollectionFacts({ facts, loading }: { facts: LibraryFactsModel |
         className="col-span-2 h-[64px] @3xl:col-span-1"
         label="Collected"
         value={<span className="text-[15px]">{utcDayRange(facts.collected.first, facts.collected.last)}</span>}
-        sub="when the files were retrieved, not revised"
+        sub="retrieved, not revised"
       />
     </FactsRow>
   );

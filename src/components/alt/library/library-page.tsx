@@ -7,7 +7,7 @@ import { AltNav } from "./alt-nav";
 import { BoardSlot } from "./board-slot";
 import { ChangesFeed } from "./changes-feed";
 import { CollectionCard, CollectionCardSkeleton } from "./collection-card";
-import { useLibrary } from "./library-data";
+import { failureHint, useLibrary } from "./library-data";
 import { LibraryFacts } from "./library-facts";
 import { LibrarySearchRow, type PublisherOption } from "./library-search";
 import {
@@ -64,7 +64,7 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
       {failure ? (
         <DataUnavailable
           title="The Data library could not be read"
-          hint={failure.reason === "timeout" ? "The database took too long to answer. Try again in a moment." : failure.message}
+          hint={failureHint(failure)}
           onRetry={retry}
         />
       ) : filtering ? (
@@ -148,10 +148,8 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
                 : Array.from({ length: 14 }).map((_, i) => <CollectionCardSkeleton key={i} />)}
             </div>
           </section>
-          <div className="grid grid-cols-1 items-start gap-5 @5xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <ChangesFeed lines={lib ? changeLines(lib, names) : []} loading={loading} />
-            <PublisherList rows={publishers} loading={loading} />
-          </div>
+          <ChangesFeed lines={lib ? changeLines(lib, names) : []} loading={loading} />
+          <PublisherList rows={publishers} loading={loading} />
         </>
       )}
     </div>

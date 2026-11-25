@@ -109,6 +109,8 @@ export type CollectionCardModel = {
   tables: number;
   records: number;
   views: number;
+  /** Records of the views here: repeats of their parents' records, shown apart and never added. */
+  viewRecords: number;
   /** Short names of the publishers with the most tables here, at most three. */
   publishers: string[];
   morePublishers: number;
@@ -127,7 +129,7 @@ export function collectionCards(lib: SourceLibrary, names = publisherNames(lib))
     const byPublisher = new Map<string, number>();
     for (const r of mine) byPublisher.set(r.publisherId, (byPublisher.get(r.publisherId) ?? 0) + 1);
     const ranked = [...byPublisher.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    const { records, views } = sumRecords(mine);
+    const { records, views, viewRecords } = sumRecords(mine);
     out.push({
       id: c.id,
       name: c.name,
@@ -136,6 +138,7 @@ export function collectionCards(lib: SourceLibrary, names = publisherNames(lib))
       tables: mine.length,
       records,
       views,
+      viewRecords,
       publishers: ranked.slice(0, 3).map(([id]) => names(id)?.short ?? id),
       morePublishers: Math.max(0, ranked.length - 3),
       shapes: shapeCounts(mine),

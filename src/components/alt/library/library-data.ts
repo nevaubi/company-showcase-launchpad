@@ -32,3 +32,10 @@ export function useLibrary(): LibraryState {
         : null;
   return { lib, loading: q.isLoading, failure, retry: () => void q.refetch() };
 }
+
+/** What a reader is told when the library cannot be read: a timeout says so; a request that failed says to retry. */
+export function failureHint(failure: NonNullable<LibraryState["failure"]>): string {
+  if (failure.reason === "timeout") return "The database took too long to answer. Try again in a moment.";
+  if (failure.reason === "request") return "The request did not complete. Check the connection and try again.";
+  return failure.message;
+}

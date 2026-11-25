@@ -64,7 +64,7 @@ export function LibrarySearchRow({
         {hasQuery && (
           <button
             type="button"
-            aria-label="Clear search"
+            aria-label="Clear the search field"
             onClick={() => {
               setText("");
               onChange({ q: undefined, sort: value.sort === "match" ? undefined : value.sort });

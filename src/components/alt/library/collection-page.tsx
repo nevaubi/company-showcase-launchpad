@@ -9,7 +9,7 @@ import { BoardSlot } from "./board-slot";
 import { CollectionCard, CollectionCardSkeleton } from "./collection-card";
 import { CollectionFacts, CollectionHeader } from "./collection-header";
 import { HrefLink } from "./href-link";
-import { useLibrary } from "./library-data";
+import { failureHint, useLibrary } from "./library-data";
 import { LibrarySearchRow, type PublisherOption } from "./library-search";
 import { collectionCards, libraryFacts, publisherLabel, publisherNames, publisherRows } from "./overview";
 import { OVERLAP_NOTE, relatedPages } from "./related";
@@ -63,7 +63,7 @@ function KnownCollection({ collection, search, onSearch }: { collection: Collect
       {failure ? (
         <DataUnavailable
           title="This collection could not be read"
-          hint={failure.reason === "timeout" ? "The database took too long to answer. Try again in a moment." : failure.message}
+          hint={failureHint(failure)}
           onRetry={retry}
         />
       ) : (
@@ -154,7 +154,7 @@ function UnknownCollection({ segment }: { segment: string }) {
     <div className="@container grid grid-cols-1 content-start gap-5">
       <CollectionHeader title="No such collection" description={`“${shown.slice(0, 80)}” is not one of the library's collections. Choose one of these, or search the whole library.`} />
       {failure ? (
-        <DataUnavailable title="The Data library could not be read" hint={failure.message} onRetry={retry} />
+        <DataUnavailable title="The Data library could not be read" hint={failureHint(failure)} onRetry={retry} />
       ) : (
         <section data-section="Collections" className="min-w-0">
           <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @4xl:grid-cols-3 @5xl:grid-cols-4">

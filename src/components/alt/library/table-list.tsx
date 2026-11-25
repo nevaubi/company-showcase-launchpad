@@ -16,6 +16,7 @@ function useWidth(el: HTMLElement | null) {
   useLayoutEffect(() => {
     if (!el) return;
     setWidth(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
     ro.observe(el);
     return () => ro.disconnect();
@@ -169,6 +170,9 @@ export function TableList({
   return (
     <section ref={setWrap} data-section={section} className="min-w-0 rounded-md border bg-card shadow-paper">
       {heading}
+      {!loading && items.length === 0 ? (
+        empty
+      ) : (
       <div className={cn("transition-opacity duration-150", dim && "opacity-60")} style={{ overflowAnchor: "none" }}>
         {narrow ? (
           <ul ref={setBody} aria-label="Tables">
@@ -242,8 +246,8 @@ export function TableList({
             </tbody>
           </table>
         )}
-        {!loading && items.length === 0 && empty}
       </div>
+      )}
       {!loading && items.length > 0 && (
         <p className="border-t px-3.5 py-2 text-[11px] leading-4 text-muted-foreground">
           Collected is when the file was retrieved from the publisher, not when the publisher last revised it. A view repeats its parent's records and is never added to them. Arrow keys move between rows; Enter opens the table.
