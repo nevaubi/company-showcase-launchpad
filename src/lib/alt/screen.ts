@@ -1,23 +1,28 @@
 // The one check every stored `alt_data` row passes before anything shows it (pages, alerts, the
 // daily brief, the research assistant, exports). Rows a collector stored under the wrong company
-// (misattributed contract awards, look-alike FDA firms, trial sponsors and vehicle makers) and
-// missing values stored as zero (FDIC) are removed. Pure.
+// (misattributed contract awards, look-alike FDA firms, trial sponsors and vehicle makers), bank
+// and deposits rows of a bank the official mapping does not prove for the company
+// (`guardBankRows`, src/lib/sources/company/guard.ts) and missing values stored as zero (FDIC) are
+// removed. Pure.
 import { contractRowBelongs, REFRESH_DATASET, type CompanyKeys } from "@/lib/alt/contracts";
 import { firmRowBelongs, rowFirm } from "@/lib/alt/firms";
 import { isBankPlaceholder } from "@/lib/alt/bank";
+import { guardBankRows } from "@/lib/sources/company/guard";
 
 /** The fields of a stored row the screen reads. */
 export interface ScreenRowLike {
   ticker: string;
   dataset: string;
   kind: string;
+  uid?: string | null;
+  date?: string | null;
   meta?: unknown;
   title?: string | null;
   value?: number | null;
 }
 
-/** Columns a reader must select for the screen to judge its rows. */
-export const SCREEN_COLUMNS = ["ticker", "dataset", "kind", "meta", "title", "value"] as const;
+/** Columns a reader must select for the screen to judge its rows (the key and date group a deposits survey year). */
+export const SCREEN_COLUMNS = ["uid", "ticker", "dataset", "kind", "date", "meta", "title", "value"] as const;
 
 /** Whether the screen needs to know who the company is to judge this row. */
 const needsKeys = (r: ScreenRowLike) => r.dataset === "contracts" || rowFirm(r) !== undefined;
@@ -32,7 +37,7 @@ export function screenAltRows<T extends ScreenRowLike>(rows: T[], keysOf: (ticke
     if (!cache.has(t)) cache.set(t, keysOf(t));
     return cache.get(t)!;
   };
-  return rows.filter((r) => {
+  const kept = rows.filter((r) => {
     if (r.dataset === REFRESH_DATASET) return false;
     if (r.dataset === "bank") return !isBankPlaceholder(r);
     if (!needsKeys(r)) return true;
@@ -40,9 +45,10 @@ export function screenAltRows<T extends ScreenRowLike>(rows: T[], keysOf: (ticke
     if (!k) return false;
     return r.dataset === "contracts" ? contractRowBelongs(r, k) : firmRowBelongs(r, r.ticker, k);
   });
+  return guardBankRows(kept);
 }
 
-/** Add the screen's columns to a select list ("dataset,date,title" → "dataset,date,title,ticker,kind,meta,value"). */
+/** Add the screen's columns to a select list ("dataset,date,title" → "dataset,date,title,uid,ticker,kind,meta,value"). */
 export function withScreenColumns(columns: string): string {
   const cols = columns.split(",").map((c) => c.trim()).filter(Boolean);
   if (cols.includes("*")) return "*";

@@ -66,6 +66,26 @@ export function depositsScopeProven(meta: Record<string, unknown>, e: GuardEntry
   return rssd === "" || rssd === "0" ? true : e.rollup.includes(rssd);
 }
 
+/** Whether a call-report row is of a certificate the mapping proves. */
+const bankRowProven = (r: AltLike, e: GuardEntry) => {
+  const cert = certOf(metaOf(r));
+  return cert != null && e.certs.includes(cert);
+};
+
+/** One survey year of one mapped ticker: its total and the state rows of the same roll-up, or nothing (rule below). */
+function provenYear<T extends AltLike>(list: T[], e: GuardEntry): T[] {
+  const totals = list.filter(isTotal);
+  if (totals.length !== 1) return [];
+  const total = totals[0];
+  const meta = metaOf(total);
+  if (!depositsScopeProven(meta, e)) return [];
+  const scope = typeof meta.scope === "string" ? meta.scope : null;
+  const states = list.filter(r => !isTotal(r) && (!scope || metaOf(r).scope === scope));
+  const sum = states.reduce((n, r) => n + (r.value ?? 0), 0);
+  if (total.value == null || sum !== total.value) return [];
+  return [total, ...states];
+}
+
 /**
  * Bank and deposits rows of a mapped ticker, without any row of a bank the mapping does not prove:
  * - call-report rows (`bank`) only for proven certificates;
@@ -81,8 +101,7 @@ export function guardAltRows<T extends AltLike>(ticker: string, rows: T[], guard
   const out: T[] = [];
   for (const r of rows) {
     if (r.dataset === "bank") {
-      const cert = certOf(metaOf(r));
-      if (cert != null && e.certs.includes(cert)) out.push(r);
+      if (bankRowProven(r, e)) out.push(r);
     } else if (r.dataset === "deposits") {
       const year = (r.date ?? "").slice(0, 4);
       const list = deposits.get(year);
@@ -90,17 +109,39 @@ export function guardAltRows<T extends AltLike>(ticker: string, rows: T[], guard
       else deposits.set(year, [r]);
     } else out.push(r);
   }
-  for (const list of deposits.values()) {
-    const totals = list.filter(isTotal);
-    if (totals.length !== 1) continue;
-    const total = totals[0];
-    const meta = metaOf(total);
-    if (!depositsScopeProven(meta, e)) continue;
-    const scope = typeof meta.scope === "string" ? meta.scope : null;
-    const states = list.filter(r => !isTotal(r) && (!scope || metaOf(r).scope === scope));
-    const sum = states.reduce((n, r) => n + (r.value ?? 0), 0);
-    if (total.value == null || sum !== total.value) continue;
-    out.push(total, ...states);
-  }
+  for (const list of deposits.values()) out.push(...provenYear(list, e));
   return out;
+}
+
+/**
+ * `guardAltRows` over rows of any number of tickers, in their input order: the shared alt screen
+ * (`screenAltRows`, src/lib/alt/screen.ts) applies it, so every reader gets it (company pages, the hub's
+ * leaderboards, deposits by state, the assistant). For readers that read only part of a company's rows:
+ * - a survey year read as its total alone (a leaderboard of totals) keeps the total when its roll-up is proven;
+ * - a deposits row read without its key (the leaderboard function returns none) is judged alone: kept only when
+ *   its own meta proves the roll-up, which a state row never does (it carries no certificate);
+ * - a year read only in part fails the sum and is left out whole.
+ */
+export function guardBankRows<T extends AltLike & { ticker: string }>(rows: T[], guard: BankGuardFile = BANK_GUARD): T[] {
+  const keep = new Set<T>();
+  const years = new Map<string, { e: GuardEntry; list: T[] }>();
+  for (const r of rows) {
+    const e = r.dataset === "bank" || r.dataset === "deposits" ? guardEntry(r.ticker, guard) : null;
+    if (!e) keep.add(r);
+    else if (r.dataset === "bank") {
+      if (bankRowProven(r, e)) keep.add(r);
+    } else if (typeof r.uid !== "string") {
+      if (depositsScopeProven(metaOf(r), e)) keep.add(r);
+    } else {
+      const key = `${r.ticker.trim().toUpperCase()}|${(r.date ?? "").slice(0, 4)}`;
+      const year = years.get(key);
+      if (year) year.list.push(r);
+      else years.set(key, { e, list: [r] });
+    }
+  }
+  for (const { e, list } of years.values()) {
+    const totalAlone = list.length === 1 && isTotal(list[0]);
+    for (const r of totalAlone ? (depositsScopeProven(metaOf(list[0]), e) ? list : []) : provenYear(list, e)) keep.add(r);
+  }
+  return keep.size === rows.length ? rows : rows.filter(r => keep.has(r));
 }
