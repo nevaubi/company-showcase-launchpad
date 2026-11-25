@@ -73,7 +73,7 @@ function bankDetail(): SourceDatasetDetail {
   return {
     dataset: {
       id: "bank",
-      name: "FDIC bank financial statements — all reported quarters",
+      name: "FDIC bank financial statements \u2014 all reported quarters",
       sector: "01_financials",
       agency: "FDIC",
       source_id: "BANK_TEST",
