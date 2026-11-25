@@ -1,0 +1,79 @@
+{
+ "read": "getFieldCompleteness",
+ "input": {
+  "datasetId": "official_11_real_estate_raw_hpi_at_tract_d51b3471be",
+  "snapshotId": "a5b0f712db7e8ac19126e1c6cd734fea4c4103b84d23ddff8eec80d3cf513c2c"
+ },
+ "result": {
+  "ok": true,
+  "data": {
+   "snapshot": {
+    "datasetId": "official_11_real_estate_raw_hpi_at_tract_d51b3471be",
+    "snapshotId": "a5b0f712db7e8ac19126e1c6cd734fea4c4103b84d23ddff8eec80d3cf513c2c",
+    "publishedAt": "2026-11-25T05:42:53.290772+00:00",
+    "retrievedAt": "2026-11-24T09:59:18.460907+00:00",
+    "fileSha256": "7675da97c942f6ab2949aa58a733675a681ca69cb28cbb192cf84ef5ee1502cf",
+    "rows": 2179042,
+    "fields": 7
+   },
+   "fields": [
+    {
+     "position": 0,
+     "key": "col0001",
+     "label": "tract",
+     "filled": 2179042,
+     "blank": 0,
+     "share": 1
+    },
+    {
+     "position": 1,
+     "key": "col0002",
+     "label": "state_abbr",
+     "filled": 2179042,
+     "blank": 0,
+     "share": 1
+    },
+    {
+     "position": 2,
+     "key": "col0003",
+     "label": "year",
+     "filled": 2179042,
+     "blank": 0,
+     "share": 1
+    },
+    {
+     "position": 3,
+     "key": "col0004",
+     "label": "annual_change",
+     "filled": 1969601,
+     "blank": 209441,
+     "share": 0.9038839086167224
+    },
+    {
+     "position": 4,
+     "key": "col0005",
+     "label": "hpi",
+     "filled": 2069265,
+     "blank": 109777,
+     "share": 0.9496214391461936
+    },
+    {
+     "position": 5,
+     "key": "col0006",
+     "label": "hpi1990",
+     "filled": 1035715,
+     "blank": 1143327,
+     "share": 0.475307497514963
+    },
+    {
+     "position": 6,
+     "key": "col0007",
+     "label": "hpi2000",
+     "filled": 1810161,
+     "blank": 368881,
+     "share": 0.8307141395163563
+    }
+   ]
+  }
+ }
+}

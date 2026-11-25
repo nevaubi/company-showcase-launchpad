@@ -1,0 +1,31 @@
+{
+ "read": "getSourcePeriodRange",
+ "input": {
+  "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+  "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd"
+ },
+ "result": {
+  "ok": true,
+  "data": {
+   "snapshot": {
+    "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+    "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+    "publishedAt": "2026-11-25T06:10:19.876385+00:00",
+    "retrievedAt": "2026-11-24T09:55:53.865453+00:00",
+    "fileSha256": "c32bc8aafd02953e419a18074d531110e759d8b791c4566d345d5abbe5b96ee7",
+    "rows": 686,
+    "fields": 5
+   },
+   "range": {
+    "first": {
+     "period": "2000",
+     "row": 1
+    },
+    "last": {
+     "period": "2026",
+     "row": 686
+    }
+   }
+  }
+ }
+}
