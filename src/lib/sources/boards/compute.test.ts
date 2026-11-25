@@ -276,6 +276,15 @@ describe("rules", () => {
   const ctx = context(spec, "yyyy-mm", "month");
   const cells = (texts: (string | null)[]): CellInput[] => texts.map((t, i) => ({ row: i + 1, period: `2026-${String(i + 1).padStart(2, "0")}`, text: t }));
 
+  it("refuses a percent change of a rate stated in percent; a difference in points is shown (review int-code N5)", () => {
+    const rate = cells(Array.from({ length: 13 }, (_, i) => (i === 12 ? "4.4" : "4.0"))).map((c, i) => ({ ...c, period: `${2025 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}` }));
+    const reason = "A rate stated in percent changes by a difference in percentage points; a percent change of it is not shown.";
+    expect(computeSeriesTile({ ...spec, transform: "change-12m", headline: "change", changeAs: "percent" }, ctx, rate)).toEqual({ ok: false, reason });
+    expect(computeSeriesTile({ ...spec, changeAs: "percent" }, ctx, rate)).toEqual({ ok: false, reason });
+    const points = ok(computeSeriesTile({ ...spec, transform: "change-12m", headline: "change", changeAs: "difference" }, ctx, rate));
+    expect(points.headline).toContain("0.4 percentage points");
+  });
+
   it("never shows an older figure as the latest", () => {
     expect(computeSeriesTile(spec, ctx, cells(["1.0", "2.0", ""]))).toEqual({ ok: false, reason: "The latest period, Mar 2026, has no figure (empty in the source)." });
     expect(computeSeriesTile(spec, { ...ctx, markers: ["NA"] }, cells(["1.0", "NA"]))).toEqual({

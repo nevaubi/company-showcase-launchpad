@@ -244,6 +244,9 @@ export function computeSeriesTile(spec: SeriesTileSpec, context: TileContext, ce
   if ((isChange || spec.changeAs) && context.cadence === "day")
     return refuse("A daily series has no period a year earlier to compare with.");
   if (isChange && !spec.changeAs) return refuse("A change tile must say whether the change is a percent or a difference.");
+  // a rate going from 4.0 to 4.4 rose 0.4 percentage points, not "10.0%" (review int-code N5)
+  if ((spec.changeAs ?? "percent") === "percent" && (isChange || spec.changeAs) && spec.unit === "Percent")
+    return refuse("A rate stated in percent changes by a difference in percentage points; a percent change of it is not shown.");
 
   const gaps = emptyGaps();
   const placedResult = place(cells, context, gaps);
