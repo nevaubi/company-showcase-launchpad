@@ -134,7 +134,20 @@ class FredDownloadTests(unittest.TestCase):
     def test_nonidentity_partial_and_structured_error_bodies_are_rejected(self):
         self.error("invalid_response_headers", response=FakeResponse(headers=[("Content-Type", "text/csv"), ("Content-Encoding", "gzip")]))
         self.error("invalid_response_headers", response=FakeResponse(headers=[("Content-Type", "text/csv"), ("Content-Range", "bytes 0-20/100")]))
-        self.error("http_status", response=FakeResponse(status=206))
+        _, refused = self.error("http_status", response=FakeResponse(status=206))
+        self.assertEqual(refused.status, 206)
+
+    def test_refused_answer_carries_its_status_and_nothing_else(self):
+        for status in (403, 429, 503, 404):
+            with self.subTest(status=status):
+                _, refused = self.error("http_status", response=FakeResponse(status=status))
+                self.assertEqual(refused.status, status)
+                self.assertEqual(MODULE._error("http_status", status)["error"],
+                                 {"code": "http_status", "message": MODULE.ERRORS["http_status"], "status": status})
+        # no status for other codes, and never a value that is not a plain status number
+        self.assertNotIn("status", MODULE._error("deadline", 504)["error"])
+        self.assertNotIn("status", MODULE._error("http_status", "429")["error"])
+        self.assertNotIn("status", MODULE._error("http_status", 99)["error"])
         for content_type in ["text/html", "application/json", "application/problem+json", "application/xml"]:
             self.error("unexpected_content", response=FakeResponse(headers=[("Content-Type", content_type)]))
         for body in [b"  <!doctype html><html>blocked", b'\xef\xbb\xbf {"error":1}', b"<?xml version='1.0'?>", b"[1,2]"]:

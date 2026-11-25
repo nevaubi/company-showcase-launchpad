@@ -21,10 +21,24 @@ import {
   enabled,
   retryDelay,
   safeError,
+  childReceipt,
 } from "./lib/official-worker-plan";
+import { sweepRunReceipts, takeRunReceipt } from "./lib/run-receipt";
 import { trimSourceCache } from "./lib/source-cache";
 
 const owner = `official:${process.env.RENDER_INSTANCE_ID ?? "worker"}:${randomUUID()}`;
+const WORK = process.env.OFFICIAL_SOURCE_WORK_DIR ?? "/var/data/official-sources";
+/** Where a child leaves its account of a run for the worker to store with the run's receipt. */
+const RECEIPTS = join(WORK, "receipts");
+try {
+  mkdirSync(RECEIPTS, { recursive: true });
+  // Receipts a previous worker process never read (it was stopped while a child ran).
+  const swept = sweepRunReceipts(RECEIPTS);
+  if (swept) log("official-source-worker", `removed ${swept} unread receipt files older than a day`);
+} catch (e) {
+  // Without the folder the children still run; their receipts then say only how each process ended.
+  log("official-source-worker", "receipt folder unavailable", safeError(e));
+}
 const children = new Set<ChildProcess>();
 let stopped = false;
 for (const signal of ["SIGTERM", "SIGINT"] as const)
@@ -97,18 +111,24 @@ async function claim(job: string): Promise<Lease | null> {
   };
 }
 
+type ChildEnd = { code: number | null; told: Record<string, unknown> | null };
+
 async function childRun(
   lease: Lease,
   script: string,
   args: string[],
   maxMs: number,
-): Promise<number | null> {
+): Promise<ChildEnd> {
   if (stopped || !hasMemoryHeadroom()) {
     log(lease.job, "waiting for memory headroom before starting new work");
-    return RESOURCE_WAIT_EXIT;
+    return { code: RESOURCE_WAIT_EXIT, told: null };
   }
   const started = new Date().toISOString();
-  const child = spawn("bun", [script, ...args], { stdio: "inherit", env: process.env });
+  const receiptFile = join(RECEIPTS, `${lease.job}-${randomUUID()}.json`);
+  const child = spawn("bun", [script, ...args, `--receipt=${receiptFile}`], {
+    stdio: "inherit",
+    env: process.env,
+  });
   children.add(child);
   let killed = false;
   let renewing = false;
@@ -138,20 +158,26 @@ async function childRun(
   clearInterval(heartbeat);
   children.delete(child);
   const result = killed ? 124 : code;
+  // What the child says it did (datasets checked, filings stored, what failed and why) goes into the
+  // row beside how the process ended. Rows of data are still counted only by committed snapshots and loads.
+  const told = takeRunReceipt(receiptFile);
+  const row = childReceipt({
+    child: script,
+    exitCode: result,
+    killed,
+    seconds: (Date.now() - Date.parse(started)) / 1000,
+    told,
+  });
   const receipt = await sb.from("job_runs").insert({
     job: lease.job,
     started_at: started,
     finished_at: new Date().toISOString(),
-    ok: result === 0,
-    items: 0,
-    detail: {
-      child: script,
-      exit_code: result,
-      note: "Process receipt; source rows are counted only by committed snapshots or ABS loads.",
-    },
+    ok: row.ok,
+    items: row.items,
+    detail: row.detail,
   });
   if (receipt.error) log(lease.job, "receipt failed", safeError(receipt.error));
-  return result;
+  return { code: result, told };
 }
 
 async function sourceLoop() {
@@ -171,7 +197,7 @@ async function sourceLoop() {
         .limit(1);
       if (pending.error) throw new Error(pending.error.message);
       if (pending.data?.length) {
-        const code = await childRun(
+        const { code } = await childRun(
           lease,
           "scripts/source-import.ts",
           ["--all", "--max-snapshots=25", "--max-runtime-seconds=480"],
@@ -199,7 +225,7 @@ async function refreshLoop() {
         await sleep(30_000);
         continue;
       }
-      const code = await childRun(
+      const { code } = await childRun(
         lease,
         "scripts/source-refresh.ts",
         ["--all", "--max-datasets=8", "--max-runtime-seconds=480"],
@@ -236,7 +262,7 @@ function watches(): AbsWatch[] {
 
 async function absLoop() {
   const watch = watches();
-  const cache = join(process.env.OFFICIAL_SOURCE_WORK_DIR ?? "/var/data/official-sources", "sec");
+  const cache = join(WORK, "sec");
   mkdirSync(cache, { recursive: true });
   let failures = 0;
   while (!stopped && watch.length) {
@@ -259,7 +285,7 @@ async function absLoop() {
         `--cache=${cache}`,
         ...(w.from ? [`--from=${w.from}`] : []),
       ];
-      const code = await childRun(lease, "scripts/abs-ee.ts", args, 25 * 60_000);
+      const { code } = await childRun(lease, "scripts/abs-ee.ts", args, 25 * 60_000);
       // The durable provenance is in abs_*; these are re-fetchable copies owned by this worker.
       // Pruning occurs only after the child exits, so no active reader loses its file.
       const cacheState = trimSourceCache(

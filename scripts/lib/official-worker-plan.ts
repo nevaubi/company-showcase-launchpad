@@ -28,6 +28,39 @@ export function enabled(value: string | undefined, defaultValue = true): boolean
   return value === undefined ? defaultValue : /^(1|true)$/i.test(value);
 }
 
+/**
+ * The `job_runs` row for one child process: how it ended, plus the child's own account of its work
+ * when it left one (scripts/lib/run-receipt.ts). `error` is always present on a failed run, because
+ * that is where the freshness page and the watchdog tell a person to look.
+ */
+export function childReceipt(i: {
+  child: string;
+  exitCode: number | null;
+  /** the worker ended the process (time limit or lost lease) */
+  killed: boolean;
+  seconds: number;
+  told: Record<string, unknown> | null;
+}): { ok: boolean; items: number; detail: Record<string, unknown> } {
+  const ok = i.exitCode === 0;
+  const { items: toldItems, error: toldError, ...account } = i.told ?? {};
+  const items = typeof toldItems === "number" && Number.isSafeInteger(toldItems) && toldItems >= 0 ? toldItems : 0;
+  const said = [toldError, account.first_error].find((v): v is string => typeof v === "string" && v.length > 0);
+  const ended = i.killed
+    ? `stopped by the worker after ${Math.round(i.seconds)} s (time limit or lost lease)`
+    : `child exited with code ${i.exitCode ?? "none"}`;
+  return {
+    ok,
+    items,
+    detail: {
+      ...account,
+      child: i.child,
+      exit_code: i.exitCode,
+      ...(i.told ? {} : { note: "The child left no receipt: only how the process ended is known." }),
+      ...(ok ? (typeof toldError === "string" && toldError ? { error: toldError } : {}) : { error: safeError(said ? `${ended}: ${said}` : ended) }),
+    },
+  };
+}
+
 export function safeError(error: unknown): string {
   // No URL query strings or credential-looking tokens belong in the operational ledger.
   return String(error instanceof Error ? error.message : error)

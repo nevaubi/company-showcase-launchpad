@@ -13,7 +13,7 @@ import {
 
 const FAMILIES = Object.keys(REFRESH_FAMILY_SWITCH) as RefreshSwitchFamily[];
 /** The files that call a publisher with a header of their own. */
-const COLLECTORS = ["scripts/lib/fdic-native.ts", "scripts/lib/taiwan-revenue-native.ts"];
+const COLLECTORS = ["scripts/source-refresh.ts", "scripts/lib/fdic-native.ts", "scripts/lib/taiwan-revenue-native.ts"];
 
 describe("family switches of the official-source refresh", () => {
   it("names one worker variable per family", () => {
@@ -67,5 +67,9 @@ describe("user agent of the official-source collectors", () => {
       expect(source, file).not.toMatch(/official-source collector|official-data refresh/);
       expect(source, file).toContain('"User-Agent": OFFICIAL_USER_AGENT');
     }
+    // no override: the environment cannot put another identification back
+    expect(readFileSync("scripts/source-refresh.ts", "utf8")).not.toContain("OFFICIAL_SOURCE_USER_AGENT");
+    // the FRED child is handed the refresh's header and has no user agent of its own
+    expect(readFileSync("scripts/lib/fred-transport.ts", "utf8")).not.toMatch(/FiledUnder [a-z]/);
   });
 });
