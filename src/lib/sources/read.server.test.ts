@@ -4,7 +4,7 @@ import {
   readSourceFacets, readSourceFind, readSourcePeriodRange, readSourceRecord, readSourceSeries, readSourceSeriesFields, resetReadState,
 } from "./read.server";
 import { FakeSourceDb, type FakeRow as Row } from "./read.fake";
-import { crossSectionReadInput, entitiesReadInput, fieldCompleteness, findReadInput, recordReadInput, seriesReadInput } from "./read-types";
+import { crossSectionReadInput, entitiesReadInput, fieldCompleteness, findReadInput, recordReadInput, SERIES_SURE_LIMIT, seriesReadInput } from "./read-types";
 
 const H = (n: number) => n.toString(16).padStart(64, "0");
 const S1 = H(1), S2 = H(2), S3 = H(3), STAGING = H(9);
@@ -108,6 +108,23 @@ describe("readSourceSeries", () => {
     expect(await readSourceSeriesFields(db, { datasetId: "long", fields: [1], address: { whole: true } }, known)).toMatchObject({ ok: false, reason: "invalid" });
     expect(await readSourceSeriesFields(db, { datasetId: "fdic", fields: [3, "asset"], address: { whole: true } })).toMatchObject({ ok: false, reason: "invalid" });
   });
+  it("says for certain whether a series of up to 4,999 points ended; at 5,000 it cannot (review int-code N4)", async () => {
+    const table = (n: number) => new FakeSourceDb({
+      source_datasets: [{ id: "t", latest_snapshot_id: S2 }],
+      source_snapshots: [snapshot(S2, "t", n, [col("date"), col("value")], {})],
+      source_records: Array.from({ length: n }, (_, i) => rec(S2, i + 1, [`d${i + 1}`, String(i)])),
+    });
+    const read = (n: number, limit: number) => readSourceSeries(table(n), { datasetId: "t", field: 1, address: { whole: true }, limit });
+    expect(SERIES_SURE_LIMIT).toBe(4999);
+    const exact = await read(4999, SERIES_SURE_LIMIT);
+    expect(exact.ok && [exact.data.points.length, exact.data.next]).toEqual([4999, null]);
+    const longer = await read(5000, SERIES_SURE_LIMIT);
+    expect(longer.ok && [longer.data.points.length, longer.data.next]).toEqual([4999, 4999]);
+    // five full selects of 1,000 leave no row to tell: a reader asking for 5,000 would call a series of exactly 5,000 longer
+    const blind = await read(5000, 5000);
+    expect(blind.ok && blind.data.next).toBe(5000);
+  });
+
   it("pages a long series in selects of at most 1,000 rows, five a call, and continues exactly", async () => {
     const first = await readSourceSeries(db, { datasetId: "long", field: 1, address: { whole: true }, limit: 1500 });
     expect(first.ok).toBe(true);

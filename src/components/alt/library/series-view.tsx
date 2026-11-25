@@ -6,7 +6,7 @@ import type { TileResult } from "@/lib/sources/boards/types";
 import { recordHref } from "@/lib/sources/links";
 import type { MeasureSpec, Profile, SeriesAddress } from "@/lib/sources/profiles";
 import { sourceQueries } from "@/lib/sources/queries";
-import type { SourcePoint } from "@/lib/sources/read-types";
+import { SERIES_SURE_LIMIT, type SourcePoint } from "@/lib/sources/read-types";
 import type { SourceSnapshot } from "@/lib/sources/schema";
 import { cn } from "@/lib/utils";
 import { lastYears, levelSpec, seriesCells, seriesPlan, tileContext } from "./first-look-model";
@@ -14,8 +14,8 @@ import { count } from "./dataset-model";
 import { AWAITS_UPDATE } from "./coverage-view";
 import { PANEL, QuietLine } from "./ui/primitives";
 
-/** Rows one series view reads at most (five selects of 1,000). */
-const SERIES_LIMIT = 5000;
+/** Rows one series view reads at most (five selects of 1,000, one row kept to tell where the series ends). */
+const SERIES_LIMIT = SERIES_SURE_LIMIT;
 
 /** The row number a record address carries ("...&row=48517"). */
 export const rowOf = (href: string): number | null => {

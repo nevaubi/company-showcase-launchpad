@@ -55,6 +55,13 @@ export type SourceSnapshotRef = {
   fields: number;
 };
 
+/**
+ * The most points a series read can return and still say for certain whether the series ended: five selects of
+ * 1,000 rows hold 5,000 rows, so the last select keeps room for the one row that tells. A reader that refuses a
+ * series longer than it reads asks for this many, so "more than 4,999" is always true (review int-code N4).
+ */
+export const SERIES_SURE_LIMIT = READ_LIMITS.page * READ_LIMITS.pages - 1;
+
 /** A field of the dictionary with its zero-based position in `values`. */
 export type SourceFieldInfo = SourceColumn & { position: number };
 

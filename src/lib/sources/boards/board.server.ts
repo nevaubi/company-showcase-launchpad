@@ -14,7 +14,7 @@ import { describeDataset } from "../catalog";
 import { addressMatches, addressRefusal, cadenceOf, locateField, measureOf, profileStatus, unitOf } from "../profiles";
 import type { MeasureSpec, Profile, SeriesAddress } from "../profiles/types";
 import { readSourceCrossSection, readSourceSeriesFields, type SourceDirectClient, type SourceSnapshotKnown } from "../read.server";
-import type { SourceCellMatch, SourceSeriesAddress } from "../read-types";
+import { SERIES_SURE_LIMIT, type SourceCellMatch, type SourceSeriesAddress } from "../read-types";
 import type { SourceColumn, SourceIngest } from "../schema";
 import { computeRankTile, computeSeriesTile, type CellInput, type RankCellInput, type TileContext } from "./compute";
 import { boardSpec, tileSpec } from "./specs";
@@ -29,8 +29,8 @@ type Outcome = { tile: BoardTile } | { refused: { id: string; title: string; rea
 
 const META_TTL_MS = 10 * 60_000;
 const TILE_CACHE_LIMIT = 400;
-/** Series longer than this are not read for a tile (five pages of 1,000 rows per call). */
-const SERIES_ROW_LIMIT = 5000;
+/** Series longer than this are not read for a tile (five pages of 1,000 rows per call, one row kept to tell the end). */
+const SERIES_ROW_LIMIT = SERIES_SURE_LIMIT;
 
 const metaCache = new Map<string, { at: number; meta: DatasetMeta }>();
 const tileCache = new Map<string, Outcome>();
