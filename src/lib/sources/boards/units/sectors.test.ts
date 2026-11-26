@@ -2,11 +2,10 @@ import { describe, expect, it } from "vitest";
 import { addressRefusal, measureOf, PROFILE_ENTRIES } from "../../profiles";
 import type { Profile, ProfileDataset, SeriesAddress } from "../../profiles/types";
 import { composeProblems } from "../compose";
-import { isClassicSpec } from "../compute";
 import { BOARDS, CORE_BOARDS, CORE_TILES, TILES } from "../specs";
 import type { TileSpec } from "../types";
 import { UNIT_SPECS } from "./index";
-import { COMPUTABLE_TILES, LIVE_TILES, PENDING_BOARD_TILES, SECTOR_BOARD_ORDER, SECTOR_TILES, SPECS } from "./sectors";
+import { FACET_TILES, LIVE_TILES, PENDING_BOARD_TILES, SECTOR_BOARD_ORDER, SECTOR_TILES, SPECS } from "./sectors";
 
 /** The registered source id of every dataset a measure tile of this unit reads. */
 const SOURCE_ID: Readonly<Record<string, string | null>> = {
@@ -59,10 +58,13 @@ describe("sectors tiles and boards", () => {
 
   it("put only tiles the engine of this branch computes on a board, and hold the rest as pending", () => {
     const ids = new Set(MINE.map((t) => t.id));
-    for (const id of LIVE_TILES) expect(COMPUTABLE_TILES.has(id), id).toBe(true);
-    for (const id of COMPUTABLE_TILES) {
+    for (const id of LIVE_TILES) {
       expect(ids.has(id)).toBe(true);
-      expect(isClassicSpec(MINE.find((t) => t.id === id) as TileSpec)).toBe(true);
+      expect(FACET_TILES.has(id), id).toBe(false);
+    }
+    for (const id of FACET_TILES) {
+      const spec = MINE.find((t) => t.id === id);
+      expect(spec?.transform === "records" && "dimension" in spec.per, id).toBe(true);
     }
     for (const [board, pending] of Object.entries(PENDING_BOARD_TILES)) {
       for (const id of pending) {

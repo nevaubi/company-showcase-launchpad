@@ -41,6 +41,7 @@ const WB_TECH_SHORT = "official_02_technology_csv_wb_tech_annual_22be3f4568";
 const PARTD = "official_03_healthcare_csv_partd_overall_annual_654675dedc";
 const FDA_APPLICATIONS = "official_03_healthcare_csv_fda_applications_8ae8368413";
 const OB_EXCLUSIVITY = "official_03_healthcare_csv_ob_exclusivity_b108a0e8e8";
+const FCC_PROVIDERS = "official_10_communications_csv_fcc_provider_extents_b54be90909";
 const CAF_DISBURSE = "official_10_communications_csv_caf_disbursements_929fb6680e";
 const CAF_SPEED = "official_10_communications_csv_caf_speed_obligations_4a63551abb";
 const WB_TELECOM = "official_10_communications_csv_wb_telecom_annual_full_c578033483";
@@ -533,6 +534,20 @@ const HEALTH: TileSpec[] = [
 
 const COMMUNICATIONS: TileSpec[] = [
   {
+    id: "fcc-provider-records",
+    collection: "10_communications",
+    datasetId: FCC_PROVIDERS,
+    title: "Fixed broadband providers in FCC's provider lookup table, by Form 477 date",
+    subject: "FCC's fixed broadband provider lookup table",
+    transform: "records",
+    headline: "records",
+    form: "bars",
+    per: { dimension: "period", format: "mmmyyyy", by: "period" },
+    section: "Broadband providers",
+    size: "wide",
+    note: "One record per holding company and Form 477 date (June and December), as FCC publishes them; the table's latest date is June 2021.",
+  } satisfies RecordsTileSpec,
+  {
     id: "caf-disbursement-records",
     collection: "10_communications",
     datasetId: CAF_DISBURSE,
@@ -592,16 +607,25 @@ const COMMUNICATIONS: TileSpec[] = [
 const ALL: readonly TileSpec[] = [...HOUSING, ...TECHNOLOGY, ...HEALTH, ...COMMUNICATIONS];
 
 /**
- * Tiles the engine of this branch computes today (classic forms, a ranking whose period holds at most 1,000 records, a
- * series read in at most five selects) and that the board tests can compute on fixture rows.
+ * Count tiles that read the store's facet counts (`source_facets`): the board tests' fake client answers no facet
+ * call yet, so these wait off the boards (asked of the lead on 26 Nov 2026). Their exact production counts are in
+ * `sectors.fixtures.json` under `facets`.
  */
-export const COMPUTABLE_TILES: ReadonlySet<string> = new Set(["twse-tech-revenue-top", "tpex-tech-revenue-top", "partd-ozempic", "fda-nda-approvals"]);
+export const FACET_TILES: ReadonlySet<string> = new Set([
+  "fhfa-county-records",
+  "kev-by-vendor",
+  "fda-sponsors",
+  "fcc-provider-records",
+  "caf-disbursement-records",
+  "caf-speed-records",
+  "wb-telecom-records",
+  "wb-telecom-missing",
+]);
 
-/**
- * Tiles on the live board lists. Empty until the board fixtures take unit rows (asked of the lead on 26 Nov 2026):
- * the board server's tests compute every listed tile on fixture rows, and these tables have none there yet.
- */
-export const LIVE_TILES: ReadonlySet<string> = new Set<string>();
+/** Tiles on the live board lists: every tile the engine computes on the fixture rows of `sectors.fixtures.json`. */
+export const LIVE_TILES: ReadonlySet<string> = new Set(
+  [...HOUSING, ...TECHNOLOGY, ...HEALTH, ...COMMUNICATIONS].map((t) => t.id).filter((id) => !FACET_TILES.has(id)),
+);
 
 /** Each board's tiles in board order, live and pending alike. */
 const ORDER: Readonly<Record<string, readonly string[]>> = {
