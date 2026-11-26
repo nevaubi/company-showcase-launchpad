@@ -5,7 +5,18 @@ import type { SeriesTileSpec } from "../../boards/types";
 import type { SourceColumn } from "../../schema";
 import { PROFILE_ENTRIES, profileFor, profileStatus, unitOf } from "../index";
 import type { ProfileDataset } from "../types";
-import { DS140_ENTRY, ERS_ANNUAL_ENTRY, ERS_FORECAST_ENTRY, MSHA_STATE_ENTRY, ds140Unit, ds140Workbook, forecastMonth } from "./industry";
+import {
+  DS140_ENTRY,
+  ERS_ANNUAL_ENTRY,
+  ERS_FORECAST_ENTRY,
+  MSHA_COUNT_ENTRY,
+  MSHA_STATE_ENTRY,
+  NHTSA_MAKER_ENTRY,
+  NHTSA_YEAR_ENTRY,
+  ds140Unit,
+  ds140Workbook,
+  forecastMonth,
+} from "./industry";
 import { DS140_TABLES } from "./industry-ds140";
 
 /** Positional keys and the publisher's headers as labels, as production stores every dictionary. */
@@ -15,7 +26,8 @@ const fields = (labels: readonly string[], units: Record<string, string> = {}): 
 const CHECKS = JSON.parse(readFileSync("src/lib/sources/profiles/units/industry.checks.json", "utf8")) as {
   ds140: { listed: number; refused: Record<string, string>; compared: Record<string, { snapshotId: string; rows: number; md5: string }> };
   ers: { tables: Record<string, { rows: number; md5: string }> };
-  msha: { snapshotId: string; rows: number; years: Record<string, { records: number; md5: string }> };
+  msha: { snapshotId: string; rows: number; years: Record<string, { records: number; md5: string }>; mineCounts: { snapshotId: string; rows: number } };
+  nhtsa: { byYear: { snapshotId: string; rows: number; equal: number; differ: Record<string, unknown> }; byMaker: { snapshotId: string } };
 };
 
 const ds140 = (id: string): ProfileDataset => ({ id: `official_07_materials_csv_${id}`, source_id: "USGS_DS140" });
@@ -241,10 +253,51 @@ describe("MSHA state and subunit employment profile", () => {
   });
 });
 
+describe("MSHA mine register counts profile", () => {
+  const dataset: ProfileDataset = { id: "official_07_materials_csv_materials_mine_status_counts_4d6148ba31", source_id: "MSHA_MINES" };
+  const columns = fields(["STATE", "CURRENT_MINE_TYPE", "CURRENT_MINE_STATUS", "Mine count"], { "Mine count": "mine register records" });
+
+  it("reads the count's unit from the dictionary and refuses another", () => {
+    const profile = profileFor(dataset, columns);
+    expect(profile?.family).toBe("msha-mine-counts");
+    expect(unitOf(profile!.measures[0], columns)).toEqual({ ok: true, text: "mine register records" });
+    expect(unitOf(profile!.measures[0], columns.map((c) => ({ ...c, unit: c.label === "Mine count" ? "mines" : c.unit })))).toMatchObject({ ok: false });
+    expect(MSHA_COUNT_ENTRY.claims({ ...dataset, id: "official_07_materials_csv_mine_commodity_status_counts_e07c44fa6a" })).toBe(false);
+  });
+
+  it("was proven on the snapshot the checks name", () => {
+    expect(MSHA_COUNT_ENTRY.profile(dataset).proof.snapshotId).toBe(CHECKS.msha.mineCounts.snapshotId);
+    expect(CHECKS.msha.mineCounts.rows).toBe(MSHA_COUNT_ENTRY.profile(dataset).addressing.rowsScanned);
+  });
+});
+
+describe("NHTSA recall campaign profiles", () => {
+  const byYear: ProfileDataset = { id: "official_08_consumer_discretionary_recalls_year_d8884f5228", source_id: "NHTSA_RECALLS" };
+  const byMaker: ProfileDataset = { id: "official_08_consumer_discretionary_recalls_manufacturer_year_7d2c6c8fd6", source_id: "NHTSA_RECALLS" };
+
+  it("reads the year from its field and counts campaigns, one family per table", () => {
+    const year = profileFor(byYear, fields(["Received year", "Distinct campaigns"]));
+    expect(year?.family).toBe("nhtsa-recall-years");
+    expect(year?.period).toEqual({ from: "field", field: "Received year", format: "year" });
+    expect(year?.measures[0].unit).toMatchObject({ from: "constant", text: "recall campaigns" });
+    const maker = profileFor(byMaker, fields(["Manufacturer", "Received year", "Distinct campaigns"]));
+    expect(maker?.family).toBe("nhtsa-recall-makers");
+    expect(maker?.defaultSeries?.(byMaker)).toEqual({ where: [{ field: "Manufacturer", value: "Ford Motor Company" }] });
+    expect(profileFor(byMaker, fields(["Received year", "Distinct campaigns"]))).toBeNull();
+    expect(NHTSA_YEAR_ENTRY.claims({ id: "official_08_consumer_discretionary_recall_campaigns_648e3d43d3", source_id: "NHTSA_RECALLS" })).toBe(false);
+  });
+
+  it("keeps the comparison with NHTSA's files beside the profile", () => {
+    expect(CHECKS.nhtsa.byYear.equal + Object.keys(CHECKS.nhtsa.byYear.differ).length).toBe(CHECKS.nhtsa.byYear.rows);
+    expect(NHTSA_YEAR_ENTRY.profile(byYear).proof.snapshotId).toBe(CHECKS.nhtsa.byYear.snapshotId);
+    expect(NHTSA_MAKER_ENTRY.profile(byMaker).proof.snapshotId).toBe(CHECKS.nhtsa.byMaker.snapshotId);
+  });
+});
+
 describe("registry", () => {
   it("lists the industry families once, after the core families", () => {
     const families = PROFILE_ENTRIES.map((e) => e.family);
-    for (const f of ["usgs-ds140", "ers-annual-change", "ers-forecast", "msha-state-subunit"]) expect(families.filter((x) => x === f)).toHaveLength(1);
+    for (const f of ["usgs-ds140", "ers-annual-change", "ers-forecast", "msha-state-subunit", "msha-mine-counts", "nhtsa-recall-years", "nhtsa-recall-makers"]) expect(families.filter((x) => x === f)).toHaveLength(1);
   });
 
   it("gives each claimed dataset to one family only", () => {

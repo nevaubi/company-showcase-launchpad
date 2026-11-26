@@ -305,5 +305,128 @@ function mshaStateProfile(): Profile {
 
 export const MSHA_STATE_ENTRY: ProfileEntry = { family: "msha-state-subunit", claims: mshaStateClaims, profile: mshaStateProfile };
 
+const MSHA_MINES_DEFINITIONS = "https://arlweb.msha.gov/OpenGovernmentData/DataSets/Mines_Definition_File.txt";
+const MSHA_MINES_FILE = "https://arlweb.msha.gov/OpenGovernmentData/DataSets/Mines.zip";
+const MSHA_MINE_COUNTS = "official_07_materials_csv_materials_mine_status_counts_4d6148ba31";
+
+const mshaCountClaims = (d: ProfileDataset) => d.source_id === "MSHA_MINES" && d.id === MSHA_MINE_COUNTS;
+
+/**
+ * MSHA's register of metal and nonmetal mines counted by `STATE` (the place dimension), `CURRENT_MINE_TYPE` and
+ * `CURRENT_MINE_STATUS`: the store's counts of MSHA's mine file (`Mines.txt`, one record per mine, metal and nonmetal
+ * records), 507 records without a period, dated by the file's retrieval. `Mine count` is a count of the register's
+ * records, as the dictionary states ("mine register records"). One state appears once per type and status, so a
+ * cross-section fixes both (a map of active surface mines). The table has no period, so no ranking of one period is
+ * drawn on its page.
+ */
+function mshaCountProfile(): Profile {
+  return defineProfile(mshaCountClaims, {
+    family: "msha-mine-counts",
+    period: { from: "dimension", format: "year" },
+    measures: [{ field: "Mine count", label: "Mines on the register", unit: { from: "dictionary", text: "mine register records" }, grouping: "none" }],
+    extraFields: ["STATE", "CURRENT_MINE_TYPE", "CURRENT_MINE_STATUS"],
+    addressing: {
+      by: "geo_code",
+      where: ["CURRENT_MINE_TYPE", "CURRENT_MINE_STATUS"],
+      scan: "table",
+      rowsScanned: 507,
+      note: "The whole table is one cross-section of 507 records; a type and a status are matched inside the select.",
+    },
+    defaultSeries: () => null,
+    firstLook: "places",
+    proof: {
+      snapshotId: "fd028ec45671101763e4ae5eea978434fb37b27090502de10ea2ed9dac81f26c",
+      datasetId: MSHA_MINE_COUNTS,
+      checked: "2026-11-26",
+      documentation: [MSHA_MINES_DEFINITIONS, MSHA_MINES_FILE],
+    },
+  });
+}
+
+export const MSHA_COUNT_ENTRY: ProfileEntry = { family: "msha-mine-counts", claims: mshaCountClaims, profile: mshaCountProfile };
+
+// ---------------------------------------------------------------- NHTSA recalls
+
+const NHTSA_FIELDS = "https://static.nhtsa.gov/odi/ffdd/rcl/RCL.txt";
+const NHTSA_FILES = "https://www.nhtsa.gov/nhtsa-datasets-and-apis";
+const NHTSA_BY_YEAR = "official_08_consumer_discretionary_recalls_year_d8884f5228";
+const NHTSA_BY_MAKER = "official_08_consumer_discretionary_recalls_manufacturer_year_7d2c6c8fd6";
+const NHTSA_UNIT = "recall campaigns";
+const NHTSA_EVIDENCE = `${NHTSA_FIELDS} (the recall file "contains all NHTSA safety-related defect and compliance campaigns since 1967"; CAMPNO is the NHTSA recall number, RCDATE the date the Part 573 report was received)`;
+
+const nhtsaYearClaims = (d: ProfileDataset) => d.source_id === "NHTSA_RECALLS" && d.id === NHTSA_BY_YEAR;
+const nhtsaMakerClaims = (d: ProfileDataset) => d.source_id === "NHTSA_RECALLS" && d.id === NHTSA_BY_MAKER;
+
+const nhtsaMeasure: MeasureSpec = {
+  field: "Distinct campaigns",
+  label: "Recall campaigns",
+  unit: { from: "constant", text: NHTSA_UNIT, evidence: NHTSA_EVIDENCE },
+  grouping: "none",
+};
+
+/**
+ * NHTSA recall campaigns by the year NHTSA received the manufacturer's Part 573 report: the store's counts of
+ * distinct recall numbers (CAMPNO) by the year of RCDATE in NHTSA's recall flat files, one record per year from 1966
+ * (`Received year`, a field: the table has no period dimension). The latest year counts the reports received up to
+ * the file's retrieval. The table is read whole (61 records).
+ */
+function nhtsaYearProfile(): Profile {
+  return defineProfile(nhtsaYearClaims, {
+    family: "nhtsa-recall-years",
+    period: { from: "field", field: "Received year", format: "year" },
+    cadence: "year",
+    measures: [nhtsaMeasure],
+    addressing: { by: null, where: [], scan: "table", rowsScanned: 61, note: "One record per year: the whole snapshot is read in row order." },
+    defaultSeries: () => ({ whole: true }),
+    firstLook: "series",
+    proof: {
+      snapshotId: "0c2d9cb491883088f0bf5ea87b2d666d1930ee1cdcdbc33c41c34896e0f8d55e",
+      datasetId: NHTSA_BY_YEAR,
+      checked: "2026-11-26",
+      documentation: [NHTSA_FIELDS, NHTSA_FILES],
+    },
+  });
+}
+
+/**
+ * NHTSA recall campaigns by manufacturer and year: the same counts by the manufacturer that filed the Part 573
+ * report (`Manufacturer`, NHTSA's MFGNAME, as NHTSA writes it) and `Received year`. A manufacturer is a cell filter
+ * on a table of 10,196 records; a name is never matched to a company.
+ */
+function nhtsaMakerProfile(): Profile {
+  return defineProfile(nhtsaMakerClaims, {
+    family: "nhtsa-recall-makers",
+    period: { from: "field", field: "Received year", format: "year" },
+    cadence: "year",
+    measures: [nhtsaMeasure],
+    addressing: {
+      by: null,
+      where: ["Manufacturer"],
+      scan: "table",
+      rowsScanned: 10196,
+      note: "A manufacturer is a cell filter on Manufacturer over a table of 10,196 records.",
+    },
+    defaultSeries: () => ({ where: [{ field: "Manufacturer", value: "Ford Motor Company" }] }),
+    firstLook: "series",
+    proof: {
+      snapshotId: "2f9f33ec5df8978937ad49407a6a3c21cd0075c4cac2323d0048da60e507437f",
+      datasetId: NHTSA_BY_MAKER,
+      checked: "2026-11-26",
+      documentation: [NHTSA_FIELDS, NHTSA_FILES],
+    },
+  });
+}
+
+export const NHTSA_YEAR_ENTRY: ProfileEntry = { family: "nhtsa-recall-years", claims: nhtsaYearClaims, profile: nhtsaYearProfile };
+export const NHTSA_MAKER_ENTRY: ProfileEntry = { family: "nhtsa-recall-makers", claims: nhtsaMakerClaims, profile: nhtsaMakerProfile };
+
 /** Profile families of round 6 unit `industry`, each with its proof (see ../registry.ts for the rule). */
-export const ENTRIES: readonly ProfileEntry[] = [DS140_ENTRY, ERS_ANNUAL_ENTRY, ERS_FORECAST_ENTRY, MSHA_STATE_ENTRY];
+export const ENTRIES: readonly ProfileEntry[] = [
+  DS140_ENTRY,
+  ERS_ANNUAL_ENTRY,
+  ERS_FORECAST_ENTRY,
+  MSHA_STATE_ENTRY,
+  MSHA_COUNT_ENTRY,
+  NHTSA_YEAR_ENTRY,
+  NHTSA_MAKER_ENTRY,
+];

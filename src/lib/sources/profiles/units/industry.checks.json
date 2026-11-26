@@ -350,6 +350,75 @@
     "records": 278,
     "md5": "f83dd17b3a"
    }
+  },
+  "mineCounts": {
+   "snapshotId": "fd028ec45671101763e4ae5eea978434fb37b27090502de10ea2ed9dac81f26c",
+   "rows": 507,
+   "mines": 56392,
+   "method": "Mines.txt records with COAL_METAL_IND M counted by STATE, CURRENT_MINE_TYPE and CURRENT_MINE_STATUS; md5 of the lines 'state|type|status|count' in C order equals the same digest of the stored records.",
+   "md5": "05ffa5c4ad0749c19ba94698f0bca24a",
+   "activeSurfaceTop": {
+    "TX": 585,
+    "CA": 283,
+    "TN": 241,
+    "PA": 204,
+    "MO": 203,
+    "NC": 194
+   }
+  }
+ },
+ "nhtsa": {
+  "method": "Distinct CAMPNO per year of RCDATE (and per MFGNAME and year) in FLAT_RCL_PRE_2010.zip and FLAT_RCL_POST_2010.zip (330,395 records on 26 Nov 2026; the store's product table holds 330,296, retrieved 24 Nov 2026).",
+  "byYear": {
+   "snapshotId": "0c2d9cb491883088f0bf5ea87b2d666d1930ee1cdcdbc33c41c34896e0f8d55e",
+   "rows": 61,
+   "equal": 60,
+   "differ": {
+    "2026": {
+     "stored": 821,
+     "file": 829,
+     "why": "reports received after the store's retrieval of 24 Nov 2026"
+    }
+   },
+   "stored": {
+    "2021": 1094,
+    "2022": 1051,
+    "2023": 1000,
+    "2024": 1073,
+    "2025": 994
+   }
+  },
+  "byMaker": {
+   "snapshotId": "2f9f33ec5df8978937ad49407a6a3c21cd0075c4cac2323d0048da60e507437f",
+   "rows": 10196,
+   "compared": {
+    "Ford Motor Company": {
+     "2023": 58,
+     "2024": 67,
+     "2025": 153
+    },
+    "Chrysler (FCA US, LLC)": {
+     "2023": 45,
+     "2024": 61,
+     "2025": 52
+    },
+    "General Motors, LLC": {
+     "2023": 25,
+     "2024": 34,
+     "2025": 28
+    },
+    "Honda (American Honda Motor Co.)": {
+     "2023": 19,
+     "2024": 19,
+     "2025": 24
+    },
+    "Forest River, Inc.": {
+     "2023": 37,
+     "2024": 59,
+     "2025": 36
+    }
+   },
+   "field": "Manufacturer equals MFGNAME (the manufacturer that filed the Part 573 report), not MFGTXT: 15 of 15 values equal by MFGNAME, 4 of 15 by MFGTXT."
   }
  }
 }
