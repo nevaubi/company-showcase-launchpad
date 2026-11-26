@@ -23,7 +23,6 @@ import {
   Z1_UNIT,
   h8Series,
   ofrSeries,
-  z1Quarter,
   z1Sector,
 } from "./finance";
 
@@ -79,14 +78,6 @@ describe("finance profile families", () => {
     expect([...FED_H8_ENTRY.profile(h8).requires].sort()).toEqual(["date", "description", "series", "unit", "unit_multiplier", "value_native"]);
     expect([...FED_Z1_SECTORS_ENTRY.profile(z1s).requires].sort()).toEqual(["description", "period", "series_id", "unit_and_basis", "value_native"]);
     expect([...OFR_MMF_ENTRY.profile(ofr).requires].sort()).toEqual(["date", "mnemonic", "unit", "value_native"]);
-  });
-});
-
-describe("Z.1 quarters", () => {
-  it("composes the Board's quarter and nothing else", () => {
-    expect(z1Quarter("2026:Q2")).toEqual({ text: "2026Q2", format: "quarter" });
-    expect(z1Quarter("1945:Q4")).toEqual({ text: "1945Q4", format: "quarter" });
-    for (const bad of ["2026Q2", "2026:Q5", "2026:q2", " 2026:Q2", "2026-06-30", "", null, undefined]) expect(z1Quarter(bad)).toBeNull();
   });
 });
 

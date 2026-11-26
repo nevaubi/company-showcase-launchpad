@@ -1,5 +1,5 @@
 import { defineProfile } from "../define";
-import type { FieldMatch, MeasureSpec, PeriodSpec, Profile, ProfileDataset, ProfileEntry } from "../types";
+import type { FieldMatch, MeasureSpec, Profile, ProfileDataset, ProfileEntry } from "../types";
 
 /**
  * Profile families of round 6 unit `finance` (Banks and funds, collection 01_financials), each with its proof (see
@@ -10,22 +10,6 @@ import type { FieldMatch, MeasureSpec, PeriodSpec, Profile, ProfileDataset, Prof
 
 /** The day the families below were checked, UTC. */
 export const FINANCE_CHECKED = "2026-11-26";
-
-/**
- * The Financial Accounts (Z.1) write a quarter as "2026:Q2", a form the period parser does not read; the period is
- * composed from that one cell as "2026Q2". Any other text is not a period of these tables.
- */
-export function z1Quarter(text: string | null | undefined): { text: string; format: "quarter" } | null {
-  const m = typeof text === "string" ? /^(\d{4}):Q([1-4])$/.exec(text) : null;
-  return m ? { text: `${m[1]}Q${m[2]}`, format: "quarter" } : null;
-}
-
-const z1Period = (field: string): PeriodSpec => ({
-  from: "fields",
-  fields: [field],
-  format: "quarter",
-  compose: ([cell]) => z1Quarter(cell),
-});
 
 // ---------------------------------------------------------------------------------------------------------------
 // Federal Reserve H.8, monthly headline balances of all commercial banks
@@ -122,8 +106,8 @@ export const z1Sector = (seriesId: string) => ({
 /**
  * Z.1 financial-sector balance histories: one record per series and quarter for 39 series, the total financial
  * assets of each financial sector (S-tables of the release: money market funds, credit unions, pension funds,
- * insurers, hedge funds and the domestic financial sectors together). `series_id` is the indexed entity; `period`
- * holds the quarter as the Board writes it ("2026:Q2", composed to "2026Q2"); `value_native` the figure;
+ * insurers, hedge funds and the domestic financial sectors together). `series_id` is the indexed entity; the field
+ * `period` holds the quarter as the Board writes it ("2026:Q2"; the table has no period dimension); `value_native` the figure;
  * `source_value_or_flag` the publisher's cell where it is a flag ("ND", no figure: then `value_native` is empty, a
  * gap); `unit_and_basis` the unit and basis from the Board's data dictionary. The profile draws the 36 series whose
  * dictionary entry is "Millions of dollars; amounts outstanding end of period, not seasonally adjusted" (`fixed`); the
@@ -137,7 +121,7 @@ function z1SectorsProfile(): Profile {
   return defineProfile(z1SectorsClaims, {
     family: "fed-z1-sectors",
     entityNoun: { one: "series", many: "series" },
-    period: z1Period("period"),
+    period: { from: "field", field: "period", format: "quarter" },
     cadence: "quarter",
     fixed: [{ field: "unit_and_basis", value: Z1_OUTSTANDING_NSA }],
     measures: [
@@ -237,8 +221,8 @@ export const Z1_TABLES: readonly Z1Table[] = [
 const Z1_BY_DATASET = new Map(Z1_TABLES.map((t) => [t.datasetId, t] as const));
 
 /**
- * Z.1 release tables (the Board's csv files, one table each): `date` is the period dimension, written "2026:Q2"
- * and composed to "2026Q2"; every other field is one series, labelled by its series code. A measure is a series
+ * Z.1 release tables (the Board's csv files, one table each): `date` is the period dimension, written "2026:Q2";
+ * every other field is one series, labelled by its series code. A measure is a series
  * listed in `Z1_TABLES` with the unit its data dictionary entry states ("Millions of dollars", or "Percent" for a
  * growth rate); the basis (amounts outstanding at the end of the quarter, seasonal adjustment, annual rate) is the
  * table's and goes in each tile's note. "ND" cells are the Board's own (no figure) and are gaps. A table is one
@@ -259,9 +243,10 @@ function z1TableProfile(dataset: ProfileDataset): Profile {
   }));
   return defineProfile(z1TableClaims, {
     family: "fed-z1-table",
-    period: z1Period("date"),
+    period: { from: "dimension", format: "quarter" },
     cadence: "quarter",
     measures,
+    extraFields: ["date"],
     addressing: {
       by: null,
       where: [],
