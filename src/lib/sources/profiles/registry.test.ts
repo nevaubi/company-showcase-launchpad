@@ -273,6 +273,25 @@ describe("FRED series profiles", () => {
     }
   });
 
+  it("decides every FRED series file of the store: profiled or refused, never both", () => {
+    const profiled = new Set(FRED_SERIES.map((s) => s.code));
+    const codes = Object.keys(FRED_FACTS.datasets);
+    expect(codes).toHaveLength(119);
+    for (const code of codes) expect(Number(profiled.has(code)) + Number(code in FRED_REFUSED)).toBe(1);
+    for (const code of [...profiled, ...Object.keys(FRED_REFUSED)]) expect(codes).toContain(code);
+  });
+
+  it("refuses a series FRED revised after the retrieval until a refreshed snapshot is checked", () => {
+    const revised = Object.entries(FRED_REFUSED).filter(([, reason]) => /FRED updated the series on 25 Nov 2026/.test(reason));
+    expect(revised.map(([code]) => code).sort()).toEqual(["ALTSALES", "AMDMTI", "AMDMVS", "CCSA", "HTRUCKSSAAR", "NEWORDER", "PCEDG", "PCES"]);
+    for (const [code] of revised) {
+      const fact = FRED_FACTS.datasets[code];
+      expect(fact.retrievedAt.startsWith("2026-11-24")).toBe(true);
+      // the unit is not the reason: catalogue and page agree
+      expect(fact.catalogue.unit).toBe(fact.page.unit);
+    }
+  });
+
   it("refuses WALCL because FRED dates it as a Wednesday level, not a week ending", () => {
     expect(FRED_FACTS.datasets.WALCL.page.frequency).toBe("Weekly, As of Wednesday");
     expect(cadenceOfFrequency(FRED_FACTS.datasets.WALCL.page.frequency)).toBeNull();

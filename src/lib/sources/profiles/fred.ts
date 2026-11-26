@@ -54,7 +54,11 @@ const CHECKED_25_NOV: readonly FredSeries[] = [
   { code: "MANEMP", title: "All Employees, Manufacturing", unit: "Thousands of Persons", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "3f342f7dade37c520340195cee324f8e0e5059d797e32cd7ac3a56c34623ec16", datasetId: "official_06_industrials_raw_fred_manemp_ae6a27a459", rows: 322 },
 ];
 
-/** Checked on 26 Nov 2026: unit and frequency as the store's catalogue and FRED's page state them, the last 24 stored rows equal FRED's file. */
+/**
+ * Checked on 26 Nov 2026: unit, adjustment and frequency as the store's catalogue and FRED's page state them,
+ * the last 24 stored rows equal FRED's file. The last 16 were checked on the snapshot the refresh of 26 Nov
+ * retrieved, after FRED's releases of 24 and 25 Nov had revised the 24 Nov copy.
+ */
 const CHECKED_26_NOV: readonly FredSeries[] = [
   { code: "AIRRPMTSID11", title: "Air Revenue Passenger Miles", unit: "Thousands", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "0d9c643f0cb19d0900334d4b0b16a9ba9b7c158ffdcc514658d2b0fb42aa0909", datasetId: "official_06_industrials_raw_fred_airrpmtsid11_1d8b6455f9", rows: 319 },
   { code: "AMTMNO", title: "Manufacturers' New Orders: Total Manufacturing", unit: "Millions of Dollars", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "c48a603bdda83db6a7c750d52897e7322d88e3c09464a00ca7a352eb44b682bf", datasetId: "official_06_industrials_raw_fred_amtmno_17ff88a923", rows: 321 },
@@ -117,6 +121,22 @@ const CHECKED_26_NOV: readonly FredSeries[] = [
   { code: "WPU026", title: "Producer Price Index by Commodity: Processed Foods and Feeds: Beverages and Beverage Materials", unit: "Index 1982=100", adjustment: "Not Seasonally Adjusted", cadence: "month", snapshotId: "ba90d00962e26a7d5f5dd182b5fc2ea8dcf64aaf8a86f774012126b279ca320e", datasetId: "official_09_consumer_staples_raw_fred_wpu026_6d25ca952a", rows: 322 },
   { code: "WPU028", title: "Producer Price Index by Commodity: Processed Foods and Feeds: Miscellaneous Processed Foods", unit: "Index 1982=100", adjustment: "Not Seasonally Adjusted", cadence: "month", snapshotId: "1b35453d798fb07c5977e2d48228b984c9bec7b968137ce0f0ec3826c3a62fe2", datasetId: "official_09_consumer_staples_raw_fred_wpu028_d0d3fcf647", rows: 322 },
   { code: "WPU0561", title: "Producer Price Index by Commodity: Fuels and Related Products and Power: Crude Petroleum (Domestic Production)", unit: "Index 1982=100", adjustment: "Not Seasonally Adjusted", cadence: "month", snapshotId: "23f931e6a7217a6d2fc23768432fcb97bff10c06ae79e4bea8290ce7f303ca47", datasetId: "official_09_consumer_staples_raw_fred_wpu0561_efff91bd63", rows: 322 },
+  { code: "DSPIC96", title: "Real Disposable Personal Income", unit: "Billions of Chained 2017 Dollars", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "582bbb46391369f5fbd6a842ce9cdce90fd9f0ceb35707d5639429ad2cc1b288", datasetId: "official_00_universal_raw_fred_dspic96_b8064b0bb7", rows: 322 },
+  { code: "EXPGS", title: "Exports of Goods and Services", unit: "Billions of Dollars", adjustment: "Seasonally Adjusted Annual Rate", cadence: "quarter", snapshotId: "b18cd3ad73a67d853fdbd065faec3b499ef542367a1a06d46b25b29df1c23afa", datasetId: "official_00_universal_raw_fred_expgs_202dd35bd1", rows: 107 },
+  { code: "GDP", title: "Gross Domestic Product", unit: "Billions of Dollars", adjustment: "Seasonally Adjusted Annual Rate", cadence: "quarter", snapshotId: "1846d6e29501ff41812674884c2ec39ea722bbca64f03eabd98a8aef809ca03c", datasetId: "official_00_universal_raw_fred_gdp_9e9ca17450", rows: 107 },
+  { code: "IMPGS", title: "Imports of Goods and Services", unit: "Billions of Dollars", adjustment: "Seasonally Adjusted Annual Rate", cadence: "quarter", snapshotId: "0f949471f94dfeb043fb15003eb2e6e487db668c6c817eda0f9bb25c3fbe0a96", datasetId: "official_00_universal_raw_fred_impgs_0e7ec48469", rows: 107 },
+  { code: "M2SL", title: "M2", unit: "Billions of Dollars", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "573e76e71ae69046eb847161f068e9d1f41293e8d24068daaecc6da923685c08", datasetId: "official_00_universal_raw_fred_m2sl_e01604be22", rows: 322 },
+  { code: "MSACSR", title: "Monthly Supply of New Houses in the United States", unit: "Months' Supply", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "91ce3bb71a04cde8cf06c80ab15ad1309ef1081e9d6d4bb46fe07a58449dfde4", datasetId: "official_11_real_estate_raw_fred_msacsr_797d546674", rows: 322 },
+  { code: "NFCI", title: "Chicago Fed National Financial Conditions Index", unit: "Index", adjustment: "Not Seasonally Adjusted", cadence: "week", weekEnding: "Friday", snapshotId: "81c8610a0d0a8c0025cd09c82642db337e8e07ebed88a1faf5b6303f62c5b711", datasetId: "official_00_universal_raw_fred_nfci_bfd046f81a", rows: 1403 },
+  { code: "PCE", title: "Personal Consumption Expenditures", unit: "Billions of Dollars", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "1c11d452cd964e8e9162ed532c9bc303be601a5011992a0f7ef5aa568224ab4c", datasetId: "official_00_universal_raw_fred_pce_0d00ea8bc5", rows: 322 },
+  { code: "PCECC96", title: "Real Personal Consumption Expenditures", unit: "Billions of Chained 2017 Dollars", adjustment: "Seasonally Adjusted Annual Rate", cadence: "quarter", snapshotId: "b04a48b5f31da545ebe5bbe0688ad3b28e303bd76579288b964ee777f7002143", datasetId: "official_00_universal_raw_fred_pcecc96_581adee8f3", rows: 107 },
+  { code: "PCEPILFE", title: "Personal Consumption Expenditures Excluding Food and Energy (Chain-Type Price Index)", unit: "Index 2017=100", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "60bf3022e45757d927916e232a9aaa727f3282fc3ca71be804cdb0746f1323be", datasetId: "official_00_universal_raw_fred_pcepilfe_06d71e475c", rows: 322 },
+  { code: "PERMIT", title: "New Privately-Owned Housing Units Authorized in Permit-Issuing Places: Total Units", unit: "Thousands of Units", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "c5e5fe32414c67f86dca4e26172e9a5c2c275a9d78c958c34cc9b049f817cfba", datasetId: "official_11_real_estate_raw_fred_permit_508f5d47c9", rows: 322 },
+  { code: "PERMIT1", title: "New Privately-Owned Housing Units Authorized in Permit-Issuing Places: Single-Family Units", unit: "Thousands of Units", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "6923c97ae3797d188096ce639c5b88e43addb76cf71da2c787b6d00ec1a93463", datasetId: "official_11_real_estate_raw_fred_permit1_27312e2208", rows: 322 },
+  { code: "USSTHPI", title: "All-Transactions House Price Index for the United States", unit: "Index 1980:Q1=100", adjustment: "Not Seasonally Adjusted", cadence: "quarter", snapshotId: "984dc38941b86b78c2e0d59ef09110e26193c60282c4a625fd6c6e213b311800", datasetId: "official_11_real_estate_raw_fred_ussthpi_806c4e58a9", rows: 107 },
+  { code: "PSAVERT", title: "Personal Saving Rate", unit: "Percent", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "02b6a84692fc93928cb6f0d35430ec638cf72349c85d9ac107439102647634a1", datasetId: "official_00_universal_raw_fred_psavert_12333c3a38", rows: 322 },
+  { code: "STLFSI4", title: "St. Louis Fed Financial Stress Index", unit: "Index", adjustment: "Not Seasonally Adjusted", cadence: "week", weekEnding: "Friday", snapshotId: "cb780127bb2c5f85594a45cbc69f976f5378fdf1a2588efb3effb9241e44a8e0", datasetId: "official_00_universal_raw_fred_stlfsi4_8fa7bceaeb", rows: 1403 },
+  { code: "TCU", title: "Capacity Utilization: Total Index", unit: "Percent", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "f741dd4eb8c722b7facadddc9cac13aa6dbc57d5c43c4d9fa1514962831528f1", datasetId: "official_00_universal_raw_fred_tcu_5e58bb3c88", rows: 322 },
 ];
 
 export const FRED_SERIES: readonly FredSeries[] = [...CHECKED_25_NOV, ...CHECKED_26_NOV];
@@ -129,6 +149,8 @@ const CHECKED_ON = new Map<string, string>([
 
 const IP_REBASED =
   "The store's series catalogue states Index 2017=100 (retrieved 24 Nov 2026); FRED's page now states Index 2022=100, so the stored unit cannot be established at the publisher.";
+const REVISED_SINCE =
+  "The last 24 stored rows (retrieved 24 Nov 2026) do not all equal FRED's file of 26 Nov 2026, and FRED updated the series on 25 Nov 2026, after that retrieval; check again on a refreshed snapshot.";
 const tooLong = (frequency: string, rows: number) =>
   `${frequency} series of ${rows.toLocaleString("en-US")} rows: a first look reads at most 4,999 records, so its latest observations would not be drawn.`;
 
@@ -138,7 +160,9 @@ const tooLong = (frequency: string, rows: number) =>
  * states Index 2022=100 and every value of the checked window differs, so the stored unit cannot be
  * established at the publisher. The other industrial production series are in the same state.
  * A daily series longer than a first look reads (4,999 records) would be drawn without its latest
- * observations, and WALCL's period (a Wednesday level) is not a week ending.
+ * observations, and WALCL's period (a Wednesday level) is not a week ending. Eight series still held only
+ * the 24 Nov retrieval when FRED's 25 Nov releases had revised them: their unit agrees, their values are
+ * one release behind, and they wait for a refreshed snapshot and a new check.
  */
 export const FRED_REFUSED: Readonly<Record<string, string>> = {
   IPMAN: "Stored on Index 2017=100 as catalogued at retrieval; FRED now states Index 2022=100 and all 48 checked values differ.",
@@ -155,6 +179,14 @@ export const FRED_REFUSED: Readonly<Record<string, string>> = {
   DEXUSEU: tooLong("Daily", 7015),
   DFF: tooLong("Daily, 7-Day", 9821),
   DTWEXBGS: tooLong("Daily", 5450),
+  ALTSALES: REVISED_SINCE,
+  AMDMTI: REVISED_SINCE,
+  AMDMVS: REVISED_SINCE,
+  CCSA: REVISED_SINCE,
+  HTRUCKSSAAR: REVISED_SINCE,
+  NEWORDER: REVISED_SINCE,
+  PCEDG: REVISED_SINCE,
+  PCES: REVISED_SINCE,
   WALCL:
     "FRED states the frequency as Weekly, As of Wednesday (the level on each Wednesday); a weekly cadence here reads a period as the week ending on its date, which would misstate it.",
 };
