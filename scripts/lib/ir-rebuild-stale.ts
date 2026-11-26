@@ -199,7 +199,7 @@ export async function runPass(state: RebuildState, order: readonly string[], set
     } else {
       result.failed[t] = error.slice(0, 300);
       const review = recordFailure(state, t, error, deps.now());
-      deps.log(`${t}: rebuild failed (${error.slice(0, 160)})${review ? ` — ${REVIEW_AFTER} failures, left for review` : " — skipped for a day"}`);
+      deps.log(`${t}: rebuild failed (${error.slice(0, 160)})${review ? `; ${REVIEW_AFTER} failures, left for review` : "; skipped for a day"}`);
     }
     state.at = new Date(deps.now()).toISOString();
     await deps.save(state);
