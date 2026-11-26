@@ -2843,6 +2843,62 @@ export type Database = {
           },
         ]
       }
+      source_field_counts: {
+        Row: {
+          blank: number
+          capped: string | null
+          computed_at: string
+          distinct_values: number | null
+          filled: number
+          missing: number
+          numeric_rows: number
+          other_rows: number
+          other_values: number | null
+          position: number
+          snapshot_id: string
+          top: Json
+          value_cap: number
+        }
+        Insert: {
+          blank: number
+          capped?: string | null
+          computed_at?: string
+          distinct_values?: number | null
+          filled: number
+          missing: number
+          numeric_rows: number
+          other_rows: number
+          other_values?: number | null
+          position: number
+          snapshot_id: string
+          top?: Json
+          value_cap: number
+        }
+        Update: {
+          blank?: number
+          capped?: string | null
+          computed_at?: string
+          distinct_values?: number | null
+          filled?: number
+          missing?: number
+          numeric_rows?: number
+          other_rows?: number
+          other_values?: number | null
+          position?: number
+          snapshot_id?: string
+          top?: Json
+          value_cap?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_field_counts_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "source_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       source_files: {
         Row: {
           bytes: number
@@ -4361,6 +4417,16 @@ export type Database = {
           _snapshot_id?: string
         }
         Returns: Json
+      }
+      source_field_top_valid: {
+        Args: {
+          _distinct: number
+          _filled: number
+          _other_rows: number
+          _other_values: number
+          _top: Json
+        }
+        Returns: boolean
       }
       source_find: { Args: { _limit?: number; _q: string }; Returns: Json }
       source_get_dataset: {
