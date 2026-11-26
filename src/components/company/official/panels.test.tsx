@@ -49,8 +49,8 @@ describe("InsuredBanks", () => {
     expect(screen.getByText("Noninsured trust company.")).toBeTruthy();
     expect(screen.getByText(/Trust companies file a call report but are not FDIC insured|A trust company files a call report but is not FDIC insured/)).toBeTruthy();
     // the largest bank by stated assets is selected first
-    expect(screen.getByRole("button", { name: "WINTRUST BANK NATIONAL ASSN", pressed: true })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "LAKE FOREST B&T CO NA" }));
+    expect(within(table).getByRole("button", { name: "WINTRUST BANK NATIONAL ASSN", pressed: true })).toBeTruthy();
+    fireEvent.click(within(table).getByRole("button", { name: "LAKE FOREST B&T CO NA" }));
     expect(onSelect).toHaveBeenCalledWith("27589");
   });
 
@@ -63,7 +63,7 @@ describe("InsuredBanks", () => {
     expect(screen.getAllByText("USD thousands").length).toBeGreaterThan(0);
     expect(screen.getByText("JPMORGAN CHASE BANK DEARBORN")).toBeTruthy();
     expect(screen.getByText(/The filing header of 3 asset-backed deals names JPMorgan Chase Bank, N.A. as sponsor./)).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: "Table" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Tables" }));
     expect(screen.getByRole("columnheader", { name: "Total assets (USD thousands)" })).toBeTruthy();
     expect(screen.getAllByRole("row").length).toBeGreaterThan(100);
   });
@@ -83,12 +83,13 @@ describe("HoldingCompanyReport", () => {
     const data = await load("JPM");
     render(<HoldingCompanyReport ticker="JPM" report={data.y9c!} statementAssets={() => null} />);
     expect(screen.getByText(Y9C_CAPTION)).toBeTruthy();
-    const row = screen.getByText("Common equity tier 1 capital ratio").closest("tr")!;
+    const table = screen.getAllByRole("table")[0];
+    const row = within(table).getByText("Common equity tier 1 capital ratio").closest("tr")!;
     expect(within(row).getAllByRole("link").map(a => a.textContent)).toEqual(["14.2769", "14.1913", "13.9676"]);
     expect(within(row).getByText("%")).toBeTruthy();
-    const slr = screen.getByText("Supplementary leverage ratio").closest("tr")!;
+    const slr = within(table).getByText("Supplementary leverage ratio").closest("tr")!;
     expect(within(slr).getByText("as filed")).toBeTruthy();
-    const cet1Capital = screen.getByText("Common equity tier 1 capital").closest("tr")!;
+    const cet1Capital = within(table).getByText("Common equity tier 1 capital").closest("tr")!;
     expect(within(cet1Capital).getAllByText("blank")).toHaveLength(3);
     expect(screen.queryByText(/equal the 10-Q/)).toBeNull();
   });

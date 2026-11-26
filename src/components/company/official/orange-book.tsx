@@ -6,6 +6,7 @@ import { lastListed, OB_CAVEAT, obAsks, type CompanyPatents, type ObApplication 
 import { dayLabel } from "@/lib/sources/company/present";
 import type { RecordPointer } from "@/lib/sources/company/types";
 import { cn } from "@/lib/utils";
+import { ObTimelineView } from "./ob-timeline";
 import { DatasetLink, RecordLink } from "./record-link";
 
 /** Exclusivity codes in the FDA's own words (Orange Book legend); a code it does not list is shown bare. */
@@ -98,6 +99,7 @@ export function OrangeBookView({ data, selected, onSelect }: { data: CompanyPate
         </DatasetLink>
       </div>
       <p className="px-3.5 pb-2 pt-0.5 text-[11px] text-muted-foreground">{OB_CAVEAT}</p>
+      <ObTimelineView data={data} />
       <div className="relative overflow-x-auto">
         <table className="w-full min-w-[600px] text-[13px]">
           <thead>

@@ -30,6 +30,24 @@ export interface Axis {
   max: number;
   /** Tick positions in the stored unit, and their text. */
   ticks: { value: number; text: string }[];
+  /** Decimal places of a value written on the chart in reader scale: the headline's (scale.ts); null when as filed. */
+  decimals: number | null;
+}
+
+/**
+ * A value as the chart writes it beside a mark: in the axis's reader scale with the headline's decimals ("4.175" on
+ * "USD trillions"), otherwise the stored figure, compact when large ("972.0M" on "USD thousands"), percentages to two
+ * decimals as the tables round them.
+ */
+export function axisText(v: number, axis: Axis): string {
+  const sign = v < 0 ? MINUS : "";
+  if (axis.decimals != null) {
+    const a = Math.abs(v / axis.divisor);
+    return sign + a.toLocaleString("en-US", { minimumFractionDigits: axis.decimals, maximumFractionDigits: axis.decimals });
+  }
+  const a = Math.abs(v);
+  if (a >= 10_000) return sign + COMPACT.format(a);
+  return sign + a.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 const COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
@@ -59,6 +77,7 @@ export function valueAxis(values: number[], unit: string, opts: { reader?: Reade
     min: d.min * divisor,
     max: d.max * divisor,
     ticks: d.ticks.map(t => ({ value: t * divisor, text: tickNumber(t, step, !opts.reader) })),
+    decimals: opts.reader ? opts.reader.axis.decimals : null,
   };
 }
 

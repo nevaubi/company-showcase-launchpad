@@ -1,11 +1,59 @@
 import { Panel } from "@/components/app/page-header";
+import { SLOTS } from "@/components/alt/library/charts/primitives";
 import { Sparkline } from "@/components/charts/sparkline";
 import { useSource } from "@/components/source/source-context";
 import type { SourceRef } from "@/lib/financials/types";
+import { valueAxis, y9cCharts } from "@/lib/sources/company/charts";
 import { assetsTie, dayLabel, quarterLabel, showCell, unitLabel, usdShort } from "@/lib/sources/company/present";
 import type { Y9cReport } from "@/lib/sources/company/types";
 import { Y9C_INSTRUCTIONS_URL } from "@/lib/sources/company/y9c-fields";
+import { FigureHead } from "./chart-parts";
 import { OutLink, RecordLink } from "./record-link";
+import { QuarterColumns, RatioLines } from "./small-charts";
+
+/**
+ * The holding company's quarters as charts: total assets, total equity capital and net income (year to date) as
+ * columns from zero, and the capital ratios the form reports in percent on one axis. Every mark opens its record.
+ */
+function Y9cCharts({ report }: { report: Y9cReport }) {
+  const { amounts, ratios } = y9cCharts(report);
+  if (!amounts.length && !ratios.length) return null;
+  const span = report.quarters.length ? `${quarterLabel(report.quarters[0].reportDate)} to ${quarterLabel(report.quarters[report.quarters.length - 1].reportDate)}` : "";
+  const ratioValues = ratios.flatMap(r => r.points.filter(p => p.value != null).map(p => p.value!));
+  return (
+    <div data-section="Holding company charts" className="min-w-0 border-b px-3.5 pb-2.5 pt-2.5">
+      {amounts.length > 0 && (
+        <div className="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-3">
+          {amounts.map(a => {
+            const axis = valueAxis(a.points.filter(p => p.value != null).map(p => p.value!), a.unit, { reader: a.reader, asFiled: unitLabel(a.unit) });
+            const title = a.basis === "ytd" ? `${a.label}, year to date` : a.label;
+            return (
+              <div key={a.field} className="min-w-0">
+                <FigureHead title={<>{title} <span className="font-mono text-[10px]">{a.field}</span></>} reader={a.reader} cell={a.latest!.cell} unit={a.unit} period={a.latest!.period} at={a.latest!.ref} />
+                <p className="mb-0.5 mt-1 text-[11px] text-muted-foreground">{axis.title}</p>
+                <QuarterColumns points={a.points} unit={a.unit} axis={axis} label={`${report.legalName}: ${title}, ${span}`} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {ratios.length > 0 && (
+        <div className="mt-3 min-w-0">
+          <h4 className="mb-1 text-[11px] font-medium text-muted-foreground">Capital ratios as filed, percent, {span}</h4>
+          <RatioLines
+            lines={ratios.map((r, i) => ({ key: r.field, label: r.label, color: SLOTS[i % SLOTS.length], points: r.points }))}
+            axis={valueAxis(ratioValues, "Percent", { includeZero: true, asFiled: "%" })}
+            unit="Percent"
+            label={`${report.legalName}: capital ratios, ${span}`}
+          />
+        </div>
+      )}
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        The store holds {report.quarters.length} {report.quarters.length === 1 ? "quarter" : "quarters"} of this form. Net income is reported for the calendar year to date, so each column adds the quarters before it. Ratio labels are rounded to two decimals; the table and the tooltips show the four decimals filed.
+      </p>
+    </div>
+  );
+}
 
 export const Y9C_CAPTION = "As filed with the Federal Reserve on form FR Y-9C, consolidated holding company.";
 
@@ -34,6 +82,7 @@ export function HoldingCompanyReport({ ticker, report, statementAssets }: { tick
         actions={q.length ? <RecordLink at={q[q.length - 1].ref} className="text-[11px] text-muted-foreground" title="Open the latest stored report">Stored report</RecordLink> : undefined}
       >
         <p className="border-b px-3.5 py-1.5 text-[11px] font-medium">{Y9C_CAPTION}</p>
+        {q.length > 0 && <Y9cCharts report={report} />}
         {q.length > 0 ? (
           <div className="relative overflow-x-auto">
             <table className="w-full min-w-[620px] text-[13px]">
@@ -55,6 +104,7 @@ export function HoldingCompanyReport({ ticker, report, statementAssets }: { tick
                     <tr key={l.field} className="h-7 border-b last:border-0">
                       <td className="pl-3.5 pr-2" title={`${l.label} (${l.field})`}>
                         {l.short}
+                        {l.basis === "ytd" && <span className="ml-1 text-[11px] text-muted-foreground">year to date</span>}
                         <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{l.field}</span>
                       </td>
                       {l.cells.map((c, i) => {
