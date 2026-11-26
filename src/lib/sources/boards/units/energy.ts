@@ -1,23 +1,41 @@
 import type { UnitSpecs } from "../compose";
-import type { BoardSpec, RankTileSpec, SeriesTileSpec, TileSpec } from "../types";
+import type {
+  BoardSpec,
+  CompareTileSpec,
+  MapTileSpec,
+  MixTileSpec,
+  RankTileSpec,
+  RecordsTileSpec,
+  SeriesTileSpec,
+  StatTileSpec,
+  TileSeriesSpec,
+  TileSpec,
+} from "../types";
 
 /**
  * Tiles and boards added by round 6 unit `energy`: the Energy board (04_energy) grows from four tiles, and Power
  * and utilities (05_utilities) gets its first board. Pure data: no network; no shared list is edited.
  *
- * Every Monthly Energy Review tile reads one MSN of a raw MER table through the core `eia-mer` profile, with the
- * series' description pinned (`subjectCheck`) and the unit as the record states it. Every series used here was
- * compared with EIA's CSV of its table on 26 Nov 2026: each stored record (month, value, description and unit, in
- * file order) equal to the file's, 63 series in 18 tables (energy report, round 6). Each tile's headline was
- * computed once from those rows; the report lists the figure, period and snapshot.
+ * Every Monthly Energy Review tile reads MSNs of raw MER tables through the core `eia-mer` profile, each series'
+ * description pinned (`subjectCheck`) and its unit as the record states it. Every series used here was compared
+ * with EIA's CSV of its table on 26 Nov 2026: each stored record (month, value, description and unit, in file order)
+ * equal to the file's, 64 series in 18 tables (energy report, round 6; `energy.checks.json`). Each tile of one series
+ * or one ranking was computed once from those rows; the report lists the figure, period and snapshot.
  *
  * The state tiles read the eGRID2023 state table and the EIA-861 net metering state table through this unit's
- * profiles (`../../profiles/units/energy.ts`).
+ * profiles (`../../profiles/units/energy.ts`); the count tiles count records and need no profile.
+ *
+ * The boards list the tiles the board server computes today (one series). The tiles of the round 6 forms (compare,
+ * mix, map, stat, records) and the state rankings are defined below and take the places listed in `NEXT` once the
+ * next boards version computes them and names a state from its code (energy report, "Open").
  */
 
 const MER_MONTHLY = "Monthly, not seasonally adjusted: compare a month with the same month a year earlier.";
+const NET_IMPORTS = "Net imports are imports less exports; a negative figure means exports were larger.";
 
 const T01_02 = "official_04_energy_raw_mer_t01_02_815b85125f";
+const T02_01A = "official_04_energy_raw_mer_t02_01a_079e5be928";
+const T02_01B = "official_04_energy_raw_mer_t02_01b_c3ddcc79fc";
 const T03_01 = "official_04_energy_raw_mer_t03_01_7b9fc216c5";
 const T03_03B = "official_04_energy_raw_mer_t03_03b_831b447d52";
 const T03_04 = "official_04_energy_raw_mer_t03_04_137ab74873";
@@ -33,8 +51,18 @@ const T11_06 = "official_04_energy_raw_mer_t11_06_aa6ddc226e";
 
 const EGRID_ST23 = "official_05_utilities_csv_egrid2023_st23_full_3993eec81f";
 const NET_METERING_STATES = "official_05_utilities_csv_eia861_net_metering_2025_states_state_level_662ef5df39";
+const EIA814_2016_2025 = "official_04_energy_csv_eia814_company_imports_2016_2025_full_347cf1d786";
+const EIA860_OPERABLE = "official_05_utilities_csv_eia860_3_1_generator_y2025_operable_105a35a881";
+const EIA860_PROPOSED = "official_05_utilities_csv_eia860_3_1_generator_y2025_proposed_f256d7a434";
 
-/** One MER series: the records of one MSN, the stored description pinned. */
+const KWH = "Million Kilowatthours";
+const CO2 = "Million Metric Tons of Carbon Dioxide";
+const ELECTRICITY_PRICE = "Cents per Kilowatthour,  Including Taxes";
+
+/** The address of one MER series: the records of one MSN. */
+const msn = (code: string) => ({ where: [{ field: "MSN", value: code }] });
+
+/** One MER series of a tile of one series, its description pinned. */
 const mer = (
   spec: Omit<SeriesTileSpec, "series" | "measure" | "collection" | "subjectCheck" | "form"> & {
     msn: string;
@@ -42,23 +70,52 @@ const mer = (
     form?: SeriesTileSpec["form"];
   },
 ): SeriesTileSpec => {
-  const { msn, description, form, ...rest } = spec;
+  const { msn: code, description, form, ...rest } = spec;
   return {
     ...rest,
     collection: "04_energy",
     measure: "Value",
-    series: { where: [{ field: "MSN", value: msn }] },
+    series: msn(code),
     subjectCheck: { field: "Description", value: description },
     form: form ?? "line",
   };
 };
 
-const EGRID_NOTE =
-  "Data year 2023, eGRID2023 revision 2. Fifty states, the District of Columbia and Puerto Rico, each as EPA's state table reports it.";
+/** One MER series of a compare or mix tile, its description pinned. */
+const line = (code: string, description: string, label: string, subject: string, datasetId?: string): TileSeriesSpec => ({
+  ...(datasetId ? { datasetId } : {}),
+  series: msn(code),
+  label,
+  subject,
+  subjectCheck: { field: "Description", value: description },
+});
 
-/** Tiles of the Energy board (04_energy), in board order after the four core tiles. */
-const ENERGY_TILES: readonly TileSpec[] = [
-  // Production
+/** A compact MER tile: the latest month, its change over a year and a sparkline. */
+const merStat = (
+  spec: Omit<StatTileSpec, "series" | "measure" | "collection" | "subjectCheck" | "form" | "transform" | "headline"> & {
+    msn: string;
+    description: string;
+  },
+): StatTileSpec => {
+  const { msn: code, description, ...rest } = spec;
+  return {
+    ...rest,
+    collection: "04_energy",
+    measure: "Value",
+    form: "stat",
+    transform: "level",
+    headline: "level",
+    series: msn(code),
+    subjectCheck: { field: "Description", value: description },
+  };
+};
+
+const EGRID_NOTE = "Data year 2023, eGRID2023 revision 2, as EPA's state table reports each state, DC and Puerto Rico.";
+
+// ---------------------------------------------------------------------------------------------- Energy (04)
+
+/** Tiles of one series on the Energy board, computed by the board server today. */
+const ENERGY_SERIES: readonly SeriesTileSpec[] = [
   mer({
     id: "energy-production",
     datasetId: T01_02,
@@ -72,6 +129,7 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Production",
     note: MER_MONTHLY,
   }),
   mer({
@@ -87,6 +145,7 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Production",
     note: MER_MONTHLY,
   }),
   mer({
@@ -103,10 +162,9 @@ const ENERGY_TILES: readonly TileSpec[] = [
     headline: "level",
     window: 36,
     form: "bars",
+    section: "Production",
     note: MER_MONTHLY,
   }),
-
-  // Consumption
   mer({
     id: "petroleum-products-supplied",
     datasetId: T03_01,
@@ -121,6 +179,7 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Consumption",
     note: "EIA: products supplied approximately represents consumption of petroleum products. " + MER_MONTHLY,
   }),
   mer({
@@ -136,10 +195,9 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Consumption",
     note: MER_MONTHLY,
   }),
-
-  // Trade
   mer({
     id: "petroleum-net-imports",
     datasetId: T03_01,
@@ -154,7 +212,8 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "difference",
     headline: "level",
     window: 36,
-    note: "Net imports are imports less exports; a negative figure means exports were larger.",
+    section: "Trade",
+    note: NET_IMPORTS,
   }),
   mer({
     id: "crude-oil-imports",
@@ -170,6 +229,7 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Trade",
     note: "The total includes imports for the Strategic Petroleum Reserve, which the table also lists alone. " + MER_MONTHLY,
   }),
   mer({
@@ -186,10 +246,9 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "difference",
     headline: "level",
     window: 36,
-    note: "Net imports are imports less exports; a negative figure means exports were larger.",
+    section: "Trade",
+    note: NET_IMPORTS,
   }),
-
-  // Stocks
   mer({
     id: "crude-oil-stocks-spr",
     datasetId: T03_04,
@@ -204,10 +263,9 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "percent",
     headline: "level",
     window: 60,
+    section: "Stocks",
     note: "End-of-month stocks.",
   }),
-
-  // Prices
   mer({
     id: "crude-oil-price",
     datasetId: T09_01,
@@ -221,6 +279,7 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Prices",
     note: "The composite averages the costs of domestic and imported crude oil. Not adjusted for inflation.",
   }),
   mer({
@@ -236,10 +295,9 @@ const ENERGY_TILES: readonly TileSpec[] = [
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Prices",
     note: "Citygate: where a distribution utility receives gas from a pipeline. Not adjusted for inflation.",
   }),
-
-  // Emissions
   mer({
     id: "co2-emissions",
     datasetId: T11_01,
@@ -248,19 +306,225 @@ const ENERGY_TILES: readonly TileSpec[] = [
     title: "Carbon dioxide emissions from energy consumption, total (MER table 11.1)",
     subject: "U.S. energy-related carbon dioxide emissions",
     verb: "were",
-    unit: "Million Metric Tons of Carbon Dioxide",
+    unit: CO2,
     decimals: 1,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Emissions",
     note: MER_MONTHLY,
   }),
 ];
 
-/** Tiles of the Power and utilities board (05_utilities). */
-const UTILITY_TILES: readonly TileSpec[] = [
-  // Generation by fuel
+/** Tiles of the round 6 forms on the Energy board. */
+const ENERGY_FORMS: readonly TileSpec[] = [
+  {
+    id: "energy-production-mix",
+    collection: "04_energy",
+    datasetId: T01_02,
+    measure: "Value",
+    title: "Primary energy production by source (MER table 1.2)",
+    subject: "U.S. primary energy production",
+    unit: "Quadrillion Btu",
+    decimals: 3,
+    form: "mix",
+    transform: "level",
+    headline: "share",
+    whole: line("TEPRBUS", "Total Primary Energy Production", "Total", "total primary energy production"),
+    parts: [
+      line("NGPRBUS", "Natural Gas (Dry) Production", "Natural gas (dry)", "Natural gas (dry) production"),
+      line("PAPRBUS", "Crude Oil Production", "Crude oil", "Crude oil production"),
+      line("CLPRBUS", "Coal Production", "Coal", "Coal production"),
+      line("NLPRBUS", "Natural Gas Plant Liquids Production", "Natural gas plant liquids", "Natural gas plant liquids production"),
+      line("NUETBUS", "Nuclear Electric Power Production", "Nuclear", "Nuclear electric power production"),
+      line("REPRBUS", "Total Renewable Energy Production", "Renewables", "Total renewable energy production"),
+    ],
+    draw: "areas",
+    tolerance: "0.001",
+    window: 36,
+    section: "Production",
+    size: "wide",
+    note: "EIA's six sources sum to its total within its rounding. " + MER_MONTHLY,
+  } satisfies MixTileSpec,
+  {
+    id: "consumption-by-sector",
+    collection: "04_energy",
+    datasetId: T02_01A,
+    measure: "Value",
+    title: "Total energy consumed by sector (MER tables 2.1a and 2.1b)",
+    subject: "Total energy consumed by the industrial sector",
+    unit: "Trillion Btu",
+    decimals: 0,
+    form: "compare",
+    transform: "level",
+    headline: "level",
+    changeAs: "percent",
+    lines: [
+      line("TEICBUS", "Total Energy Consumed by the Industrial Sector", "Industrial", "Total energy consumed by the industrial sector"),
+      line("TEACBUS", "Total Energy Consumed by the Transportation Sector", "Transportation", "Total energy consumed by the transportation sector", T02_01B),
+      line("TERCBUS", "Total Energy Consumed by the Residential Sector", "Residential", "Total energy consumed by the residential sector"),
+      line("TECCBUS", "Total Energy Consumed by the Commercial Sector", "Commercial", "Total energy consumed by the commercial sector"),
+    ],
+    window: 36,
+    section: "Consumption",
+    size: "wide",
+    note: "Each sector's total includes its share of electrical system energy losses. " + MER_MONTHLY,
+  } satisfies CompareTileSpec,
+  {
+    id: "petroleum-trade",
+    collection: "04_energy",
+    datasetId: T03_01,
+    measure: "Value",
+    title: "Petroleum imports and exports (MER table 3.1)",
+    subject: "U.S. petroleum imports less exports",
+    unit: "Thousand Barrels per Day",
+    decimals: 0,
+    form: "compare",
+    transform: "level",
+    headline: "spread",
+    spread: { of: 0, less: 1 },
+    lines: [
+      line("PAIMPUS", "Petroleum Imports", "Imports", "petroleum imports"),
+      line("PAEXPUS", "Petroleum Exports", "Exports", "petroleum exports"),
+    ],
+    window: 60,
+    section: "Trade",
+    size: "wide",
+    note: NET_IMPORTS + " EIA publishes the difference as petroleum net imports.",
+  } satisfies CompareTileSpec,
+  {
+    id: "crude-oil-stocks",
+    collection: "04_energy",
+    datasetId: T03_04,
+    measure: "Value",
+    title: "Crude oil stocks, SPR and non-SPR (MER table 3.4)",
+    subject: "Crude oil stocks in the Strategic Petroleum Reserve",
+    verb: "were",
+    unit: "Million Barrels",
+    decimals: 1,
+    form: "compare",
+    transform: "level",
+    headline: "level",
+    changeAs: "percent",
+    lines: [
+      line("COSQPUS", "Crude Oil Stocks, SPR", "Strategic Petroleum Reserve", "Crude oil stocks in the Strategic Petroleum Reserve"),
+      line("COSXPUS", "Crude Oil Stocks, Non-SPR", "Non-SPR", "Crude oil stocks outside the Strategic Petroleum Reserve"),
+    ],
+    window: 60,
+    section: "Stocks",
+    note: "End-of-month stocks.",
+  } satisfies CompareTileSpec,
+  {
+    id: "co2-by-fuel",
+    collection: "04_energy",
+    datasetId: T11_01,
+    measure: "Value",
+    title: "Carbon dioxide emissions from energy consumption by source (MER table 11.1)",
+    subject: "Carbon dioxide emissions from petroleum",
+    verb: "were",
+    unit: CO2,
+    decimals: 1,
+    form: "compare",
+    transform: "level",
+    headline: "level",
+    changeAs: "percent",
+    lines: [
+      line("PMTCEUS", "Petroleum, Excluding Biofuels, CO2 Emissions", "Petroleum", "Carbon dioxide emissions from petroleum"),
+      line("NNTCEUS", "Natural Gas, Excluding Supplemental Gaseous Fuels, CO2 Emissions", "Natural gas", "Carbon dioxide emissions from natural gas"),
+      line("CKTCEUS", "Coal, Including Coal Coke Net Imports, CO2 Emissions", "Coal", "Carbon dioxide emissions from coal"),
+    ],
+    window: 36,
+    section: "Emissions",
+    size: "wide",
+    note: "Petroleum excludes biofuels; natural gas excludes supplemental gaseous fuels; coal includes coal coke net imports. " + MER_MONTHLY,
+  } satisfies CompareTileSpec,
+  merStat({
+    id: "natural-gas-production-stat",
+    datasetId: T04_01,
+    msn: "NGPRPUS",
+    description: "Natural Gas Production (Dry)",
+    title: "Natural gas production (dry)",
+    subject: "U.S. dry natural gas production",
+    unit: "Billion Cubic Feet",
+    decimals: 0,
+    changeAs: "percent",
+    section: "Production",
+    note: MER_MONTHLY,
+  }),
+  merStat({
+    id: "coal-production-stat",
+    datasetId: T06_01,
+    msn: "CLPRPUS",
+    description: "Coal Production",
+    title: "Coal production",
+    subject: "U.S. coal production",
+    unit: "Thousand Short Tons",
+    decimals: 0,
+    changeAs: "percent",
+    section: "Production",
+    note: MER_MONTHLY,
+  }),
+  merStat({
+    id: "petroleum-products-supplied-stat",
+    datasetId: T03_01,
+    msn: "PATCPUS",
+    description: "Petroleum Products Supplied",
+    title: "Petroleum products supplied",
+    subject: "U.S. petroleum products supplied",
+    verb: "were",
+    unit: "Thousand Barrels per Day",
+    decimals: 0,
+    changeAs: "percent",
+    section: "Consumption",
+    note: "EIA: products supplied approximately represents consumption of petroleum products.",
+  }),
+  merStat({
+    id: "natural-gas-consumption-stat",
+    datasetId: T04_01,
+    msn: "NGTCPUS",
+    description: "Natural Gas Consumption",
+    title: "Natural gas consumption",
+    subject: "U.S. natural gas consumption",
+    unit: "Billion Cubic Feet",
+    decimals: 0,
+    changeAs: "percent",
+    section: "Consumption",
+    note: MER_MONTHLY,
+  }),
+  merStat({
+    id: "co2-emissions-stat",
+    datasetId: T11_01,
+    msn: "TETCEUS",
+    description: "Total Energy CO2 Emissions",
+    title: "Energy-related carbon dioxide emissions, total",
+    subject: "U.S. energy-related carbon dioxide emissions",
+    verb: "were",
+    unit: CO2,
+    decimals: 1,
+    changeAs: "percent",
+    section: "Emissions",
+    note: MER_MONTHLY,
+  }),
+  {
+    id: "eia814-import-records",
+    collection: "04_energy",
+    datasetId: EIA814_2016_2025,
+    title: "Company-level petroleum import records per year (EIA-814)",
+    subject: "EIA's company-level imports file",
+    transform: "records",
+    headline: "records",
+    form: "bars",
+    per: { dimension: "period", format: "iso-date", cadence: "month", by: "year" },
+    section: "Trade",
+    note: "Each record is one importer's line for a port, a product and a country of origin in a month: records, not barrels.",
+  } satisfies RecordsTileSpec,
+];
+
+// ---------------------------------------------------------------------------------------------- Power and utilities (05)
+
+/** Tiles of one series on the Power and utilities board, computed by the board server today. */
+const UTILITY_SERIES: readonly SeriesTileSpec[] = [
   mer({
     id: "generation-natural-gas",
     datasetId: T07_02A,
@@ -268,12 +532,13 @@ const UTILITY_TILES: readonly TileSpec[] = [
     description: "Electricity Net Generation From Natural Gas, All Sectors",
     title: "Electricity net generation from natural gas, all sectors (MER table 7.2a)",
     subject: "Net generation from natural gas",
-    unit: "Million Kilowatthours",
+    unit: KWH,
     decimals: 0,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Generation by fuel",
     note: MER_MONTHLY,
   }),
   mer({
@@ -283,12 +548,13 @@ const UTILITY_TILES: readonly TileSpec[] = [
     description: "Electricity Net Generation From Coal, All Sectors",
     title: "Electricity net generation from coal, all sectors (MER table 7.2a)",
     subject: "Net generation from coal",
-    unit: "Million Kilowatthours",
+    unit: KWH,
     decimals: 0,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Generation by fuel",
     note: MER_MONTHLY,
   }),
   mer({
@@ -298,12 +564,13 @@ const UTILITY_TILES: readonly TileSpec[] = [
     description: "Electricity Net Generation From Nuclear Electric Power, All Sectors",
     title: "Electricity net generation from nuclear electric power, all sectors (MER table 7.2a)",
     subject: "Net generation from nuclear electric power",
-    unit: "Million Kilowatthours",
+    unit: KWH,
     decimals: 0,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Generation by fuel",
     note: MER_MONTHLY,
   }),
   mer({
@@ -313,12 +580,13 @@ const UTILITY_TILES: readonly TileSpec[] = [
     description: "Electricity Net Generation From Wind, All Sectors",
     title: "Electricity net generation from wind, all sectors (MER table 7.2a)",
     subject: "Net generation from wind",
-    unit: "Million Kilowatthours",
+    unit: KWH,
     decimals: 0,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Generation by fuel",
     note: MER_MONTHLY,
   }),
   mer({
@@ -328,16 +596,31 @@ const UTILITY_TILES: readonly TileSpec[] = [
     description: "Electricity Net Generation From Solar, All Sectors",
     title: "Electricity net generation from solar, all sectors (MER table 7.2a)",
     subject: "Net generation from solar",
-    unit: "Million Kilowatthours",
+    unit: KWH,
     decimals: 0,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Generation by fuel",
     note: MER_MONTHLY,
   }),
-
-  // Sales and prices
+  mer({
+    id: "generation-hydro",
+    datasetId: T07_02A,
+    msn: "HVETPUS",
+    description: "Electricity Net Generation From Conventional Hydroelectric Power, All Sectors",
+    title: "Electricity net generation from conventional hydroelectric power, all sectors (MER table 7.2a)",
+    subject: "Net generation from conventional hydroelectric power",
+    unit: KWH,
+    decimals: 0,
+    transform: "level",
+    changeAs: "percent",
+    headline: "level",
+    window: 36,
+    section: "Generation by fuel",
+    note: MER_MONTHLY,
+  }),
   mer({
     id: "electricity-retail-sales",
     datasetId: T07_06,
@@ -346,12 +629,30 @@ const UTILITY_TILES: readonly TileSpec[] = [
     title: "Electricity sales to ultimate customers, total (MER table 7.6)",
     subject: "Electricity sales to ultimate customers",
     verb: "were",
-    unit: "Million Kilowatthours",
+    unit: KWH,
     decimals: 0,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Sales and prices",
+    note: MER_MONTHLY,
+  }),
+  mer({
+    id: "electricity-sales-residential",
+    datasetId: T07_06,
+    msn: "ESRCPUS",
+    description: "Electricity Sales to Ultimate Customers, Residential",
+    title: "Electricity sales to ultimate customers, residential (MER table 7.6)",
+    subject: "Residential electricity sales",
+    verb: "were",
+    unit: KWH,
+    decimals: 0,
+    transform: "level",
+    changeAs: "percent",
+    headline: "level",
+    window: 36,
+    section: "Sales and prices",
     note: MER_MONTHLY,
   }),
   mer({
@@ -361,16 +662,31 @@ const UTILITY_TILES: readonly TileSpec[] = [
     description: "Average Price of Electricity to Ultimate Customers, Residential",
     title: "Average price of electricity to ultimate customers, residential (MER table 9.8)",
     subject: "The average residential price of electricity",
-    unit: "Cents per Kilowatthour,  Including Taxes",
+    unit: ELECTRICITY_PRICE,
     decimals: 2,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Sales and prices",
     note: "Including taxes. Not adjusted for inflation.",
   }),
-
-  // Emissions
+  mer({
+    id: "natural-gas-price-power",
+    datasetId: T09_10,
+    msn: "NGEIUUS",
+    description: "Natural Gas Price, Electric Power Sector",
+    title: "Natural gas price, electric power sector (MER table 9.10)",
+    subject: "The price of natural gas to the electric power sector",
+    unit: "Dollars per Thousand Cubic Feet",
+    decimals: 2,
+    transform: "level",
+    changeAs: "percent",
+    headline: "level",
+    window: 36,
+    section: "Sales and prices",
+    note: "Not adjusted for inflation.",
+  }),
   mer({
     id: "power-sector-co2",
     datasetId: T11_06,
@@ -379,16 +695,173 @@ const UTILITY_TILES: readonly TileSpec[] = [
     title: "Carbon dioxide emissions from the electric power sector, total (MER table 11.6)",
     subject: "Carbon dioxide emissions of the electric power sector",
     verb: "were",
-    unit: "Million Metric Tons of Carbon Dioxide",
+    unit: CO2,
     decimals: 1,
     transform: "level",
     changeAs: "percent",
     headline: "level",
     window: 36,
+    section: "Emissions",
     note: MER_MONTHLY,
   }),
+  mer({
+    id: "power-sector-co2-coal",
+    datasetId: T11_06,
+    msn: "CLEIEUS",
+    description: "Coal Electric Power Sector CO2 Emissions",
+    title: "Carbon dioxide emissions from coal in the electric power sector (MER table 11.6)",
+    subject: "Carbon dioxide emissions from coal in the electric power sector",
+    verb: "were",
+    unit: CO2,
+    decimals: 1,
+    transform: "level",
+    changeAs: "percent",
+    headline: "level",
+    window: 36,
+    section: "Emissions",
+    note: MER_MONTHLY,
+  }),
+];
 
-  // Plants and states
+/** Tiles of the round 6 forms and the state rankings on the Power and utilities board. */
+const UTILITY_FORMS: readonly TileSpec[] = [
+  {
+    id: "generation-by-source",
+    collection: "04_energy",
+    datasetId: T07_02A,
+    measure: "Value",
+    title: "Electricity net generation by source, all sectors (MER table 7.2a)",
+    subject: "Net generation from natural gas",
+    unit: KWH,
+    decimals: 0,
+    form: "compare",
+    transform: "level",
+    headline: "level",
+    changeAs: "percent",
+    lines: [
+      line("NGETPUS", "Electricity Net Generation From Natural Gas, All Sectors", "Natural gas", "Net generation from natural gas"),
+      line("CLETPUS", "Electricity Net Generation From Coal, All Sectors", "Coal", "Net generation from coal"),
+      line("NUETPUS", "Electricity Net Generation From Nuclear Electric Power, All Sectors", "Nuclear", "Net generation from nuclear electric power"),
+      line("WYETPUS", "Electricity Net Generation From Wind, All Sectors", "Wind", "Net generation from wind"),
+      line("SOETPUS", "Electricity Net Generation From Solar, All Sectors", "Solar", "Net generation from solar"),
+      line("HVETPUS", "Electricity Net Generation From Conventional Hydroelectric Power, All Sectors", "Hydro", "Net generation from conventional hydroelectric power"),
+    ],
+    window: 36,
+    section: "Generation by fuel",
+    size: "wide",
+    note: "Six of the sources EIA lists; they do not sum to its total, which includes sources not shown. " + MER_MONTHLY,
+  } satisfies CompareTileSpec,
+  merStat({
+    id: "generation-solar-stat",
+    datasetId: T07_02A,
+    msn: "SOETPUS",
+    description: "Electricity Net Generation From Solar, All Sectors",
+    title: "Net generation from solar",
+    subject: "Net generation from solar",
+    unit: KWH,
+    decimals: 0,
+    changeAs: "percent",
+    section: "Generation by fuel",
+    note: MER_MONTHLY,
+  }),
+  merStat({
+    id: "generation-wind-stat",
+    datasetId: T07_02A,
+    msn: "WYETPUS",
+    description: "Electricity Net Generation From Wind, All Sectors",
+    title: "Net generation from wind",
+    subject: "Net generation from wind",
+    unit: KWH,
+    decimals: 0,
+    changeAs: "percent",
+    section: "Generation by fuel",
+    note: MER_MONTHLY,
+  }),
+  {
+    id: "electricity-sales-by-sector",
+    collection: "04_energy",
+    datasetId: T07_06,
+    measure: "Value",
+    title: "Electricity sales to ultimate customers by sector (MER table 7.6)",
+    subject: "Electricity sales to ultimate customers",
+    verb: "were",
+    unit: KWH,
+    decimals: 0,
+    form: "mix",
+    transform: "level",
+    headline: "share",
+    whole: line("ESTCPUS", "Electricity Sales to Ultimate Customers, Total", "Total", "total electricity sales to ultimate customers"),
+    parts: [
+      line("ESRCPUS", "Electricity Sales to Ultimate Customers, Residential", "Residential", "Residential sales"),
+      line("ESCCPUS", "Electricity Sales to Ultimate Customers, Commercial", "Commercial", "Commercial sales"),
+      line("ESICPUS", "Electricity Sales to Ultimate Customers, Industrial", "Industrial", "Industrial sales"),
+      line("ESACPUS", "Electricity Sales to Ultimate Customers, Transportation", "Transportation", "Transportation sales"),
+    ],
+    draw: "columns",
+    tolerance: "0.01",
+    window: 24,
+    section: "Sales and prices",
+    size: "wide",
+    note: "EIA's four sectors sum to its total within its rounding. " + MER_MONTHLY,
+  } satisfies MixTileSpec,
+  {
+    id: "electricity-prices-by-sector",
+    collection: "04_energy",
+    datasetId: T09_08,
+    measure: "Value",
+    title: "Average price of electricity to ultimate customers by sector (MER table 9.8)",
+    subject: "The average residential price of electricity",
+    unit: ELECTRICITY_PRICE,
+    decimals: 2,
+    form: "compare",
+    transform: "level",
+    headline: "level",
+    changeAs: "percent",
+    lines: [
+      line("ESRCUUS", "Average Price of Electricity to Ultimate Customers, Residential", "Residential", "The average residential price of electricity"),
+      line("ESCMUUS", "Average Price of Electricity to Ultimate Customers, Commercial", "Commercial", "The average commercial price of electricity"),
+      line("ESICUUS", "Average Price of Electricity to Ultimate Customers, Industrial", "Industrial", "The average industrial price of electricity"),
+    ],
+    window: 36,
+    section: "Sales and prices",
+    note: "Including taxes. Not adjusted for inflation.",
+  } satisfies CompareTileSpec,
+  {
+    id: "power-sector-co2-by-fuel",
+    collection: "04_energy",
+    datasetId: T11_06,
+    measure: "Value",
+    title: "Carbon dioxide emissions from the electric power sector by fuel (MER table 11.6)",
+    subject: "Carbon dioxide emissions from natural gas in the electric power sector",
+    verb: "were",
+    unit: CO2,
+    decimals: 1,
+    form: "compare",
+    transform: "level",
+    headline: "level",
+    changeAs: "percent",
+    lines: [
+      line("NNEIEUS", "Natural Gas Electric Power Sector CO2 Emissions", "Natural gas", "Carbon dioxide emissions from natural gas in the electric power sector"),
+      line("CLEIEUS", "Coal Electric Power Sector CO2 Emissions", "Coal", "Carbon dioxide emissions from coal in the electric power sector"),
+    ],
+    window: 36,
+    section: "Emissions",
+    note: MER_MONTHLY,
+  } satisfies CompareTileSpec,
+  merStat({
+    id: "power-sector-co2-stat",
+    datasetId: T11_06,
+    msn: "TXEIEUS",
+    description: "Total Energy Electric Power Sector CO2 Emissions",
+    title: "Electric power sector carbon dioxide emissions, total",
+    subject: "Carbon dioxide emissions of the electric power sector",
+    verb: "were",
+    unit: CO2,
+    decimals: 1,
+    changeAs: "percent",
+    section: "Emissions",
+    note: MER_MONTHLY,
+  }),
   {
     id: "egrid-state-generation",
     collection: "05_utilities",
@@ -396,15 +869,16 @@ const UTILITY_TILES: readonly TileSpec[] = [
     measure: "STNGENAN",
     title: "State annual net generation (eGRID2023)",
     subject: "state annual net generation",
-    entities: "places (the 50 states, DC and Puerto Rico)",
+    entities: "states",
     unit: "MWh",
     decimals: 0,
-    transform: "rank",
+    form: "map",
+    transform: "level",
     headline: "rank",
-    form: "ranked-bars",
-    across: { by: "geo_code", period: "2023", top: 10 },
+    across: { by: "geo_code", period: "2023" },
+    section: "Plants and states",
     note: EGRID_NOTE,
-  } satisfies RankTileSpec,
+  } satisfies MapTileSpec,
   {
     id: "egrid-state-co2-rate",
     collection: "05_utilities",
@@ -412,15 +886,16 @@ const UTILITY_TILES: readonly TileSpec[] = [
     measure: "STCO2RTA",
     title: "State annual CO2 total output emission rate (eGRID2023)",
     subject: "state annual CO2 total output emission rate",
-    entities: "places (the 50 states, DC and Puerto Rico)",
+    entities: "states",
     unit: "lb/MWh",
     decimals: 1,
-    transform: "rank",
+    form: "map",
+    transform: "level",
     headline: "rank",
-    form: "ranked-bars",
-    across: { by: "geo_code", period: "2023", top: 10 },
+    across: { by: "geo_code", period: "2023" },
+    section: "Plants and states",
     note: "Pounds of CO2 per megawatthour of net generation. " + EGRID_NOTE,
-  } satisfies RankTileSpec,
+  } satisfies MapTileSpec,
   {
     id: "egrid-state-renewables",
     collection: "05_utilities",
@@ -435,6 +910,7 @@ const UTILITY_TILES: readonly TileSpec[] = [
     headline: "rank",
     form: "ranked-bars",
     across: { by: "geo_code", period: "2023", top: 10 },
+    section: "Plants and states",
     note: "Renewables as eGRID counts them: hydro, biomass, wind, solar and geothermal. " + EGRID_NOTE,
   } satisfies RankTileSpec,
   {
@@ -444,31 +920,93 @@ const UTILITY_TILES: readonly TileSpec[] = [
     measure: "Photovoltaic | Capacity MW | Total",
     title: "Net metered photovoltaic capacity by state (EIA-861)",
     subject: "net metered photovoltaic capacity",
-    entities: "places (the 50 states and DC)",
+    entities: "states",
     unit: "MW",
     decimals: 1,
-    transform: "rank",
+    form: "map",
+    transform: "level",
     headline: "rank",
-    form: "ranked-bars",
-    across: { by: "geo_code", period: "2025", top: 10 },
+    across: { by: "geo_code", period: "2025" },
+    section: "Plants and states",
     note: "Report year 2025. Photovoltaic capacity under net metering programs, all customer classes, as utilities reported it on Form EIA-861.",
-  } satisfies RankTileSpec,
+  } satisfies MapTileSpec,
+  {
+    id: "eia860-operable-generators-by-state",
+    collection: "05_utilities",
+    datasetId: EIA860_OPERABLE,
+    title: "Operable generators by state (EIA-860, 2025)",
+    subject: "EIA-860's operable generator table",
+    transform: "records",
+    headline: "records",
+    form: "map",
+    per: { dimension: "geo_code", top: 60 },
+    section: "Capacity",
+    note: "One record per generator as plants reported it for 2025: records, not megawatts.",
+  } satisfies RecordsTileSpec,
+  {
+    id: "eia860-proposed-generators-by-state",
+    collection: "05_utilities",
+    datasetId: EIA860_PROPOSED,
+    title: "Proposed generators by state (EIA-860, 2025)",
+    subject: "EIA-860's proposed generator table",
+    transform: "records",
+    headline: "records",
+    form: "ranked-bars",
+    per: { dimension: "geo_code", top: 12 },
+    section: "Capacity",
+    note: "One record per planned generator as reported for 2025: records, not megawatts.",
+  } satisfies RecordsTileSpec,
 ];
 
-const ENERGY_BOARD_ADDS = ENERGY_TILES.map((t) => t.id);
-
-export const UTILITIES_BOARD: BoardSpec = {
-  id: "05_utilities",
-  title: "Power and utilities",
-  tiles: UTILITY_TILES.map((t) => t.id),
+/**
+ * The boards once the round 6 forms compute and the state tiles name their states (the next boards version):
+ * Energy keeps its four core tiles and takes these 14; Power and utilities takes these 14; the landing board these 2.
+ */
+export const NEXT: { energy: readonly string[]; utilities: readonly string[]; library: readonly string[] } = {
+  energy: [
+    "energy-production-mix",
+    "natural-gas-production-stat",
+    "coal-production-stat",
+    "consumption-by-sector",
+    "petroleum-products-supplied-stat",
+    "natural-gas-consumption-stat",
+    "petroleum-trade",
+    "natural-gas-net-imports",
+    "eia814-import-records",
+    "crude-oil-stocks",
+    "crude-oil-price",
+    "natural-gas-citygate-price",
+    "co2-by-fuel",
+    "co2-emissions-stat",
+  ],
+  utilities: [
+    "generation-by-source",
+    "generation-solar-stat",
+    "generation-wind-stat",
+    "electricity-sales-by-sector",
+    "electricity-prices-by-sector",
+    "natural-gas-price-power",
+    "power-sector-co2-by-fuel",
+    "power-sector-co2-stat",
+    "egrid-state-generation",
+    "egrid-state-co2-rate",
+    "egrid-state-renewables",
+    "net-metered-solar-capacity",
+    "eia860-operable-generators-by-state",
+    "eia860-proposed-generators-by-state",
+  ],
+  library: ["generation-by-source", "egrid-state-generation"],
 };
+
+/** The Power and utilities board as the board server computes it today: one series per tile. */
+export const UTILITIES_BOARD: BoardSpec = { id: "05_utilities", title: "Power and utilities", tiles: UTILITY_SERIES.map((t) => t.id) };
 
 export const SPECS: UnitSpecs = {
   unit: "energy",
-  tiles: [...ENERGY_TILES, ...UTILITY_TILES],
+  tiles: [...ENERGY_SERIES, ...ENERGY_FORMS, ...UTILITY_SERIES, ...UTILITY_FORMS],
   boards: [UTILITIES_BOARD],
   boardTiles: {
-    "04_energy": ENERGY_BOARD_ADDS,
+    "04_energy": ENERGY_SERIES.map((t) => t.id),
     library: ["co2-emissions", "generation-solar"],
   },
 };

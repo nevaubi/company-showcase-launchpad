@@ -442,6 +442,13 @@
    "msn": "TXEIEUS",
    "records": 697,
    "md5": "6e27e847c3dbb9f71b3209ed2bbc0213"
+  },
+  {
+   "table": "T07.06",
+   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
+   "msn": "ESACPUS",
+   "records": 721,
+   "md5": "28bf14b5388bfeee88ee5649258fd908"
   }
  ],
  "states": {
@@ -684,6 +691,18 @@
     7918
    ]
   },
+  "generation-hydro": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "18,588",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from conventional hydroelectric power was 18,588 Million Kilowatthours in Aug 2026, 7.5% below Aug 2025.",
+   "rows": [
+    5047,
+    5034
+   ]
+  },
   "electricity-retail-sales": {
    "datasetId": "official_04_energy_raw_mer_t07_06_73b49f9b83",
    "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
@@ -694,6 +713,18 @@
    "rows": [
     3605,
     3592
+   ]
+  },
+  "electricity-sales-residential": {
+   "datasetId": "official_04_energy_raw_mer_t07_06_73b49f9b83",
+   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
+   "asOf": "Aug 2026",
+   "figure": "167,660",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Residential electricity sales were 167,660 Million Kilowatthours in Aug 2026, 8.0% above Aug 2025.",
+   "rows": [
+    721,
+    708
    ]
   },
   "electricity-price-residential": {
@@ -708,6 +739,18 @@
     661
    ]
   },
+  "natural-gas-price-power": {
+   "datasetId": "official_04_energy_raw_mer_t09_10_5eab229ba3",
+   "snapshotId": "297bc1594fcf659fd68be32f113898cf333c56d9df176b9ae4868876c9d25ced",
+   "asOf": "Aug 2026",
+   "figure": "3.22",
+   "figureUnit": "Dollars per Thousand Cubic Feet",
+   "headline": "The price of natural gas to the electric power sector was 3.22 Dollars per Thousand Cubic Feet in Aug 2026, 1.8% below Aug 2025.",
+   "rows": [
+    6849,
+    6836
+   ]
+  },
   "power-sector-co2": {
    "datasetId": "official_04_energy_raw_mer_t11_06_aa6ddc226e",
    "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
@@ -720,44 +763,16 @@
     6260
    ]
   },
-  "egrid-state-generation": {
-   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
-   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
-   "asOf": "2023",
-   "figure": "544,038,647",
-   "figureUnit": "MWh",
-   "headline": "48 had the largest state annual net generation of 52 places (the 50 states, DC and Puerto Rico) on 2023.",
+  "power-sector-co2-coal": {
+   "datasetId": "official_04_energy_raw_mer_t11_06_aa6ddc226e",
+   "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
+   "asOf": "Aug 2026",
+   "figure": "72.1",
+   "figureUnit": "Million Metric Tons of Carbon Dioxide",
+   "headline": "Carbon dioxide emissions from coal in the electric power sector were 72.1 Million Metric Tons of Carbon Dioxide in Aug 2026, 0.8% above Aug 2025.",
    "rows": [
-    45,
-    10,
-    39,
-    5,
-    15,
-    2,
-    36,
-    11,
-    28,
-    35
-   ]
-  },
-  "egrid-state-co2-rate": {
-   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
-   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
-   "asOf": "2023",
-   "figure": "1,954.4",
-   "figureUnit": "lb/MWh",
-   "headline": "54 had the largest state annual CO2 total output emission rate of 52 places (the 50 states, DC and Puerto Rico) on 2023.",
-   "rows": [
-    51,
-    52,
-    18,
-    40,
-    16,
-    25,
-    46,
-    12,
-    29,
-    50
+    697,
+    684
    ]
   },
   "egrid-state-renewables": {
@@ -777,26 +792,6 @@
     35,
     17,
     15,
-    6
-   ]
-  },
-  "net-metered-solar-capacity": {
-   "datasetId": "official_05_utilities_csv_eia861_net_metering_2025_states_state_level_662ef5df39",
-   "snapshotId": "aed6f50aaeb4a6795e3f9858afdb55b0b3fddf68fc34a9ef8e360cf5e112eb82",
-   "asOf": "2025",
-   "figure": "20,041.1",
-   "figureUnit": "MW",
-   "headline": "CA had the largest net metered photovoltaic capacity of 51 places (the 50 states and DC) on 2025.",
-   "rows": [
-    5,
-    35,
-    4,
-    10,
-    32,
-    20,
-    15,
-    7,
-    21,
     6
    ]
   }

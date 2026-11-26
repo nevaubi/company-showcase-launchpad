@@ -7,7 +7,7 @@
 import { cadenceOf, measureOf, profileStatus, unitOf } from "../../profiles";
 import type { Cadence, MeasureSpec, Profile } from "../../profiles/types";
 import type { SourceColumn } from "../../schema";
-import { computeRankTile, computeSeriesTile, type CellInput, type RankCellInput, type TileContext } from "../compute";
+import { computeRankTile, computeSeriesTile, isRankSpec, isSeriesSpec, type CellInput, type RankCellInput, type TileContext } from "../compute";
 import type { RankTileSpec, SeriesTileSpec, TileResult, TileSpec } from "../types";
 
 /** One MER series: its records as [row number, period as stored, value as stored], the unit and description of every record. */
@@ -48,7 +48,7 @@ export type EnergyFixtures = {
 
 type Resolved = { ok: true; profile: Profile; measure: MeasureSpec; columns: SourceColumn[] } | { ok: false; reason: string };
 
-function resolve(spec: TileSpec, fixtures: EnergyFixtures): Resolved {
+function resolve(spec: SeriesTileSpec | RankTileSpec, fixtures: EnergyFixtures): Resolved {
   const dictionary = fixtures.dictionaries[spec.datasetId];
   if (!dictionary) return { ok: false, reason: `No dictionary for ${spec.datasetId} in the fixtures.` };
   const status = profileStatus({ id: spec.datasetId, source_id: dictionary.sourceId }, dictionary.columns);
@@ -128,9 +128,9 @@ export function replayRankTile(spec: RankTileSpec, fixtures: EnergyFixtures, cad
   return computeRankTile(spec, context, cells);
 }
 
-/** Any energy tile on its fixtures. */
+/** An energy tile of one series or one ranking on its fixtures; the other forms are replayed by their own tests. */
 export function replayTile(spec: TileSpec, fixtures: EnergyFixtures): TileResult {
-  if (spec.transform === "rank") return replayRankTile(spec, fixtures);
-  if (spec.transform === "share") return { ok: false, reason: "Share tiles are replayed by the board's own tests." };
-  return replaySeriesTile(spec, fixtures);
+  if (isRankSpec(spec)) return replayRankTile(spec, fixtures);
+  if (isSeriesSpec(spec)) return replaySeriesTile(spec, fixtures);
+  return { ok: false, reason: `The ${spec.form} form is replayed with the boards' own compute of that form.` };
 }

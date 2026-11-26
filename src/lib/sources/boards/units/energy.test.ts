@@ -4,9 +4,10 @@ import { readNative } from "../../numbers";
 import { measureOf, PROFILE_ENTRIES, profileFor, profileStatus, unitOf } from "../../profiles";
 import { ENERGY_REFUSED, EGRID_STATE_MEASURES, NET_METERING_STATE_MEASURES } from "../../profiles/units/energy";
 import type { SourceColumn } from "../../schema";
+import { isRankSpec, isSeriesSpec } from "../compute";
 import { BOARDS, boardSpec, tileSpec } from "../specs";
-import type { RankTileSpec, SeriesTileSpec } from "../types";
-import { SPECS, UTILITIES_BOARD } from "./energy";
+import type { CompareTileSpec, MixTileSpec, RankTileSpec, SeriesTileSpec, StatTileSpec, TileSeriesSpec } from "../types";
+import { NEXT, SPECS, UTILITIES_BOARD } from "./energy";
 import { merKey, replayRankTile, replayTile, type EnergyFixtures } from "./energy-replay";
 
 const FIXTURES = JSON.parse(readFileSync("src/lib/sources/boards/units/energy.fixtures.json", "utf8")) as EnergyFixtures;
@@ -88,7 +89,7 @@ describe("refused families", () => {
 
 describe("energy tiles", () => {
   it("each resolves to a reviewed profile and one of its measures", () => {
-    for (const spec of SPECS.tiles) {
+    for (const spec of SPECS.tiles.filter((t) => isSeriesSpec(t) || isRankSpec(t)) as (SeriesTileSpec | RankTileSpec)[]) {
       const dict = FIXTURES.dictionaries[spec.datasetId];
       expect(dict, spec.id).toBeDefined();
       const profile = profileFor({ id: spec.datasetId, source_id: dict.sourceId }, dict.columns);
@@ -99,7 +100,7 @@ describe("energy tiles", () => {
   });
 
   it("pin each MER series by the description and unit its records state", () => {
-    for (const spec of SPECS.tiles.filter((t): t is SeriesTileSpec => t.transform !== "rank" && t.transform !== "share")) {
+    for (const spec of SPECS.tiles.filter(isSeriesSpec)) {
       const key = merKey(spec);
       const series = key ? FIXTURES.mer[key] : undefined;
       expect(series, spec.id).toBeDefined();
@@ -114,7 +115,7 @@ describe("energy tiles", () => {
     }
   });
 
-  it.each(SPECS.tiles.map((t) => [t.id, t] as const))("%s computes the figures checked on production", (id, spec) => {
+  it.each(SPECS.tiles.filter((t) => isSeriesSpec(t) || isRankSpec(t)).map((t) => [t.id, t] as const))("%s computes the figures checked on production", (id, spec) => {
     const result = replayTile(spec, FIXTURES);
     const check = CHECKS.tiles[id];
     expect(check).toBeDefined();
@@ -134,7 +135,7 @@ describe("energy tiles", () => {
   });
 
   it("rank a whole period: every place of the cross-section, each once", () => {
-    for (const spec of SPECS.tiles.filter((t): t is RankTileSpec => t.transform === "rank")) {
+    for (const spec of SPECS.tiles.filter(isRankSpec)) {
       const result = replayRankTile(spec, FIXTURES, "profile");
       expect(result.ok, spec.id).toBe(true);
       if (!result.ok) continue;
@@ -152,6 +153,86 @@ describe("energy tiles", () => {
     expect(replayTile(spec, renamed)).toMatchObject({ ok: false });
     const redefined: EnergyFixtures = { ...FIXTURES, mer: { ...FIXTURES.mer, [key]: { ...FIXTURES.mer[key], description: "Electricity Net Generation From Solar, Electric Power Sector" } } };
     expect(replayTile(spec, redefined)).toMatchObject({ ok: false });
+  });
+});
+
+/** A decimal text as an integer count of 10^-scale units, exactly. */
+function scaled(text: string, scale: number): bigint {
+  const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!m) throw new Error(`not a plain decimal: ${text}`);
+  const frac = (m[3] ?? "").padEnd(scale, "0");
+  if (frac.length > scale) throw new Error(`more than ${scale} decimals: ${text}`);
+  const v = BigInt(m[2] + frac);
+  return m[1] ? -v : v;
+}
+
+const linesOf = (spec: CompareTileSpec | MixTileSpec): TileSeriesSpec[] => (spec.form === "mix" ? [spec.whole, ...spec.parts] : [...spec.lines]);
+const keyOf = (datasetId: string, l: { series: TileSeriesSpec["series"] }) => {
+  const where = "where" in l.series && l.series.where ? l.series.where : [];
+  return `${datasetId}|${where.find((m) => m.field === "MSN")?.value ?? ""}`;
+};
+
+describe("energy tiles of the round 6 forms", () => {
+  const several = SPECS.tiles.filter((t): t is CompareTileSpec | MixTileSpec => t.form === "compare" || t.form === "mix");
+  const stats = SPECS.tiles.filter((t): t is StatTileSpec => t.form === "stat");
+
+  it("name only MER series proven on production, each pinned by the description and unit its records state", () => {
+    expect(several.length).toBeGreaterThanOrEqual(8);
+    for (const spec of several) {
+      for (const l of linesOf(spec)) {
+        const datasetId = l.datasetId ?? spec.datasetId;
+        const series = FIXTURES.mer[keyOf(datasetId, l)];
+        expect(series, `${spec.id} ${keyOf(datasetId, l)}`).toBeDefined();
+        if (!series) continue;
+        expect(l.subjectCheck).toEqual({ field: "Description", value: series.description });
+        expect(l.unit ?? spec.unit).toBe(series.unit);
+        expect(CHECKS.series.some((p) => p.snapshotId === series.snapshotId && keyOf(datasetId, l).endsWith(`|${p.msn}`))).toBe(true);
+      }
+    }
+    for (const spec of stats) {
+      const series = FIXTURES.mer[keyOf(spec.datasetId, spec)];
+      expect(series, spec.id).toBeDefined();
+      expect(spec.subjectCheck).toEqual({ field: "Description", value: series?.description });
+      expect(spec.unit).toBe(series?.unit);
+    }
+  });
+
+  it("keep two to six series per compare and one unit per tile", () => {
+    for (const spec of several.filter((t): t is CompareTileSpec => t.form === "compare")) {
+      expect(spec.lines.length).toBeGreaterThanOrEqual(2);
+      expect(spec.lines.length).toBeLessThanOrEqual(6);
+      if (spec.spread) expect(spec.lines[spec.spread.of].unit ?? spec.unit).toBe(spec.lines[spec.spread.less].unit ?? spec.unit);
+    }
+  });
+
+  it("draw a mix only where EIA's parts sum to its total within the stated tolerance in every month drawn", () => {
+    for (const spec of several.filter((t): t is MixTileSpec => t.form === "mix")) {
+      const scale = 6;
+      const tolerance = scaled(spec.tolerance, scale);
+      const monthly = (l: TileSeriesSpec) =>
+        new Map(FIXTURES.mer[keyOf(l.datasetId ?? spec.datasetId, l)].rows.filter((r) => !r[1].endsWith("13")).map((r) => [r[1], r[2]] as const));
+      const whole = monthly(spec.whole);
+      const parts = spec.parts.map(monthly);
+      const months = [...whole.keys()].sort().slice(-spec.window);
+      expect(months).toHaveLength(spec.window);
+      for (const month of months) {
+        const sum = parts.reduce((acc, p) => acc + scaled(p.get(month) as string, scale), 0n);
+        const gap = sum - scaled(whole.get(month) as string, scale);
+        expect(gap <= tolerance && gap >= -tolerance, `${spec.id} ${month}`).toBe(true);
+      }
+    }
+  });
+
+  it("fill the next boards within their bounds, with tiles defined once", () => {
+    const ids = new Set(SPECS.tiles.map((t) => t.id));
+    expect(ids.size).toBe(SPECS.tiles.length);
+    for (const id of [...NEXT.energy, ...NEXT.utilities, ...NEXT.library]) expect(ids.has(id), id).toBe(true);
+    expect(4 + NEXT.energy.length).toBeLessThanOrEqual(18);
+    expect(NEXT.utilities.length).toBeGreaterThanOrEqual(12);
+    expect(NEXT.utilities.length).toBeLessThanOrEqual(16);
+    expect(new Set(NEXT.energy).size).toBe(NEXT.energy.length);
+    expect(new Set(NEXT.utilities).size).toBe(NEXT.utilities.length);
+    for (const id of [...NEXT.energy, ...NEXT.utilities]) expect(tileSpec(id)?.section, id).toBeTruthy();
   });
 });
 
@@ -175,7 +256,7 @@ describe("energy boards", () => {
   });
 
   it("proves every series the checks list against EIA's file, on the snapshot the fixtures name", () => {
-    expect(CHECKS.series).toHaveLength(63);
+    expect(CHECKS.series).toHaveLength(64);
     for (const s of CHECKS.series) {
       expect(s.snapshotId, `${s.table} ${s.msn}`).toMatch(/^[0-9a-f]{64}$/);
       expect(s.md5).toMatch(/^[0-9a-f]{32}$/);
