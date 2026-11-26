@@ -96,7 +96,8 @@ const fhfaStat = (id: string, placeId: string, name: string): StatTileSpec => ({
   collection: "11_real_estate",
   datasetId: FHFA_QUARTERLY_DATASET,
   measure: "index_sa",
-  title: `FHFA purchase-only house price index, ${name}`,
+  // the place first: a stat tile's title is cut to one line
+  title: `${name}, FHFA purchase-only index`,
   subject: `The FHFA purchase-only index for ${name}`,
   unit: FHFA_Q_UNIT,
   decimals: 2,
@@ -150,7 +151,6 @@ const HOUSING: TileSpec[] = [
     // the store's period dimension holds the year; the quarter is FHFA's own field `period`
     across: { by: "geo_code", period: "2026", where: [...FHFA_Q_FAMILY, { field: "period", value: "2" }] },
     section: "States and divisions",
-    size: "wide",
     note: FHFA_Q_NOTE,
   } satisfies MapTileSpec,
   fhfaDivisions({
@@ -237,7 +237,7 @@ const wbLine = (indicator: string, code: string, label: string): TileSeriesSpec 
   label,
 });
 
-const wbCompare = (spec: { id: string; datasetId: string; title: string; indicator: { code: string; name: string; unit: string }; subject: string }): CompareTileSpec => ({
+const wbCompare = (spec: { id: string; datasetId: string; title: string; indicator: { code: string; name: string; unit: string }; subject: string; wide?: boolean }): CompareTileSpec => ({
   id: spec.id,
   collection: "02_technology",
   datasetId: spec.datasetId,
@@ -259,6 +259,7 @@ const wbCompare = (spec: { id: string; datasetId: string; title: string; indicat
   ],
   window: 18,
   section: "Trade in technology",
+  ...(spec.wide ? { size: "wide" as const } : {}),
   note: "World Bank, World Development Indicators. Economies as the World Bank names them.",
 });
 
@@ -266,7 +267,6 @@ const KEV_NOTE = "CISA's catalog of vulnerabilities known to be exploited. The c
 
 const TECHNOLOGY: TileSpec[] = [
   twRank("twse-tech-revenue-top", TWSE_TECH, "TWSE"),
-  twRank("tpex-tech-revenue-top", TPEX_TECH, "TPEX"),
   {
     id: "twse-tech-revenue-change",
     collection: "02_technology",
@@ -283,8 +283,10 @@ const TECHNOLOGY: TileSpec[] = [
     across: { by: "entity_id", period: "latest" },
     draw: { as: "histogram", edges: ["-50", "-25", "-10", "0", "10", "25", "50", "100"] },
     section: "Taiwan monthly revenue",
+    size: "wide",
     note: TW_COHORT,
   } satisfies DistributionTileSpec,
+  twRank("tpex-tech-revenue-top", TPEX_TECH, "TPEX"),
   {
     id: "twse-industries-records",
     collection: "02_technology",
@@ -296,6 +298,7 @@ const TECHNOLOGY: TileSpec[] = [
     form: "ranked-bars",
     per: { field: "產業別", top: 10 },
     section: "Taiwan monthly revenue",
+    size: "wide",
     note: "One record per listed company for the reporting month; industries as the exchange names them.",
   } satisfies RecordsTileSpec,
   {
@@ -336,6 +339,7 @@ const TECHNOLOGY: TileSpec[] = [
     form: "ranked-bars",
     per: { dimension: "entity_name", top: 10 },
     section: "Known exploited vulnerabilities",
+    size: "wide",
     note: "Vendor or project as CISA writes it.",
   } satisfies RecordsTileSpec,
   {
@@ -357,6 +361,7 @@ const TECHNOLOGY: TileSpec[] = [
     title: "High-technology exports (% of manufactured exports)",
     indicator: WB_HIGH_TECH,
     subject: "High-technology exports of Korea",
+    wide: true,
   }),
   wbCompare({
     id: "wb-ict-goods-exports",
@@ -482,7 +487,7 @@ const HEALTH: TileSpec[] = [
     headline: "level",
     series: { where: [{ field: "application_type", value: "NDA" }, { field: "submission_status", value: "AP" }] },
     window: 26,
-    section: "Drug approvals",
+    section: "FDA approvals and exclusivity",
     note: FDA_COUNT_NOTE,
   } satisfies SeriesTileSpec,
   {
@@ -500,7 +505,7 @@ const HEALTH: TileSpec[] = [
     headline: "level",
     lines: [fdaLine("NDA", "AP", "NDA"), fdaLine("BLA", "AP", "BLA")],
     window: 26,
-    section: "Drug approvals",
+    section: "FDA approvals and exclusivity",
     note: `${FDA_COUNT_NOTE} Drugs@FDA lists the biologics CDER regulates.`,
   } satisfies CompareTileSpec,
   {
@@ -518,7 +523,7 @@ const HEALTH: TileSpec[] = [
     headline: "level",
     lines: [fdaLine("ANDA", "AP", "Approved"), fdaLine("ANDA", "TA", "Tentatively approved")],
     window: 26,
-    section: "Drug approvals",
+    section: "FDA approvals and exclusivity",
     note: FDA_COUNT_NOTE,
   } satisfies CompareTileSpec,
   {
@@ -531,7 +536,8 @@ const HEALTH: TileSpec[] = [
     headline: "records",
     form: "ranked-bars",
     per: { dimension: "entity_name", top: 10 },
-    section: "Drug approvals",
+    section: "FDA approvals and exclusivity",
+    size: "wide",
     note: "One record per application (NDA, ANDA or BLA), counted by SponsorName exactly as FDA writes it: one company can file under several names (TEVA and TEVA PHARMS USA are counted apart).",
   } satisfies RecordsTileSpec,
   {
@@ -544,7 +550,7 @@ const HEALTH: TileSpec[] = [
     headline: "records",
     form: "ranked-bars",
     per: { field: "Exclusivity_Code", top: 8 },
-    section: "Orange Book",
+    section: "FDA approvals and exclusivity",
     note: "One record per product and exclusivity; codes as FDA's Orange Book writes them (NCE new chemical entity, ODE orphan drug, PED pediatric).",
   } satisfies RecordsTileSpec,
 ];
@@ -628,7 +634,6 @@ const COMMUNICATIONS: TileSpec[] = [
     form: "map",
     per: { dimension: "geo_code", top: 60 },
     section: "Connect America Fund",
-    size: "wide",
     note: "One record per study area, fund and filing year, as USAC publishes them.",
   } satisfies RecordsTileSpec,
   {
@@ -654,8 +659,7 @@ const COMMUNICATIONS: TileSpec[] = [
     headline: "records",
     form: "bars",
     per: { dimension: "period", format: "mmmyyyy", by: "period" },
-    section: "Broadband providers",
-    size: "wide",
+    section: "Broadband providers and telecom indicators",
     note: "One record per holding company and Form 477 date (June and December), as FCC publishes them; the table's latest date is June 2021.",
   } satisfies RecordsTileSpec,
   {
@@ -668,7 +672,7 @@ const COMMUNICATIONS: TileSpec[] = [
     headline: "records",
     form: "bars",
     per: { dimension: "period", format: "year", by: "year", window: 30 },
-    section: "World Bank indicators",
+    section: "Broadband providers and telecom indicators",
     note: "Seven indicators (subscriptions, Internet use, secure servers) for every economy and aggregate the World Bank lists.",
   } satisfies RecordsTileSpec,
   {
@@ -681,7 +685,7 @@ const COMMUNICATIONS: TileSpec[] = [
     headline: "records",
     form: "bars",
     per: { dimension: "period", format: "year", by: "year", window: 30 },
-    section: "World Bank indicators",
+    section: "Broadband providers and telecom indicators",
     note: "Indicator, economy and year combinations the World Bank lists without a value.",
   } satisfies RecordsTileSpec,
 ];
