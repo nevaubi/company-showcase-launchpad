@@ -495,6 +495,13 @@ export type Database = {
             foreignKeyName: "abs_documents_accession_fkey"
             columns: ["accession"]
             isOneToOne: false
+            referencedRelation: "abs_filing_periods"
+            referencedColumns: ["accession"]
+          },
+          {
+            foreignKeyName: "abs_documents_accession_fkey"
+            columns: ["accession"]
+            isOneToOne: false
             referencedRelation: "abs_filings"
             referencedColumns: ["accession"]
           },
@@ -595,6 +602,13 @@ export type Database = {
             foreignKeyName: "abs_filings_superseded_by_fkey"
             columns: ["superseded_by"]
             isOneToOne: false
+            referencedRelation: "abs_filing_periods"
+            referencedColumns: ["accession"]
+          },
+          {
+            foreignKeyName: "abs_filings_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
             referencedRelation: "abs_filings"
             referencedColumns: ["accession"]
           },
@@ -635,6 +649,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "abs_loads_accession_fkey"
+            columns: ["accession"]
+            isOneToOne: false
+            referencedRelation: "abs_filing_periods"
+            referencedColumns: ["accession"]
+          },
           {
             foreignKeyName: "abs_loads_accession_fkey"
             columns: ["accession"]
@@ -2899,6 +2920,47 @@ export type Database = {
           },
         ]
       }
+      source_snapshot_stats: {
+        Row: {
+          computed_at: string | null
+          entities: number | null
+          geographies: number | null
+          labels: string | null
+          period_max: string | null
+          period_min: string | null
+          periods: number | null
+          snapshot_id: string
+        }
+        Insert: {
+          computed_at?: string | null
+          entities?: number | null
+          geographies?: number | null
+          labels?: string | null
+          period_max?: string | null
+          period_min?: string | null
+          periods?: number | null
+          snapshot_id: string
+        }
+        Update: {
+          computed_at?: string | null
+          entities?: number | null
+          geographies?: number | null
+          labels?: string | null
+          period_max?: string | null
+          period_min?: string | null
+          periods?: number | null
+          snapshot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_snapshot_stats_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: true
+            referencedRelation: "source_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       source_snapshots: {
         Row: {
           attempts: number
@@ -3684,6 +3746,57 @@ export type Database = {
           },
         ]
       }
+      abs_filing_periods: {
+        Row: {
+          accepted_at: string | null
+          accession: string | null
+          alone_amendment: boolean | null
+          cover_after_filing: boolean | null
+          cover_period_end: string | null
+          cover_period_start: string | null
+          deal_id: string | null
+          filed: string | null
+          form: string | null
+          is_current: boolean | null
+          list_cik: number | null
+          load_id: number | null
+          loaded_at: string | null
+          period_ends: number | null
+          records_after_filing: boolean | null
+          records_period_end: string | null
+          superseded_by: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_filings_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "abs_deals"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "abs_filings_load_fk"
+            columns: ["load_id"]
+            isOneToOne: false
+            referencedRelation: "abs_loads"
+            referencedColumns: ["load_id"]
+          },
+          {
+            foreignKeyName: "abs_filings_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "abs_filing_periods"
+            referencedColumns: ["accession"]
+          },
+          {
+            foreignKeyName: "abs_filings_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "abs_filings"
+            referencedColumns: ["accession"]
+          },
+        ]
+      }
       abs_pool_metrics_live: {
         Row: {
           accepted_at: string | null
@@ -3752,6 +3865,7 @@ export type Database = {
         }
         Returns: Json
       }
+      abs_deal: { Args: { _deal_id: string }; Returns: Json }
       abs_fail_claimed: {
         Args: { _accession: string; _detail: string }
         Returns: undefined
@@ -3761,6 +3875,10 @@ export type Database = {
       abs_mark_filing: {
         Args: { _accession: string; _detail: string; _status: string }
         Returns: undefined
+      }
+      abs_monitor: {
+        Args: { _family: string; _periods?: number }
+        Returns: Json
       }
       abs_put_rows: {
         Args: { _kind: string; _load_id: number; _rows: Json }
@@ -4220,10 +4338,40 @@ export type Database = {
         Returns: Json
       }
       source_columns_valid: { Args: { _columns: Json }; Returns: boolean }
+      source_compute_missing_stats: {
+        Args: { _max_snapshots?: number; _max_values?: number }
+        Returns: number
+      }
+      source_compute_snapshot_stats: {
+        Args: { _max_values?: number; _snapshot_id: string }
+        Returns: Json
+      }
+      source_count_distinct: {
+        Args: { _dimension: string; _max_values: number; _snapshot_id: string }
+        Returns: number
+      }
+      source_facets: {
+        Args: {
+          _after?: string
+          _contains?: string
+          _dataset_id: string
+          _dimension?: string
+          _limit?: number
+          _scan_limit?: number
+          _snapshot_id?: string
+        }
+        Returns: Json
+      }
+      source_find: { Args: { _limit?: number; _q: string }; Returns: Json }
       source_get_dataset: {
         Args: { _id: string; _snapshot_id?: string }
         Returns: Json
       }
+      source_get_snapshot_stats: {
+        Args: { _dataset_id: string; _snapshot_id?: string }
+        Returns: Json
+      }
+      source_library: { Args: never; Returns: Json }
       source_list_datasets: {
         Args: {
           _after?: string
@@ -4268,6 +4416,10 @@ export type Database = {
       source_renew_lease: {
         Args: { _owner: string; _snapshot_id: string; _ttl_seconds?: number }
         Returns: boolean
+      }
+      source_snapshot_ref: {
+        Args: { s: Database["public"]["Tables"]["source_snapshots"]["Row"] }
+        Returns: Json
       }
       source_values_valid: { Args: { _values: Json }; Returns: boolean }
       tier_has_feature: {
