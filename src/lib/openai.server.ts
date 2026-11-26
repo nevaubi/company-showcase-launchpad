@@ -341,6 +341,10 @@ async function freeOnlyStructured<T>(opts: Parameters<typeof openaiStructured>[0
 export async function openaiDirectStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
   const key = process.env["OPENAI_API_KEY"];
   if (!key) throw new OpenAIError("OPENAI_API_KEY is not configured", "auth", 0);
+  // Gateway ids ("google/gemini-3.1-flash-lite", "openai/gpt-6-luna") are not OpenAI API ids: sent
+  // here they come back "400 invalid_value: Invalid model ID." (19 Nov, IR_AI_PROVIDER=openai without
+  // IR_FREE_ONLY). Refused before the request, as the same configuration error.
+  if (opts.model.includes("/")) throw new OpenAIError(`Invalid model ID: ${opts.model} is a Lovable AI Gateway id, not an OpenAI API id (direct OpenAI reads need IR_FREE_ONLY=1 or an OpenAI model id)`, "auth", 400);
   const content: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;
   let res: Response;
   try {
