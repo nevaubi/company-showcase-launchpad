@@ -14,6 +14,7 @@ import { count, isLatest, periodWords, refreshState, utcDay, utcStamp, versionPo
 import type { Profile } from "@/lib/sources/profiles";
 import type { SnapshotVersion } from "./record-read";
 import { CopyButton, HrefLink, LINK, QuietLine } from "./ui/primitives";
+import { AltNav } from "./alt-nav";
 
 const BOILERPLATE = /^Complete retained source table with all original fields and records from this file\.\s*/;
 
@@ -130,6 +131,7 @@ export function DatasetHeader({
           </>
         }
       />
+      <AltNav />
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border shadow-paper sm:grid-cols-3 @5xl:grid-cols-6" data-section="Table facts">
         <Stat className="border-b-0 bg-card" label="Records" value={count(snapshot.loaded_rows)} sub="in this version" />
@@ -153,7 +155,7 @@ export function DatasetHeader({
           }
           sub={range === null ? "no period field" : range ? (first!.text === last!.text ? "one period" : `${first!.text} to ${last!.text}`) : undefined}
         />
-        <EntityStat entities={entities} failed={entitiesFailed} dimension={entityDimension} noun={entityNoun} />
+        <EntityStat entities={entities} failed={entitiesFailed} dimension={entityDimension} noun={entityNoun} periodText={(p) => periodWords(p, format, profile)} />
         <Stat
           className="border-b-0 bg-card"
           label="File retrieved"
@@ -212,11 +214,14 @@ function EntityStat({
   failed,
   dimension,
   noun,
+  periodText,
 }: {
   entities: SourceEntities | null | undefined;
   failed: boolean;
   dimension: "entity" | "geo" | null;
   noun: { one: string; many: string } | null;
+  /** The period as a reader says it ("Q2 2026"), with the stored text kept for the title. */
+  periodText: (period: string) => { text: string; title?: string };
 }) {
   if (dimension === null) return <Stat className="border-b-0 bg-card" label="Entities" value="–" sub="no entity or place field" />;
   const plural = dimension === "geo" ? "Places" : noun ? noun.many[0].toUpperCase() + noun.many.slice(1) : "Entities";
@@ -227,7 +232,8 @@ function EntityStat({
     );
   const n = entities.entities.length;
   const label = plural;
-  const where = entities.period ? `in ${entities.period}` : "in the first rows";
+  const said = entities.period ? periodText(entities.period) : null;
+  const where = said ? `in ${said.text}` : "in the first rows";
   return (
     <Stat
       className="border-b-0 bg-card"

@@ -45,6 +45,8 @@ vi.mock("@/lib/sources/read.functions", () => ({
   findSources: vi.fn(),
   getLibraryWire: vi.fn(),
 }));
+// The section tabs read the router's state; they have their own tests.
+vi.mock("./alt-nav", () => ({ AltNav: () => null }));
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   useRouter: () => ({ navigate: mocks.navigate }),

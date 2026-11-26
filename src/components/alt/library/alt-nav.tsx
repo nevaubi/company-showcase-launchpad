@@ -27,7 +27,7 @@ export function AltNav({ className }: { className?: string }) {
     <nav
       aria-label="Alt data sections"
       data-section="Alt data sections"
-      className={cn("-mx-1 flex min-w-0 gap-1 overflow-x-auto border-b scrollbar-thin", className)}
+      className={cn("-mx-1 flex min-w-0 gap-1 overflow-x-auto overflow-y-hidden border-b scrollbar-thin", className)}
     >
       <Link
         to="/app/alt-data"

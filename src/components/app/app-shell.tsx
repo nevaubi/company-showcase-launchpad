@@ -728,7 +728,7 @@ function HubTabs({ pathname }: { pathname: string }) {
   return (
     <nav
       aria-label={hub.label}
-      className="-mx-1 mb-4 flex gap-1 overflow-x-auto border-b scrollbar-thin"
+      className="-mx-1 mb-4 flex gap-1 overflow-x-auto overflow-y-hidden border-b scrollbar-thin"
     >
       {hub.pages.map((p) => {
         const active = isPageActive(p, pathname);
