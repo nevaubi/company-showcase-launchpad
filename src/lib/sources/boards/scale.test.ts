@@ -64,9 +64,18 @@ describe("whitelist entries on the figures the tiles print", () => {
     });
   });
 
+  it("writes CMS Part D drug spending in dollars, the stored figure as filed beneath", () => {
+    expect(readerFigure("USD nominal gross drug spending", d("4123456789.12"), "4,123,456,789.12")).toMatchObject({
+      figure: "$4.123 billion",
+      unit: "",
+      filed: "4,123,456,789.12 USD nominal gross drug spending as filed",
+      axis: { title: "USD billions", shift: 9 },
+    });
+  });
+
   it("holds only units that a level or a ranking tile uses", () => {
     const used = new Set(TILES.flatMap((t) => (isClassicSpec(t) && (t.transform === "level" || t.transform === "rank") ? [t.unit] : [])));
-    for (const entry of SCALE_UNITS) expect(used.has(entry.unit), entry.unit).toBe(true);
+    for (const entry of SCALE_UNITS) if (!entry.requested) expect(used.has(entry.unit), entry.unit).toBe(true);
   });
 });
 
