@@ -50,6 +50,8 @@ describe("irpolish: statement sections on JPM's rebuilt payload", () => {
     const s = sec(/average balance sheets/i);
     const heads = s.rows.filter((r): r is Extract<StatementRow, { kind: "head" }> => r.kind === "head").map((r) => r.text);
     expect(heads.some((h) => /\b(or|and|of)$/i.test(h))).toBe(false);
+    // A heading whose printed rows end at a spacer band before the next line has no line of its own here.
+    expect(heads).not.toContain("Interest-bearing liabilities");
     const { rows } = visibleRows(s, byKey, {});
     rows.forEach((r, i) => {
       if (r.kind !== "head") return;

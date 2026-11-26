@@ -31,6 +31,8 @@ export type StatementRow =
       /** the first printed line of a label the table wraps over two rows ("Federal funds purchased and
        *  securities loaned or" over "sold under repurchase agreements"), read before the row's own name */
       wrap?: string;
+      /** brought to its siblings' level under the total that closes its block (it lost that total in the build) */
+      sib?: boolean;
     }
   | { kind: "head"; text: string; depth: number }
   | { kind: "gap" };
@@ -549,7 +551,12 @@ export function assembleStatements(p: IrPayload): Statement[] {
         for (let i = prevR + 1; i < r; i++) {
           const h = heads.get(i);
           if (h) between.push({ kind: "head", text: shownLabel(sentenceCase(h, keep)), depth: 0 });
-          else if (blank.has(i) || !cap) gap = true;
+          else if (blank.has(i) || !cap) {
+            // A spacer band closes the headings above it: their rows are not in this section (the reader
+            // did not keep them), so they would head the wrong lines.
+            between.length = 0;
+            gap = true;
+          }
         }
         if (between.length) {
           if (gap || rows.at(-1)?.kind === "line") rows.push({ kind: "gap" });
@@ -841,6 +848,7 @@ function levelSiblings(rows: StatementRow[], byKey: Map<string, PayloadSeries>) 
       if (shift <= 0) continue;
       const from = r.depth;
       r.depth = want;
+      r.sib = true;
       for (let x = j + 1; x < i; x++) {
         const u = rows[x];
         if (u.kind !== "line" || inBlock.has(x) || u.depth <= from) break;
@@ -853,9 +861,10 @@ function levelSiblings(rows: StatementRow[], byKey: Map<string, PayloadSeries>) 
 /**
  * Tie-out checks of a section's totals against the parts this table prints (`blockParts`), never against
  * lines of other tables or documents stored under the same total (JPM's TOTAL NET REVENUE also closes the
- * AWM table and a deck slide). A total and period the build checked is re-checked here from the figures the
- * section shows; a period missing one of the parts is left unchecked; selected-line lists keep the build's
- * verdict. Keyed "<line key>|<q|y>|<period end>" like the stored checks.
+ * AWM table and a deck slide). A period the build checked and found not adding up is re-checked here from the
+ * figures of the parts this section prints (stored under the total, or siblings brought to their level); it
+ * ties when they add up, and keeps the build's verdict otherwise. Checks the build passed and selected-line
+ * lists stand as stored. Keyed "<line key>|<q|y>|<period end>" like the stored checks.
  */
 export function sectionChecks(
   sec: Statement,
@@ -869,9 +878,11 @@ export function sectionChecks(
   const out = new Map<string, PayloadCheck>();
   sec.rows.forEach((t, i) => {
     if (t.kind !== "line" || !t.total) return;
+    // The rows of its block stored under it, and the siblings brought to their level; other rows the block
+    // shows at that level (stored under another line) are not its parts.
     const parts = blockParts(sec.rows, i, byKey)
       .map((j) => sec.rows[j] as LineRow)
-      .filter((r) => r.depth === t.depth + 1);
+      .filter((r) => r.depth === t.depth + 1 && (childOf(r, t, byKey) || r.sib));
     for (const freq of ["q", "y"] as const) {
       const tc = rowCells(t.ks, byKey, freq, t.at);
       const pc = parts.map((r) => rowCells(r.ks, byKey, freq, r.at).cells);
@@ -880,11 +891,17 @@ export function sectionChecks(
         const key = `${owner}|${freq}|${e}`;
         const x = map.get(key);
         if (!x) continue;
-        if (x.partial || parts.length < 2) {
+        // A check the build passed stands; one it failed is redone from this table's own parts, which is
+        // where a total compared with another table's or document's lines (managed basis against a slide's
+        // reported lines) comes right.
+        if (x.ok || x.partial || parts.length < 2) {
           out.set(key, x);
           continue;
         }
-        if (pc.some((c) => !c[e])) continue;
+        if (pc.some((c) => !c[e])) {
+          out.set(key, x);
+          continue;
+        }
         const sub = new Set(x.sub ?? []);
         const sum = parts.reduce(
           (n, r, j) => n + (r.ks.some((k) => sub.has(byKey.get(k)?.label ?? "")) ? -1 : 1) * pc[j][e].v,
@@ -892,7 +909,8 @@ export function sectionChecks(
         );
         const unit = byKey.get(owner)?.unit;
         const tol = Math.max(Math.abs(cell.v) * 0.005, unit === "usd" ? 1.5e6 : 1.5);
-        out.set(key, { ...x, total: cell.v, sum, ok: Math.abs(sum - cell.v) <= tol, n: parts.length });
+        const ok = Math.abs(sum - cell.v) <= tol;
+        out.set(key, ok ? { ...x, total: cell.v, sum, ok, n: parts.length } : x);
       }
     }
   });

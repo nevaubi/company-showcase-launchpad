@@ -314,7 +314,7 @@ function Lazy({
     <div
       ref={ref}
       data-statement-slot={id}
-      className="min-w-0 scroll-mt-28 border-t first:border-t-0"
+      className="min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px)+0.5rem)] border-t first:border-t-0"
     >
       {on ? children : <div aria-hidden style={{ height: estimate }} />}
     </div>
@@ -325,6 +325,29 @@ export interface StatementsSummary {
   tieOk: number;
   tieN: number;
   sections: number;
+}
+
+/**
+ * The statements' control bar (line type, Go to a section, Find a line) sticks under the page header, so the
+ * jump is always in reach; its height (one row, or two on a phone) is published as `--ir-bar` on the panel
+ * body so section head strips and jump targets sit under it. A CSS variable, not a held height.
+ */
+function useStickyBar() {
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const host = el?.parentElement;
+    if (!el || !host) return;
+    const set = () => host.style.setProperty("--ir-bar", `${el.offsetHeight}px`);
+    set();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      host.style.removeProperty("--ir-bar");
+    };
+  }, [el]);
+  return setEl;
 }
 
 export function IrStatements({
@@ -344,6 +367,7 @@ export function IrStatements({
   /** the tie-out count of what is in view, for the badge at the top of the tab */
   onSummary?: (s: StatementsSummary) => void;
 }) {
+  const barRef = useStickyBar();
   const [freq, setFreq] = useState<Freq>("q");
   const [span, setSpan] = useState(DEFAULT_SPAN.q);
   const [show, setShow] = useState<"cur" | "all">("cur");
@@ -679,14 +703,23 @@ export function IrStatements({
         </>
       }
     >
-      <div data-agent-controls className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-        <Segmented
-          label="Line type"
-          size="xs"
-          value={dim}
-          onChange={setDim}
-          options={DIMENSIONS.map((d) => ({ v: d.v, l: d.l }))}
-        />
+      <div
+        ref={barRef}
+        data-agent-controls
+        data-statements-bar
+        className="sticky top-[var(--sticky-top,3.5rem)] z-30 flex flex-wrap items-center gap-2 border-b bg-card px-4 py-2"
+      >
+        {/* One line on a phone too (it scrolls sideways), so the sticky bar stays two rows at most. */}
+        <div className="no-scrollbar min-w-0 max-w-full overflow-x-auto">
+          <Segmented
+            label="Line type"
+            size="xs"
+            className="max-w-none flex-nowrap"
+            value={dim}
+            onChange={setDim}
+            options={DIMENSIONS.map((d) => ({ v: d.v, l: d.l }))}
+          />
+        </div>
         <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
           <Select value="" onValueChange={jump}>
             <SelectTrigger className="h-8 w-full text-xs sm:w-56" aria-label="Go to a section">

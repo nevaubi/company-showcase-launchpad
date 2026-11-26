@@ -152,10 +152,10 @@ export const StatementSection = memo(function StatementSection({
     <section
       aria-labelledby={titleId}
       data-statement={sec.id}
-      className={cn("min-w-0 scroll-mt-28 pt-5", FIRST)}
+      className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px)+0.5rem)] pt-3", FIRST)}
       style={{ "--col": col } as CSSProperties}
     >
-      <header className="flex flex-col gap-x-3 gap-y-2 px-4 pb-3 sm:flex-row sm:items-start">
+      <header className="flex flex-col gap-x-3 gap-y-1.5 px-4 pb-2 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className={IR.group}>
             {sec.title}
@@ -280,7 +280,8 @@ export const StatementSection = memo(function StatementSection({
           <div
             ref={head}
             aria-hidden
-            className="sticky top-[var(--sticky-top,3.5rem)] z-20 overflow-hidden border-y bg-card"
+            data-head-strip
+            className="sticky top-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px))] z-20 overflow-hidden border-y bg-card"
           >
             <table
               className={cn("w-full table-fixed border-separate border-spacing-0", IR.row)}
@@ -289,11 +290,11 @@ export const StatementSection = memo(function StatementSection({
               {colgroup}
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-card py-1.5 pl-4 pr-3 text-left align-bottom font-normal" />
+                  <th className="sticky left-0 z-10 bg-card py-1 pl-4 pr-3 text-left align-bottom font-normal" />
                   {heads.map((h, i) => (
                     <th
                       key={cols[i]}
-                      className="whitespace-nowrap py-1.5 pl-2 pr-5 text-right align-bottom font-normal"
+                      className="whitespace-nowrap py-1 pl-2 pr-5 text-right align-bottom font-normal"
                       title={periodLong(cols[i], freq)}
                     >
                       <span className="num block text-[11px] font-medium text-foreground">
@@ -334,7 +335,7 @@ export const StatementSection = memo(function StatementSection({
                   if (r.kind === "gap")
                     return (
                       <tr key={r.id} aria-hidden>
-                        <td colSpan={cols.length + 1} className="h-3 p-0" />
+                        <td colSpan={cols.length + 1} className="h-1.5 p-0" />
                       </tr>
                     );
                   if (r.kind === "head")
@@ -342,13 +343,12 @@ export const StatementSection = memo(function StatementSection({
                       <tr key={r.id}>
                         <th
                           scope="rowgroup"
-                          colSpan={1}
-                          className="sticky left-0 z-[1] bg-card pb-0.5 pr-3 pt-1.5 text-left text-[12px] font-medium text-muted-foreground"
+                          colSpan={cols.length + 1}
+                          className="whitespace-nowrap bg-card pb-0 pr-3 pt-1 text-left text-[12px] font-medium leading-5 text-muted-foreground"
                           style={indentStyle(r.depth)}
                         >
-                          {r.text}
+                          <span className="sticky left-4">{r.text}</span>
                         </th>
-                        <td colSpan={cols.length} />
                       </tr>
                     );
                   const rule = r.total ? "border-t border-t-foreground/25" : "";
@@ -357,7 +357,7 @@ export const StatementSection = memo(function StatementSection({
                       <th
                         scope="row"
                         className={cn(
-                          "sticky left-0 z-[1] truncate bg-card py-1 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary",
+                          "sticky left-0 z-[1] truncate bg-card py-0.5 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary",
                           r.total && IR.total,
                           rule,
                           r.match && "bg-highlight-soft",
@@ -377,7 +377,7 @@ export const StatementSection = memo(function StatementSection({
                             <td
                               key={e}
                               className={cn(
-                                "py-1 pl-2 pr-5 transition-colors duration-150 group-hover:bg-secondary/60",
+                                "py-0.5 pl-2 pr-5 transition-colors duration-150 group-hover:bg-secondary/60",
                                 IR.num,
                                 IR.missing,
                                 rule,
@@ -402,6 +402,7 @@ export const StatementSection = memo(function StatementSection({
                               title={x.title}
                               className={cn(
                                 IR.cellButton,
+                                "py-0.5",
                                 IR.num,
                                 CELL_LAYOUT,
                                 r.total && IR.total,

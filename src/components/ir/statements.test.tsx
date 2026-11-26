@@ -154,4 +154,27 @@ describe("IR statements", () => {
     );
     expect(onChecks).toHaveBeenCalledWith("0:3");
   });
+
+  // irpolish: Statements ran about 28,000 px on JPM (33 sections): rows, headings and spacers are tightened to
+  // the older site's density, a heading is one full-width line, and the jump control stays in reach.
+  it("keeps the section jump in reach and lays rows out densely, headings on one full-width line", () => {
+    render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
+    const bar = screen.getByLabelText("Go to a section").closest("[data-statements-bar]")!;
+    expect(bar).toBeTruthy();
+    expect(bar.className).toContain("sticky");
+    expect(screen.getByLabelText("Find a line").closest("[data-statements-bar]")).toBe(bar);
+    const income = section("Consolidated statements of income");
+    const line = within(income).getByRole("rowheader", { name: "Card income" });
+    expect(line.className).toContain("py-0.5");
+    expect(line.className).not.toMatch(/\bpy-1\b/);
+    for (const b of within(line.closest("tr")!).getAllByRole("button")) expect(b.className).not.toMatch(/\bpy-1\b/);
+    const head = income.querySelector("th[scope=rowgroup]") as HTMLTableCellElement;
+    const cols = line.closest("tr")!.children.length;
+    expect(head.colSpan).toBe(cols);
+    expect(head.className).toContain("whitespace-nowrap");
+    const gap = income.querySelector("tr[aria-hidden] td") as HTMLElement | null;
+    if (gap) expect(gap.className).not.toContain("h-3");
+    // The section heads stick under the bar, not under the page header alone.
+    expect(income.querySelector("[data-head-strip]")!.className).toContain("var(--ir-bar");
+  });
 });
