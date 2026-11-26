@@ -84,6 +84,12 @@ export interface PayloadSeries {
   held?: { q?: Record<string, PayloadCell>; y?: Record<string, PayloadCell>; mo?: Record<string, PayloadCell> };
   /** trailing-twelve-month figures of this line taken out of the quarter and year columns (ttm.ts) */
   ttm?: number;
+  /**
+   * Where the line is printed, shown figure or not: [doc index, table, row] in the newest documents that print
+   * it (at most `PRINTED_DOCS`), so a statement section lists every line its table prints, also one whose shown
+   * figures cite another printing of the same number.
+   */
+  at?: [number, number, number][];
 }
 export interface PayloadGroup {
   id: string;
@@ -120,6 +126,17 @@ export interface PayloadDoc {
   kind: string | null;
   filed: string | null;
 }
+/**
+ * What a stored document prints around one of its tables (table-captions.ts), kept for the tables the
+ * statement view is laid out from (`statementAnchors`): its printed title and scale line, verbatim, its
+ * block headings and its empty spacer rows, by row index.
+ */
+export interface PayloadTable {
+  title?: string;
+  unit?: string;
+  heads?: [number, string][];
+  blank?: number[];
+}
 export interface IrPayload {
   v: 2;
   ticker: string;
@@ -137,6 +154,8 @@ export interface IrPayload {
   tidy?: number;
   /** retired line key → the line it was merged into (old workbook links still resolve) */
   alias?: Record<string, string>;
+  /** printed captions of section tables, by "<doc index>:<table index>" (added by the build after the series) */
+  tables?: Record<string, PayloadTable>;
 }
 export interface IrStats {
   series: number;
@@ -190,6 +209,9 @@ export function bestParent(kid: IrSeries, candidates: IrSeries[]): IrSeries {
   return candidates.reduce((best, p) => (score(p) > score(best) ? p : best));
 }
 
+/** Documents per line whose printing positions the payload keeps (`PayloadSeries.at`). */
+export const PRINTED_DOCS = 2;
+
 export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<string, LabelMapEntry>): IrPayload {
   // Second pass without hierarchies whose parts never add up to their total in any period.
   let built = buildIrSeries(facts, { labelMap });
@@ -238,6 +260,27 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   const kids = new Map<IrSeries, IrSeries[]>();
   for (const [k, p] of parentOf) kids.set(p, [...(kids.get(p) ?? []), k]);
 
+  // Printing positions in the line's newest documents (by filing date), one per table and row.
+  const atOf = (s: IrSeries): [number, number, number][] | undefined => {
+    if (!s.printed?.length) return undefined;
+    const byDoc = new Map<string, IrFact[]>();
+    for (const f of s.printed) {
+      const id = f.document_id ?? `${f.accn}/${f.doc}`;
+      byDoc.set(id, [...(byDoc.get(id) ?? []), f]);
+    }
+    const newest = [...byDoc.values()].sort((a, b) => (b[0].filed ?? "").localeCompare(a[0].filed ?? "")).slice(0, PRINTED_DOCS);
+    const seen = new Set<string>();
+    const out: [number, number, number][] = [];
+    for (const fs of newest)
+      for (const f of fs) {
+        const l = f.locator as { t: number; r: number };
+        const at: [number, number, number] = [di(f), l.t, l.r];
+        const id = at.join(":");
+        if (!seen.has(id)) seen.add(id), out.push(at);
+      }
+    return out;
+  };
+
   // Unit slips and other contradicted figures are held back by `holdSuspects` (suspect.ts) in the tidy pass.
   const cellsMap = (cells: Record<string, IrCell>) => Object.fromEntries(Object.entries(cells).map(([e, c]) => [e, cellOf(c)]));
   const out: PayloadSeries[] = series
@@ -256,6 +299,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       q: cellsMap(s.cells),
       y: cellsMap(s.annual),
       ...(s.monthly && Object.keys(s.monthly).length ? { mo: Object.fromEntries(Object.entries(s.monthly).map(([e, c]) => [e, cellOf(c)])) } : {}),
+      ...(atOf(s) ? { at: atOf(s) } : {}),
     }));
   const kept = new Set(out.map((s) => s.k));
 

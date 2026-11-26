@@ -74,6 +74,8 @@ export interface IrSeries {
   annual: Record<string, IrCell>; // fiscal-year end
   /** one-month flows, and balances at month-ends that don't close a fiscal quarter */
   monthly?: Record<string, IrCell>;
+  /** every table fact of the line, shown or not: where the documents print it (statement layout, payload `at`) */
+  printed?: IrFact[];
 }
 
 export interface ReconcileCheck {
@@ -653,6 +655,7 @@ export function buildIrSeries(
     if (f.breakdown) vt.breakdown.set(f.breakdown, (vt.breakdown.get(f.breakdown) ?? 0) + 1);
     vt.parent.set(f.parent ?? "", (vt.parent.get(f.parent ?? "") ?? 0) + 1);
     const vin: Vintage = { v: f.value, fact: f, doc: docOf(f), filed: sortDate(f) };
+    if (typeof (f.locator as { t?: unknown }).t === "number") (s.printed ??= []).push(f);
     if (f.months === 3) push(qv, key, snap(quarters, f.period_end, slack(f)), vin);
     else if (f.months === 0) {
       s.pit = true;

@@ -3,6 +3,9 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
 import { buildPayload, type IrPayload } from "@/lib/ir/payload";
 import { guardedDocIds, hasGuardedSources, withoutGuardedFacts } from "@/lib/ir/source-guard";
+import { withCaptions } from "@/lib/ir/statements";
+import { tableCaptions, type TableCaption } from "@/lib/ir/table-captions";
+import { coverageOf } from "@/lib/coverage";
 
 export const FACT_COLUMNS = "id, document_id, document_kind, category, metric, breakdown, parent, label, is_total, period_start, period_end, months, value, unit, accn, doc, filed, locator, method";
 
@@ -57,12 +60,37 @@ export async function refusedDocs(ticker: string): Promise<Set<string>> {
   return guardedDocIds(ticker, docs);
 }
 
-export async function rebuildCompany(ticker: string, opts: { dry?: boolean } = {}): Promise<IrPayload | null> {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Printed captions (title, scale line, headings, spacer rows) of one stored document, read from the same
+ * stored text the table reader used (rendition first, else the original), so table and row indexes match
+ * every fact locator. Null when the file can't be read in time; the section then keeps its stored name.
+ */
+export async function documentCaptions(id: string, company?: string): Promise<TableCaption[] | null> {
+  if (!UUID.test(id)) return null;
+  const { data: doc } = await supabaseAdmin.from("ir_documents").select("path, rendition_path, ext").eq("id", id).maybeSingle();
+  const path = doc?.rendition_path || (doc && /^(htm|html)$/i.test(doc.ext ?? "") ? doc.path : null);
+  if (!path) return null;
+  const got = await Promise.race([
+    supabaseAdmin.storage.from("ir-documents").download(path),
+    new Promise<{ data: null; error: Error }>((res) => setTimeout(() => res({ data: null, error: new Error("timeout") }), 60_000)),
+  ]);
+  if (!got.data || got.data.size > 40e6) return null;
+  return tableCaptions(await got.data.text(), company);
+}
+
+export async function rebuildCompany(ticker: string, opts: { dry?: boolean; captions?: boolean } = {}): Promise<IrPayload | null> {
   const [stored, map, refused] = await Promise.all([loadFacts(ticker), loadLabelMap(ticker), refusedDocs(ticker)]);
   // Figures read from files of another company (reviewed list, source-guard.ts) never enter the series.
   const facts = withoutGuardedFacts(stored, refused);
   if (!facts.length) return null;
-  const payload = buildPayload(ticker, facts, map);
+  let payload = buildPayload(ticker, facts, map);
+  // Printed titles of the tables the statement view is laid out from (a few documents per company).
+  if (opts.captions !== false) {
+    const company = coverageOf(ticker)?.shortName;
+    payload = await withCaptions(payload, (d) => documentCaptions(payload.docs[d]?.id ?? "", company).catch(() => null));
+  }
   if (!opts.dry) {
     // Payloads for banks run to several MB: keep them in storage, with stats in the table.
     const body = JSON.stringify(payload);
