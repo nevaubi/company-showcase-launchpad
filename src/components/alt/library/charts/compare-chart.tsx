@@ -3,7 +3,7 @@ import * as d3 from "d3";
 import type { ScaleAxis } from "@/lib/sources/boards/scale";
 import type { TileLine, TilePoint } from "@/lib/sources/boards/types";
 import { tickFormat } from "../boards/tile-chart";
-import { SeriesLegend, SeriesReadout, day, slot, timeTicks, useWidth } from "./primitives";
+import { SeriesLegend, SeriesReadout, dashOf, day, slot, tickAnchor, timeTicks, useWidth } from "./primitives";
 
 /**
  * Several series on one time axis. One plotted unit: one chart, a 2px line per series in its fixed slot, an end dot
@@ -121,7 +121,7 @@ function Overlay({ lines, label, recordHref, onOpen, height, axis }: Props) {
   const dateLabel = (p: TilePoint) => p.label;
   return (
     <div>
-      <SeriesLegend items={lines.map((l, i) => ({ key: l.key, label: l.label, color: slot(i) }))} />
+      <SeriesLegend items={lines.map((l, i) => ({ key: l.key, label: l.label, color: slot(i), dash: dashOf(i) }))} />
       <div ref={ref} className="relative" style={{ height }}>
         <svg
           width={width}
@@ -142,12 +142,15 @@ function Overlay({ lines, label, recordHref, onOpen, height, axis }: Props) {
                 </text>
               </g>
             ))}
-            {xt.map((d) => (
-              <text key={+d} x={x(d)} y={ih + 15} textAnchor="middle" className="fill-muted-foreground font-mono text-[10px]">
-                {format(d)}
-              </text>
-            ))}
-            {paths.map((d, i) => d && <path key={lines[i].key} d={d} fill="none" stroke={slot(i)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />)}
+            {xt.map((d) => {
+              const at = tickAnchor(x(d), format(d), -margin.left, iw + margin.right);
+              return (
+                <text key={+d} x={at.x} y={ih + 15} textAnchor={at.anchor} className="fill-muted-foreground font-mono text-[10px]">
+                  {format(d)}
+                </text>
+              );
+            })}
+            {paths.map((d, i) => d && <path key={lines[i].key} d={d} fill="none" stroke={slot(i)} strokeDasharray={dashOf(i)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />)}
             {endLabels.map((l, i) =>
               l ? (
                 <g key={`end-${lines[i].key}`}>
@@ -261,7 +264,7 @@ function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
                   </text>
                 </g>
               ))}
-              {d && <path d={d} fill="none" stroke={slot(i)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+              {d && <path d={d} fill="none" stroke={slot(i)} strokeDasharray={dashOf(i)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
               {end && (
                 <>
                   <circle cx={x(day(end.date))} cy={y(end.value as number)} r={4} fill={slot(i)} stroke="var(--card)" strokeWidth={2} />
@@ -294,11 +297,14 @@ function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
       })}
       <svg width={width} height={16} className="block" aria-hidden>
         <g transform={`translate(${margin.left},0)`}>
-          {xt.map((d) => (
-            <text key={+d} x={x(d)} y={12} textAnchor="middle" className="fill-muted-foreground font-mono text-[10px]">
-              {format(d)}
-            </text>
-          ))}
+          {xt.map((d) => {
+            const at = tickAnchor(x(d), format(d), -margin.left, iw + margin.right);
+            return (
+              <text key={+d} x={at.x} y={12} textAnchor={at.anchor} className="fill-muted-foreground font-mono text-[10px]">
+                {format(d)}
+              </text>
+            );
+          })}
         </g>
       </svg>
       {t !== null && (

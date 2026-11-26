@@ -182,7 +182,7 @@ export function GridLegend({ scale, rangeLabels, unit, hatched }: { scale: GridS
         <span className="num text-foreground">{rangeLabels[1]}</span>
         <span>{unit}</span>
       </span>
-      {scale === "diverging" && <span>Centred on zero</span>}
+      {scale === "diverging" && <span>Centered on zero</span>}
       {hatched && (
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-2.5 rounded-[2px]" style={{ background: HATCH }} />

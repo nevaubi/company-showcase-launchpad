@@ -53,3 +53,16 @@ describe("the last column's label", () => {
     expect(columnEndLabel(values(-1, -3), 19, "\u22121.0", band, 12, y).y).toBe(y(-3) + 11);
   });
 });
+
+describe("chart primitives", () => {
+  it("keep an axis label inside the chart: centered, or ending or starting at its tick near an edge", async () => {
+    const { tickAnchor, dashOf, slot } = await import("../charts/primitives");
+    expect(tickAnchor(150, "Oct 2026", -40, 310)).toEqual({ x: 150, anchor: "middle" });
+    expect(tickAnchor(300, "Oct 2026", -40, 310)).toEqual({ x: 300, anchor: "end" });
+    expect(tickAnchor(-30, "Oct 2026", -40, 310)).toEqual({ x: -30, anchor: "start" });
+    // a sixth series takes the first hue again, dashed; the first five are solid
+    expect([0, 1, 2, 3, 4].map(dashOf)).toEqual([undefined, undefined, undefined, undefined, undefined]);
+    expect(dashOf(5)).toBe("5 3");
+    expect(slot(5)).toBe(slot(0));
+  });
+});
