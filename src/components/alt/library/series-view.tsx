@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { TileChart } from "@/components/alt/library/boards/tile-chart";
+import { CompareChart } from "@/components/alt/library/charts/compare-chart";
 import { computeSeriesTile } from "@/lib/sources/boards/compute";
-import type { TileResult } from "@/lib/sources/boards/types";
+import { computeCompareTile, type LineInput } from "@/lib/sources/boards/compute-forms";
+import type { CompareTileSpec, TileResult } from "@/lib/sources/boards/types";
 import { recordHref } from "@/lib/sources/links";
-import type { MeasureSpec, Profile, SeriesAddress } from "@/lib/sources/profiles";
+import type { CompareSeries, MeasureSpec, Profile, SeriesAddress } from "@/lib/sources/profiles";
 import { sourceQueries } from "@/lib/sources/queries";
 import { SERIES_SURE_LIMIT, type SourcePoint } from "@/lib/sources/read-types";
 import type { SourceSnapshot } from "@/lib/sources/schema";
@@ -185,6 +187,111 @@ export function PointTable({
         </tbody>
       </table>
       {points.length > 60 && <QuietLine className="mt-1 text-[11px]">The latest 60 of {count(points.length)} periods; the records table holds every one.</QuietLine>}
+    </div>
+  );
+}
+
+/**
+ * Several series of one table in one unit on one chart, as a profile lists them (`compareSeries`): each read and
+ * checked as the series view reads one (the unit as the profile establishes it, periods by its format), drawn as a
+ * board's compare tile, every point opening its record.
+ */
+export function CompareView({
+  datasetId,
+  collection,
+  snapshot,
+  profile,
+  measure,
+  series,
+  range,
+  view,
+  onOpen,
+}: {
+  datasetId: string;
+  collection: string;
+  snapshot: SourceSnapshot;
+  profile: Profile;
+  measure: MeasureSpec;
+  series: readonly CompareSeries[];
+  range: "5y" | "10y" | "all";
+  view: "chart" | "table";
+  onOpen: (row: number) => void;
+}) {
+  const plans = useMemo(() => series.map((s) => seriesPlan(profile, snapshot.columns, measure, s.series)), [series, profile, snapshot.columns, measure]);
+  const wanted = plans.flatMap((plan, k) => (plan.ok ? plan.positions.map((field) => ({ k, field, read: plan.read })) : []));
+  const reads = useQueries({
+    queries: wanted.map((w) => ({ ...sourceQueries.series({ datasetId, snapshotId: snapshot.id, field: w.field, address: w.read, limit: SERIES_LIMIT }) })),
+  });
+  const pending = reads.some((r) => r.isPending);
+  const failed = reads.find((r) => r.isError || (r.data && !r.data.ok));
+  const result: TileResult | null = useMemo(() => {
+    const bad = plans.find((p) => !p.ok);
+    if (bad && !bad.ok) return { ok: false, reason: bad.reason };
+    if (pending || failed) return null;
+    const ctx = tileContext(profile, measure, datasetId, snapshot.id, snapshot.columns);
+    if (!ctx.ok) return { ok: false, reason: ctx.reason };
+    const lines: LineInput[] = [];
+    for (const [k, plan] of plans.entries()) {
+      if (!plan.ok) return { ok: false, reason: plan.reason };
+      const byPos = new Map<number, SourcePoint[]>();
+      for (const [i, w] of wanted.entries()) {
+        if (w.k !== k) continue;
+        const data = reads[i].data && reads[i].data!.ok ? reads[i].data!.data : null;
+        if (!data) return null;
+        if (data.next !== null) return { ok: false, reason: `${series[k].label}: the series has more than ${count(SERIES_LIMIT)} records; the first look reads at most that many.` };
+        byPos.set(w.field, data.points);
+      }
+      lines.push({ context: ctx.context, cells: seriesCells(profile, snapshot.columns, measure, plan, byPos) });
+    }
+    const unit = ctx.unit ?? lines.flatMap((l) => l.cells).find((c) => c.unit)?.unit ?? "";
+    const spec: CompareTileSpec = {
+      id: `look-compare:${datasetId}`,
+      collection,
+      datasetId,
+      measure: measure.field,
+      title: measure.label,
+      subject: series[0].label,
+      unit,
+      decimals: 0,
+      form: "compare",
+      transform: "level",
+      headline: "level",
+      window: 100_000,
+      lines: series.map((s) => ({ label: s.label, series: s.series })),
+    };
+    // printed as stored: no decimals are imposed on a table page
+    return computeCompareTile({ ...spec, decimals: undefined as unknown as number }, lines);
+  }, [plans, wanted, pending, failed, reads, profile, measure, datasetId, snapshot.id, snapshot.columns, series, collection]);
+
+  if (failed) {
+    const reason = failed.data && !failed.data.ok ? failed.data.reason : "error";
+    return <QuietLine>{reason === "unavailable" ? AWAITS_UPDATE : "The series could not be read."}</QuietLine>;
+  }
+  if (!result) return <span className="block h-[17rem] animate-pulse rounded-md bg-muted/60 motion-reduce:animate-none" aria-label="Reading the series" />;
+  if (!result.ok) return <QuietLine>{result.reason}</QuietLine>;
+  if (result.shape?.kind !== "compare") return null;
+  const lines = result.shape.lines.map((l) => ({ ...l, points: lastYears(l.points, range) }));
+  return (
+    <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Series compared">
+      <p className="text-[13px] font-medium leading-5">{result.headline}</p>
+      <p className="mb-2 text-[11px] leading-4 text-muted-foreground">
+        {measure.label}, {result.plotUnit}. {series.length} series of this table, each read whole; a gap is never drawn as zero.
+      </p>
+      {view === "chart" ? (
+        <CompareChart
+          lines={lines}
+          layout={result.shape.layout}
+          label={`${measure.label}, ${result.plotUnit}, ${series.map((s) => s.label).join(", ")}`}
+          recordHref={(_line, row) => recordHref(datasetId, snapshot.id, row)}
+          onOpen={(href) => {
+            const row = rowOf(href);
+            if (row !== null) onOpen(row);
+          }}
+          height={240}
+        />
+      ) : (
+        <PointTable points={[...lines[0].points].reverse()} unit={`${lines[0].label}, ${result.plotUnit}`} onOpen={onOpen} />
+      )}
     </div>
   );
 }
