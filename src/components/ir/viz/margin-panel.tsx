@@ -13,19 +13,41 @@ export function MarginPanel({ figures, scale, onOpen, className }: MarginPanelPr
         <h3 className="text-[13px] font-medium leading-5">Margins</h3>
         {figures.margins.length ? (
           <>
-            <p className="mb-1 text-[11px] leading-4 text-muted-foreground">As printed, in percent.</p>
-            <SectionChart title="Margins" series={figures.margins} scale={scale} onOpen={onOpen} height={170} />
+            <p className="mb-1 text-[11px] leading-4 text-muted-foreground">
+              As printed, in percent.
+            </p>
+            <SectionChart
+              title="Margins"
+              series={figures.margins}
+              scale={scale}
+              onOpen={onOpen}
+              height={170}
+            />
           </>
         ) : (
-          <VizNote>The company prints no margin as a percentage, and none is computed here.</VizNote>
+          <VizNote>
+            The company prints no margin as a percentage, and none is computed here.
+          </VizNote>
         )}
       </section>
       <section aria-label={figures.expenses?.label ?? "Expenses"} className="min-w-0">
-        <h3 className="text-[13px] font-medium leading-5">{figures.expenses?.label ?? "Expenses"}</h3>
+        <h3 className="text-[13px] font-medium leading-5">
+          {figures.expenses?.label ?? "Expenses"}
+        </h3>
         {figures.expenses ? (
           <>
-            <p className="mb-1 text-[11px] leading-4 text-muted-foreground">The printed lines, stacked where they add up to the printed total.</p>
-            <SectionChart title={figures.expenses.label} series={figures.expenses.parts} parts={figures.expenses} view="stacked" scale={scale} onOpen={onOpen} height={170} />
+            <p className="mb-1 text-[11px] leading-4 text-muted-foreground">
+              The printed lines, stacked where they add up to the printed total.
+            </p>
+            <SectionChart
+              title={figures.expenses.label}
+              series={figures.expenses.parts}
+              parts={figures.expenses}
+              view="stacked"
+              scale={scale}
+              onOpen={onOpen}
+              height={170}
+            />
           </>
         ) : (
           <VizNote>No expense section adds up to its printed total.</VizNote>

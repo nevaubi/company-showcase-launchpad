@@ -6,8 +6,16 @@ import { MINUS } from "@/components/alt/library/charts/primitives";
 import type { VizChange, VizPoint, VizSeries, VizUnit } from "./types";
 
 /** A figure in its unit, with the printed unit word for lines "as printed" ("51 days"). */
-export function fmtValue(v: number, unit: VizUnit, scale: Scale, printedUnit?: string, decimals?: number): string {
-  const keep = decimals != null && (unit === "pct" || unit === "ratio" || unit === "other" || unit === "usdPerShare");
+export function fmtValue(
+  v: number,
+  unit: VizUnit,
+  scale: Scale,
+  printedUnit?: string,
+  decimals?: number,
+): string {
+  const keep =
+    decimals != null &&
+    (unit === "pct" || unit === "ratio" || unit === "other" || unit === "usdPerShare");
   const s = fmtIr(v, unit, scale, keep ? { decimals } : {}).replace(/^-/, MINUS);
   if (unit === "usd") {
     const suffix = scale === "full" ? "" : scale;
@@ -23,7 +31,14 @@ export function fmtTick(v: number, unit: VizUnit, scale: Scale): string {
     const div = scale === "full" ? 1 : scale === "K" ? 1e3 : scale === "M" ? 1e6 : 1e9;
     const x = v / div;
     const a = Math.abs(x);
-    const t = a >= 100 ? Math.round(a).toLocaleString("en-US") : a >= 10 ? a.toFixed(0) : a === 0 ? "0" : a.toFixed(1).replace(/\.0$/, "");
+    const t =
+      a >= 100
+        ? Math.round(a).toLocaleString("en-US")
+        : a >= 10
+          ? a.toFixed(0)
+          : a === 0
+            ? "0"
+            : a.toFixed(1).replace(/\.0$/, "");
     return `${x < 0 ? MINUS : ""}${t}`;
   }
   if (unit === "pct") return `${Number(v.toFixed(2))}`;

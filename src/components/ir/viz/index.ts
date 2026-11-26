@@ -6,5 +6,14 @@ export { SummaryStrip } from "./summary-strip";
 export { BridgeChart } from "./bridge-chart";
 export { BankPanel } from "./bank-panel";
 export { MarginPanel } from "./margin-panel";
-export { bankFiguresOf, groupSeries, marginFiguresOf, partsOf, segmentMixOf, seriesOf, summaryTilesOf, targetOf } from "./from-payload";
+export {
+  bankFiguresOf,
+  groupSeries,
+  marginFiguresOf,
+  partsOf,
+  segmentMixOf,
+  seriesOf,
+  summaryTilesOf,
+  targetOf,
+} from "./from-payload";
 export { bridgeOf, defaultBridge, foldParts, stackable, statOf, tiedPeriods } from "./model";

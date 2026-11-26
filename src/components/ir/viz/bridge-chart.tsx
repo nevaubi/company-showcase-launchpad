@@ -18,7 +18,12 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
   const [ref, width] = useWidth(260, 640);
   const [active, setActive] = useState<number | null>(null);
   const open = useOpener(onOpen);
-  if (!bridge) return <VizNote className={className}>{reason || "No bridge: the parts do not add up to the printed total in both periods."}</VizNote>;
+  if (!bridge)
+    return (
+      <VizNote className={className}>
+        {reason || "No bridge: the parts do not add up to the printed total in both periods."}
+      </VizNote>
+    );
 
   const bars = waterfallBars(bridge);
   const closes = bridgeCloses(bridge);
@@ -39,9 +44,16 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
   const hi = cut ? rhi + pad : Math.max(0, rhi);
   const x = d3.scaleLinear().domain([lo, hi]).range([0, w]);
   const h = bars.length * ROW;
-  const sign = (b: WaterfallBar) => (b.kind === "total" ? "" : b.delta > 0 ? "+" : b.delta < 0 ? "" : "±");
-  const text = (b: WaterfallBar) => `${sign(b)}${fmtValue(b.kind === "total" ? b.end : b.delta, bridge.unit, scale)}`;
-  const span = bridge.span === "yoy" ? "Year over year" : bridge.span === "qoq" ? "Quarter over quarter" : "Between the two periods";
+  const sign = (b: WaterfallBar) =>
+    b.kind === "total" ? "" : b.delta > 0 ? "+" : b.delta < 0 ? "" : "±";
+  const text = (b: WaterfallBar) =>
+    `${sign(b)}${fmtValue(b.kind === "total" ? b.end : b.delta, bridge.unit, scale)}`;
+  const span =
+    bridge.span === "yoy"
+      ? "Year over year"
+      : bridge.span === "qoq"
+        ? "Quarter over quarter"
+        : "Between the two periods";
   const describe = (b: WaterfallBar) =>
     b.kind === "total"
       ? `${bridge.label}, ${b.point!.periodLabel}: ${fmtValue(b.end, bridge.unit, scale)}, as filed ${b.point!.printed ?? "not printed as a cell"}`
@@ -49,7 +61,16 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
   const onKey = (ev: KeyboardEvent<HTMLUListElement>) => {
     const i = Number((ev.target as HTMLElement).dataset.i ?? -1);
     if (i < 0) return;
-    const to = ev.key === "ArrowDown" ? i + 1 : ev.key === "ArrowUp" ? i - 1 : ev.key === "Home" ? 0 : ev.key === "End" ? bars.length - 1 : null;
+    const to =
+      ev.key === "ArrowDown"
+        ? i + 1
+        : ev.key === "ArrowUp"
+          ? i - 1
+          : ev.key === "Home"
+            ? 0
+            : ev.key === "End"
+              ? bars.length - 1
+              : null;
     if (to == null) return;
     ev.preventDefault();
     const next = Math.max(0, Math.min(bars.length - 1, to));
@@ -59,7 +80,12 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
   return (
     <figure className={cn("min-w-0", className)}>
       <div ref={ref} className="relative min-w-0">
-        <ul className="relative m-0 list-none p-0" onKeyDown={onKey} aria-label={`${span}: ${bridge.label}, ${bridge.from.short} to ${bridge.to.short}`} style={{ height: h }}>
+        <ul
+          className="relative m-0 list-none p-0"
+          onKeyDown={onKey}
+          aria-label={`${span}: ${bridge.label}, ${bridge.from.short} to ${bridge.to.short}`}
+          style={{ height: h }}
+        >
           {bars.map((b, i) => {
             const x0 = x(Math.min(b.start, b.end));
             const bw = Math.max(1.5, Math.abs(x(b.end) - x(b.start)));
@@ -68,7 +94,10 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
               <li key={b.key} className="absolute inset-x-0" style={{ top: i * ROW, height: ROW }}>
                 <button
                   type="button"
-                  className={cn("flex h-full w-full flex-wrap items-center text-left outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm", active === i && "bg-muted/50")}
+                  className={cn(
+                    "flex h-full w-full flex-wrap items-center text-left outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
+                    active === i && "bg-muted/50",
+                  )}
                   aria-label={describe(b)}
                   onMouseEnter={() => setActive(i)}
                   onMouseLeave={() => setActive(null)}
@@ -77,19 +106,52 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
                   data-i={i}
                   onClick={() => open(b.point)}
                 >
-                  <span className={cn("shrink-0 truncate pr-2 text-[12px] leading-4", b.kind === "total" ? "font-medium text-foreground" : "text-muted-foreground")} style={{ width: narrow ? "100%" : labelW }}>
-                    {b.kind === "total" ? `${bridge.label.length > 24 && !narrow ? "Total" : bridge.label}, ${b.label}` : b.label}
+                  <span
+                    className={cn(
+                      "shrink-0 truncate pr-2 text-[12px] leading-4",
+                      b.kind === "total" ? "font-medium text-foreground" : "text-muted-foreground",
+                    )}
+                    style={{ width: narrow ? "100%" : labelW }}
+                  >
+                    {b.kind === "total"
+                      ? `${bridge.label.length > 24 && !narrow ? "Total" : bridge.label}, ${b.label}`
+                      : b.label}
                   </span>
                   <svg width={w} height={BAR} className="shrink-0 overflow-visible" aria-hidden>
-                    {!cut && <line x1={x(0)} x2={x(0)} y1={-ROW + BAR} y2={BAR} stroke="var(--border)" />}
-                    {i > 0 && !narrow && <line x1={x(bars[i - 1].end)} x2={x(bars[i - 1].end)} y1={-ROW + BAR - 7} y2={7} stroke="var(--muted-foreground)" strokeDasharray="2 2" opacity={0.5} />}
+                    {!cut && (
+                      <line x1={x(0)} x2={x(0)} y1={-ROW + BAR} y2={BAR} stroke="var(--border)" />
+                    )}
+                    {i > 0 && !narrow && (
+                      <line
+                        x1={x(bars[i - 1].end)}
+                        x2={x(bars[i - 1].end)}
+                        y1={-ROW + BAR - 7}
+                        y2={7}
+                        stroke="var(--muted-foreground)"
+                        strokeDasharray="2 2"
+                        opacity={0.5}
+                      />
+                    )}
                     {b.kind === "total" && cut ? (
-                      <rect x={x(b.end) - 1.5} y={5} width={3} height={BAR - 10} rx={1.5} fill={fill} />
+                      <rect
+                        x={x(b.end) - 1.5}
+                        y={5}
+                        width={3}
+                        height={BAR - 10}
+                        rx={1.5}
+                        fill={fill}
+                      />
                     ) : (
                       <rect x={x0} y={7} width={bw} height={BAR - 14} rx={2} fill={fill} />
                     )}
                   </svg>
-                  <span className={cn("num shrink-0 pl-2 text-right text-[12px] leading-4", b.kind === "total" ? "font-medium text-foreground" : "text-foreground")} style={{ width: valueW }}>
+                  <span
+                    className={cn(
+                      "num shrink-0 pl-2 text-right text-[12px] leading-4",
+                      b.kind === "total" ? "font-medium text-foreground" : "text-foreground",
+                    )}
+                    style={{ width: valueW }}
+                  >
                     {text(b)}
                   </span>
                 </button>
@@ -98,14 +160,22 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
           })}
         </ul>
         {active != null && (
-          <div className="pointer-events-none absolute right-0 z-10 max-w-[260px] rounded-md border bg-popover px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-lift" style={{ top: Math.min(h - 8, (active + 1) * ROW + 2) }} role="status">
+          <div
+            className="pointer-events-none absolute right-0 z-10 max-w-[260px] rounded-md border bg-popover px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-lift"
+            style={{ top: Math.min(h - 8, (active + 1) * ROW + 2) }}
+            role="status"
+          >
             {describe(bars[active])}
           </div>
         )}
       </div>
       <figcaption className="mt-1 text-[11px] leading-4 text-muted-foreground">
-        {span}, {bridge.from.short} to {bridge.to.short} · {axisCaption({ unit: bridge.unit }, scale)} · each step is a line&apos;s printed change; the lines add up to the printed total in both periods
-        {cut ? ` · the axis runs from ${fmtValue(lo, bridge.unit, scale)}, not zero, so totals are marked, not drawn as bars` : ""}
+        {span}, {bridge.from.short} to {bridge.to.short} ·{" "}
+        {axisCaption({ unit: bridge.unit }, scale)} · each step is a line&apos;s printed change; the
+        lines add up to the printed total in both periods
+        {cut
+          ? ` · the axis runs from ${fmtValue(lo, bridge.unit, scale)}, not zero, so totals are marked, not drawn as bars`
+          : ""}
         {closes ? "" : " · the steps differ from the change of the total by more than rounding"}
       </figcaption>
     </figure>
