@@ -1,15 +1,26 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { FakeSourceDb } from "@/lib/sources/read.fake";
 import { resetReadState } from "@/lib/sources/read.server";
 import { readBoard, resetBoardCache } from "@/lib/sources/boards/board.server";
 import { fixtureTables } from "@/lib/sources/boards/fixtures";
-import type { Board } from "@/lib/sources/boards/types";
-import { BoardBody, PHONE_TILES } from "./board";
+import type { Board, BoardLayoutSection } from "@/lib/sources/boards/types";
+import { CORE_BOARDS } from "@/lib/sources/boards/specs";
+import { BoardBody, BoardSection } from "./board";
 
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   useNavigate: () => vi.fn(),
+}));
+
+const requests: string[][] = [];
+vi.mock("@/lib/sources/boards/board.functions", () => ({
+  // every request of the section through the real server with a small budget, so tiles are deferred and asked again
+  getBoard: async ({ data }: { data: { id: string; tiles?: string[] } }) => {
+    requests.push(data.tiles ?? []);
+    return readBoard(new FakeSourceDb(fixtureTables()), data.id, Date.UTC(2026, 10, 25, 21), data.tiles, 6);
+  },
 }));
 
 beforeAll(() => {
@@ -20,48 +31,61 @@ beforeAll(() => {
     disconnect() {}
   } as unknown as typeof ResizeObserver;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  requests.length = 0;
+});
 
 const tables = fixtureTables();
+const core = (id: string) => CORE_BOARDS.find((b) => b.id === id)?.tiles ?? [];
 async function board(id: string): Promise<Board> {
   resetBoardCache();
   resetReadState();
-  const read = await readBoard(new FakeSourceDb(tables), id, Date.UTC(2026, 10, 25, 21));
+  const read = await readBoard(new FakeSourceDb(tables), id, Date.UTC(2026, 10, 25, 21), core(id));
   if (!read.ok) throw new Error(read.message);
   return read.data;
 }
+const articles = (container: HTMLElement) => [...container.querySelectorAll("article")];
 
-const tiles = (container: HTMLElement) => [...container.querySelectorAll("article")];
-const folded = (el: Element) => el.className.split(/\s+/).includes("@max-2xl:hidden");
-
-describe("a board under two columns", () => {
-  it("shows the first four tiles and a button for all nine; the button shows the rest and hands focus on", async () => {
+describe("a board", () => {
+  it("shows every tile, none folded behind a button", async () => {
     const data = await board("library");
     const { container } = render(<BoardBody data={data} />);
-    expect(tiles(container)).toHaveLength(9);
-    expect(tiles(container).map(folded)).toEqual([false, false, false, false, true, true, true, true, true]);
-    const button = screen.getByRole("button", { name: "Show all 9 charts" });
-    expect(button.getAttribute("aria-expanded")).toBe("false");
-    // only below two columns: a wide board shows every tile and no button
-    expect(button.className.split(/\s+/)).toContain("@2xl:hidden");
-    act(() => {
-      fireEvent.click(button);
-    });
-    expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
-    expect(tiles(container).some(folded)).toBe(false);
-    expect(document.activeElement).toBe(tiles(container)[PHONE_TILES]);
-    expect(document.activeElement?.getAttribute("data-section")).toBe(data.tiles[PHONE_TILES].title);
-  });
-
-  it("folds nothing on a board of four", async () => {
-    const { container } = render(<BoardBody data={await board("01_financials")} />);
-    expect(tiles(container)).toHaveLength(4);
-    expect(tiles(container).some(folded)).toBe(false);
+    expect(articles(container)).toHaveLength(core("library").length);
     expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
   });
 
-  it("names the board's own count", async () => {
-    render(<BoardBody data={await board("00_universal")} />);
-    expect(screen.getByRole("button", { name: "Show all 6 charts" })).toBeTruthy();
+  it("groups the landing board by collection, each section headed by the collection's name", async () => {
+    render(<BoardBody data={await board("library")} />);
+    for (const name of ["Economy", "Energy"]) expect(screen.getByRole("heading", { name, level: 3 })).toBeTruthy();
+  });
+
+  it("shows a refused tile as one quiet line with its reason, never an empty frame", async () => {
+    const data = await board("01_financials");
+    const refused = { ...data, tiles: data.tiles.slice(1), refused: [{ id: data.tiles[0].id, title: data.tiles[0].title, reason: "The reason." }] };
+    const { container } = render(<BoardBody data={refused} />);
+    expect(articles(container)).toHaveLength(data.tiles.length - 1);
+    expect(screen.getByText(`Not shown: ${data.tiles[0].title}. The reason.`)).toBeTruthy();
+  });
+});
+
+describe("a board section", () => {
+  it("draws skeletons, then every tile, asking again for the tiles a request deferred", async () => {
+    resetBoardCache();
+    resetReadState();
+    const section: BoardLayoutSection = {
+      title: "Rates",
+      tiles: core("00_universal").map((id) => ({ id, title: id, form: "line", size: "regular", collection: "00_universal", datasetId: "" })),
+    };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <BoardSection board="00_universal" section={section} />
+      </QueryClientProvider>,
+    );
+    expect(container.querySelectorAll("[aria-hidden].animate-pulse, [aria-hidden] .animate-pulse").length).toBeGreaterThan(0);
+    await waitFor(() => expect(articles(container)).toHaveLength(section.tiles.length), { timeout: 4000 });
+    expect(requests.length).toBeGreaterThan(1);
+    expect(screen.getByRole("heading", { name: "Rates", level: 3 })).toBeTruthy();
   });
 });

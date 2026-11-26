@@ -479,6 +479,8 @@ export type TileShape =
       /** One point per category, in category order; `label` is the category's. */
       latest: TilePoint[];
       earlier: TilePoint[] | null;
+      /** The table and snapshot of each category, in category order (each may be its own table). */
+      sources: { datasetId: string; snapshotId: string }[];
     }
   | {
       kind: "stat";
