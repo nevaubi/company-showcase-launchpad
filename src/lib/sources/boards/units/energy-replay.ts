@@ -49,6 +49,11 @@ export type EnergyFixtures = {
    * dataset id; the values sum to the snapshot's rows.
    */
   counts?: Record<string, { snapshotId: string; retrievedAt: string; rows: number; dimension: "period" | "geo_code"; values: { value: string; rows: number }[] }>;
+  /**
+   * Every record of a small table with the cells a count tile reads, keyed by dataset id: [row number, cell] in row
+   * order, the cell at `positions` and, where `geo` names that field, also the record's indexed place.
+   */
+  cells?: Record<string, { snapshotId: string; positions: Record<string, number>; geo?: string; rows: [number, string | null][] }>;
 };
 
 type Resolved = { ok: true; profile: Profile; measure: MeasureSpec; columns: SourceColumn[] } | { ok: false; reason: string };

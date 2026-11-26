@@ -1,6 +1,6 @@
 {
  "checked": "2026-11-26",
- "about": "Production reads of 26 Nov 2026 03:35 to 04:20 UTC. series: every stored record of each MER series (month, value, description and unit, in row order) hashed with md5 on production and equal to the same hash of EIA's CSV of the table fetched 26 Nov 2026 03:35 UTC; row numbers equal file positions. states: stored cells compared value by value with EPA's eGRID2023 rev2 workbook (sheet ST23) and EIA's Net_Metering_2025.xlsx (sheet States- State Level). tiles: each tile computed once by energy-replay.ts on fixture rows equal to those production rows, as board.server.ts computes it (rankings with the cadence it passes, day).",
+ "about": "Production reads of 26 Nov 2026 03:35 to 04:20 UTC. series: every stored record of each MER series (month, value, description and unit, in row order) hashed with md5 on production and equal to the same hash of EIA's CSV of the table fetched 26 Nov 2026 03:35 UTC; row numbers equal file positions. states: stored cells compared value by value with EPA's eGRID2023 rev2 workbook (sheet ST23) and EIA's Net_Metering_2025.xlsx (sheet States- State Level). tiles: each tile computed by the board server itself (readBoard: its reads, its compute) on a fake member client holding the core and energy fixture rows, and again on the untrimmed rows of energy.rows.json, with the same figures.",
  "series": [
   {
    "table": "T01.01",
@@ -487,31 +487,31 @@
   }
  },
  "tiles": {
-  "energy-production": {
-   "datasetId": "official_04_energy_raw_mer_t01_02_815b85125f",
-   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+  "co2-by-fuel": {
+   "datasetId": "official_04_energy_raw_mer_t11_01_bb7ae7b424",
+   "snapshotId": "f9c56a655e596a479dc04e018203964be50795595bec0b20e09a92d2eb71a51f",
    "asOf": "Aug 2026",
-   "figure": "9.564",
-   "figureUnit": "Quadrillion Btu",
-   "headline": "U.S. total primary energy production was 9.564 Quadrillion Btu in Aug 2026, 3.3% above Aug 2025.",
+   "figure": "188.2",
+   "figureUnit": "Million Metric Tons of Carbon Dioxide",
+   "headline": "Carbon dioxide emissions from petroleum were 188.2 Million Metric Tons of Carbon Dioxide in Aug 2026, 2.8% below Aug 2025.",
    "rows": [
-    9373,
-    9360
+    9061,
+    9048
    ]
   },
-  "natural-gas-production": {
-   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
-   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+  "co2-emissions-stat": {
+   "datasetId": "official_04_energy_raw_mer_t11_01_bb7ae7b424",
+   "snapshotId": "f9c56a655e596a479dc04e018203964be50795595bec0b20e09a92d2eb71a51f",
    "asOf": "Aug 2026",
-   "figure": "3,591",
-   "figureUnit": "Billion Cubic Feet",
-   "headline": "U.S. dry natural gas production was 3,591 Billion Cubic Feet in Aug 2026, 6.6% above Aug 2025.",
+   "figure": "418.8",
+   "figureUnit": "Million Metric Tons of Carbon Dioxide",
+   "headline": "U.S. energy-related carbon dioxide emissions were 418.8 Million Metric Tons of Carbon Dioxide in Aug 2026, 1.0% above Aug 2025.",
    "rows": [
-    2884,
-    2871
+    9758,
+    9745
    ]
   },
-  "coal-production": {
+  "coal-production-stat": {
    "datasetId": "official_04_energy_raw_mer_t06_01_4cca84cba3",
    "snapshotId": "c91842d576524681297c6bb782fdade3f719145d0b515c991961be957dd2f872",
    "asOf": "Oct 2026",
@@ -523,40 +523,16 @@
     710
    ]
   },
-  "petroleum-products-supplied": {
-   "datasetId": "official_04_energy_raw_mer_t03_01_7b9fc216c5",
-   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
-   "asOf": "Oct 2026",
-   "figure": "21,073",
-   "figureUnit": "Thousand Barrels per Day",
-   "headline": "U.S. petroleum products supplied were 21,073 Thousand Barrels per Day in Oct 2026, 0.5% above Oct 2025.",
-   "rows": [
-    9399,
-    9386
-   ]
-  },
-  "natural-gas-consumption": {
-   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
-   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+  "consumption-by-sector": {
+   "datasetId": "official_04_energy_raw_mer_t02_01a_079e5be928",
+   "snapshotId": "2a2e885b1317d12ad9f58f1e76d61c5ee83ae266bc9e681acc2a95d86294a2ab",
    "asOf": "Aug 2026",
-   "figure": "2,810",
-   "figureUnit": "Billion Cubic Feet",
-   "headline": "U.S. natural gas consumption was 2,810 Billion Cubic Feet in Aug 2026, 6.4% above Aug 2025.",
+   "figure": "2,722",
+   "figureUnit": "Trillion Btu",
+   "headline": "Total energy consumed by the industrial sector was 2,722 Trillion Btu in Aug 2026, 1.7% below Aug 2025.",
    "rows": [
-    7931,
-    7918
-   ]
-  },
-  "petroleum-net-imports": {
-   "datasetId": "official_04_energy_raw_mer_t03_01_7b9fc216c5",
-   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
-   "asOf": "Oct 2026",
-   "figure": "−3,965",
-   "figureUnit": "Thousand Barrels per Day",
-   "headline": "U.S. petroleum net imports were −3,965 Thousand Barrels per Day in Oct 2026, 393 Thousand Barrels per Day below Oct 2025.",
-   "rows": [
-    7230,
-    7217
+    10815,
+    10802
    ]
   },
   "crude-oil-imports": {
@@ -571,19 +547,19 @@
     1433
    ]
   },
-  "natural-gas-net-imports": {
-   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
-   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
-   "asOf": "Aug 2026",
-   "figure": "−607",
-   "figureUnit": "Billion Cubic Feet",
-   "headline": "U.S. natural gas net imports were −607 Billion Cubic Feet in Aug 2026, 83 Billion Cubic Feet below Aug 2025.",
+  "crude-oil-price": {
+   "datasetId": "official_04_energy_raw_mer_t09_01_4ba4b3d233",
+   "snapshotId": "a2b3d0bcb55d048dd9cdfb2c8e7d1a973bf0322a79ee691e490febc0f8500ef4",
+   "asOf": "Sep 2026",
+   "figure": "94.93",
+   "figureUnit": "Dollars per Barrel",
+   "headline": "The composite refiner acquisition cost of crude oil was 94.93 Dollars per Barrel in Sep 2026, 44.6% above Sep 2025.",
    "rows": [
-    5768,
-    5755
+    4332,
+    4319
    ]
   },
-  "crude-oil-stocks-spr": {
+  "crude-oil-stocks": {
    "datasetId": "official_04_energy_raw_mer_t03_04_137ab74873",
    "snapshotId": "d40c00a1884dfe6f03784be49ac7a6d25bd9efb26cdef04d9feafede80b38984",
    "asOf": "Oct 2026",
@@ -595,16 +571,119 @@
     710
    ]
   },
-  "crude-oil-price": {
-   "datasetId": "official_04_energy_raw_mer_t09_01_4ba4b3d233",
-   "snapshotId": "a2b3d0bcb55d048dd9cdfb2c8e7d1a973bf0322a79ee691e490febc0f8500ef4",
-   "asOf": "Sep 2026",
-   "figure": "94.93",
-   "figureUnit": "Dollars per Barrel",
-   "headline": "The composite refiner acquisition cost of crude oil was 94.93 Dollars per Barrel in Sep 2026, 44.6% above Sep 2025.",
+  "egrid-state-co2-rate": {
+   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
+   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
+   "asOf": "2023",
+   "figure": "1,954.4",
+   "figureUnit": "lb/MWh",
+   "headline": "West Virginia had the highest state annual CO2 total output emission rate of 52 places (the states, DC and Puerto Rico) in 2023, 1,954.4 lb/MWh; Vermont the lowest, 43.0 lb/MWh.",
    "rows": [
-    4332,
-    4319
+    51,
+    48
+   ]
+  },
+  "egrid-state-generation": {
+   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
+   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
+   "asOf": "2023",
+   "figure": "544,038,647",
+   "figureUnit": "MWh",
+   "headline": "Texas had the highest state annual net generation of 52 places (the states, DC and Puerto Rico) in 2023, 544,038,647 MWh; District of Columbia the lowest, 171,869 MWh.",
+   "rows": [
+    45,
+    8
+   ]
+  },
+  "egrid-state-renewables": {
+   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
+   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
+   "asOf": "2023",
+   "figure": "148,843,208",
+   "figureUnit": "MWh",
+   "headline": "Texas had the highest state annual total renewables net generation of 52 places (the states, DC and Puerto Rico) in 2023, 148,843,208 MWh; District of Columbia the lowest, 82,606 MWh.",
+   "rows": [
+    45,
+    8
+   ]
+  },
+  "eia860-proposed-storage-by-state": {
+   "datasetId": "official_05_utilities_csv_eia860_3_4_energy_storage_y2025_proposed_cde5506369",
+   "snapshotId": "3f690a21bce349e2ddc057192fe57b495e49376137ca0c3bd548d98ce2b4aed1",
+   "asOf": "Retrieved 24 Nov 2026",
+   "figure": "608",
+   "figureUnit": "records",
+   "headline": "EIA-860's proposed energy storage table holds 608 records as retrieved on 24 Nov 2026; TX has the most, 209, of 44 values of State.",
+   "rows": []
+  },
+  "electricity-prices-by-sector": {
+   "datasetId": "official_04_energy_raw_mer_t09_08_7f4fef2763",
+   "snapshotId": "369eaa82d2bbf715cfe6252b8056556a83a6a662a4d271d15b8c587aaac987a0",
+   "asOf": "Aug 2026",
+   "figure": "18.16",
+   "figureUnit": "Cents per Kilowatthour,  Including Taxes",
+   "headline": "The average residential price of electricity was 18.16 Cents per Kilowatthour,  Including Taxes in Aug 2026, 3.1% above Aug 2025.",
+   "rows": [
+    674,
+    661
+   ]
+  },
+  "electricity-sales-by-sector": {
+   "datasetId": "official_04_energy_raw_mer_t07_06_73b49f9b83",
+   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
+   "asOf": "Aug 2026",
+   "figure": "40.6",
+   "figureUnit": "%",
+   "headline": "Residential electricity sales were 40.6% of total electricity sales to ultimate customers in Aug 2026.",
+   "rows": [
+    3605
+   ]
+  },
+  "energy-production-mix": {
+   "datasetId": "official_04_energy_raw_mer_t01_02_815b85125f",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "asOf": "Aug 2026",
+   "figure": "38.9",
+   "figureUnit": "%",
+   "headline": "Natural gas (dry) production was 38.9% of total primary energy production in Aug 2026.",
+   "rows": [
+    9373
+   ]
+  },
+  "generation-by-source": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "209,843",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from natural gas was 209,843 Million Kilowatthours in Aug 2026, 8.8% above Aug 2025.",
+   "rows": [
+    2163,
+    2150
+   ]
+  },
+  "generation-solar-stat": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "38,819",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from solar was 38,819 Million Kilowatthours in Aug 2026, 22.0% above Aug 2025.",
+   "rows": [
+    7931,
+    7918
+   ]
+  },
+  "generation-wind-stat": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "33,317",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from wind was 33,317 Million Kilowatthours in Aug 2026, 22.0% above Aug 2025.",
+   "rows": [
+    8652,
+    8639
    ]
   },
   "natural-gas-citygate-price": {
@@ -619,124 +698,28 @@
     1357
    ]
   },
-  "co2-emissions": {
-   "datasetId": "official_04_energy_raw_mer_t11_01_bb7ae7b424",
-   "snapshotId": "f9c56a655e596a479dc04e018203964be50795595bec0b20e09a92d2eb71a51f",
+  "natural-gas-consumption-stat": {
+   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
    "asOf": "Aug 2026",
-   "figure": "418.8",
-   "figureUnit": "Million Metric Tons of Carbon Dioxide",
-   "headline": "U.S. energy-related carbon dioxide emissions were 418.8 Million Metric Tons of Carbon Dioxide in Aug 2026, 1.0% above Aug 2025.",
-   "rows": [
-    9758,
-    9745
-   ]
-  },
-  "generation-natural-gas": {
-   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
-   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
-   "asOf": "Aug 2026",
-   "figure": "209,843",
-   "figureUnit": "Million Kilowatthours",
-   "headline": "Net generation from natural gas was 209,843 Million Kilowatthours in Aug 2026, 8.8% above Aug 2025.",
-   "rows": [
-    2163,
-    2150
-   ]
-  },
-  "generation-coal": {
-   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
-   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
-   "asOf": "Aug 2026",
-   "figure": "70,937",
-   "figureUnit": "Million Kilowatthours",
-   "headline": "Net generation from coal was 70,937 Million Kilowatthours in Aug 2026, 1.7% above Aug 2025.",
-   "rows": [
-    721,
-    708
-   ]
-  },
-  "generation-nuclear": {
-   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
-   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
-   "asOf": "Aug 2026",
-   "figure": "70,661",
-   "figureUnit": "Million Kilowatthours",
-   "headline": "Net generation from nuclear electric power was 70,661 Million Kilowatthours in Aug 2026, 0.1% below Aug 2025.",
-   "rows": [
-    3605,
-    3592
-   ]
-  },
-  "generation-wind": {
-   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
-   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
-   "asOf": "Aug 2026",
-   "figure": "33,317",
-   "figureUnit": "Million Kilowatthours",
-   "headline": "Net generation from wind was 33,317 Million Kilowatthours in Aug 2026, 22.0% above Aug 2025.",
-   "rows": [
-    8652,
-    8639
-   ]
-  },
-  "generation-solar": {
-   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
-   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
-   "asOf": "Aug 2026",
-   "figure": "38,819",
-   "figureUnit": "Million Kilowatthours",
-   "headline": "Net generation from solar was 38,819 Million Kilowatthours in Aug 2026, 22.0% above Aug 2025.",
+   "figure": "2,810",
+   "figureUnit": "Billion Cubic Feet",
+   "headline": "U.S. natural gas consumption was 2,810 Billion Cubic Feet in Aug 2026, 6.4% above Aug 2025.",
    "rows": [
     7931,
     7918
    ]
   },
-  "generation-hydro": {
-   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
-   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+  "natural-gas-net-imports": {
+   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
    "asOf": "Aug 2026",
-   "figure": "18,588",
-   "figureUnit": "Million Kilowatthours",
-   "headline": "Net generation from conventional hydroelectric power was 18,588 Million Kilowatthours in Aug 2026, 7.5% below Aug 2025.",
+   "figure": "−607",
+   "figureUnit": "Billion Cubic Feet",
+   "headline": "U.S. natural gas net imports were −607 Billion Cubic Feet in Aug 2026, 83 Billion Cubic Feet below Aug 2025.",
    "rows": [
-    5047,
-    5034
-   ]
-  },
-  "electricity-retail-sales": {
-   "datasetId": "official_04_energy_raw_mer_t07_06_73b49f9b83",
-   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
-   "asOf": "Aug 2026",
-   "figure": "412,568",
-   "figureUnit": "Million Kilowatthours",
-   "headline": "Electricity sales to ultimate customers were 412,568 Million Kilowatthours in Aug 2026, 5.1% above Aug 2025.",
-   "rows": [
-    3605,
-    3592
-   ]
-  },
-  "electricity-sales-residential": {
-   "datasetId": "official_04_energy_raw_mer_t07_06_73b49f9b83",
-   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
-   "asOf": "Aug 2026",
-   "figure": "167,660",
-   "figureUnit": "Million Kilowatthours",
-   "headline": "Residential electricity sales were 167,660 Million Kilowatthours in Aug 2026, 8.0% above Aug 2025.",
-   "rows": [
-    721,
-    708
-   ]
-  },
-  "electricity-price-residential": {
-   "datasetId": "official_04_energy_raw_mer_t09_08_7f4fef2763",
-   "snapshotId": "369eaa82d2bbf715cfe6252b8056556a83a6a662a4d271d15b8c587aaac987a0",
-   "asOf": "Aug 2026",
-   "figure": "18.16",
-   "figureUnit": "Cents per Kilowatthour,  Including Taxes",
-   "headline": "The average residential price of electricity was 18.16 Cents per Kilowatthour,  Including Taxes in Aug 2026, 3.1% above Aug 2025.",
-   "rows": [
-    674,
-    661
+    5768,
+    5755
    ]
   },
   "natural-gas-price-power": {
@@ -751,7 +734,67 @@
     6836
    ]
   },
-  "power-sector-co2": {
+  "natural-gas-production-stat": {
+   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "asOf": "Aug 2026",
+   "figure": "3,591",
+   "figureUnit": "Billion Cubic Feet",
+   "headline": "U.S. dry natural gas production was 3,591 Billion Cubic Feet in Aug 2026, 6.6% above Aug 2025.",
+   "rows": [
+    2884,
+    2871
+   ]
+  },
+  "net-metered-solar-capacity": {
+   "datasetId": "official_05_utilities_csv_eia861_net_metering_2025_states_state_level_662ef5df39",
+   "snapshotId": "aed6f50aaeb4a6795e3f9858afdb55b0b3fddf68fc34a9ef8e360cf5e112eb82",
+   "asOf": "2025",
+   "figure": "20,041.1",
+   "figureUnit": "MW",
+   "headline": "California had the highest net metered photovoltaic capacity of 51 places (the states and DC) in 2025, 20,041.1 MW; Tennessee the lowest, 1.1 MW.",
+   "rows": [
+    5,
+    43
+   ]
+  },
+  "petroleum-products-supplied-stat": {
+   "datasetId": "official_04_energy_raw_mer_t03_01_7b9fc216c5",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "asOf": "Oct 2026",
+   "figure": "21,073",
+   "figureUnit": "Thousand Barrels per Day",
+   "headline": "U.S. petroleum products supplied were 21,073 Thousand Barrels per Day in Oct 2026, 0.5% above Oct 2025.",
+   "rows": [
+    9399,
+    9386
+   ]
+  },
+  "petroleum-trade": {
+   "datasetId": "official_04_energy_raw_mer_t03_01_7b9fc216c5",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "asOf": "Oct 2026",
+   "figure": "11,554",
+   "figureUnit": "Thousand Barrels per Day",
+   "headline": "U.S. petroleum exports were 11,554 Thousand Barrels per Day in Oct 2026, 4.3% above Oct 2025.",
+   "rows": [
+    6507,
+    6494
+   ]
+  },
+  "power-sector-co2-by-fuel": {
+   "datasetId": "official_04_energy_raw_mer_t11_06_aa6ddc226e",
+   "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
+   "asOf": "Aug 2026",
+   "figure": "84.8",
+   "figureUnit": "Million Metric Tons of Carbon Dioxide",
+   "headline": "Carbon dioxide emissions from natural gas in the electric power sector were 84.8 Million Metric Tons of Carbon Dioxide in Aug 2026, 10.4% above Aug 2025.",
+   "rows": [
+    1394,
+    1381
+   ]
+  },
+  "power-sector-co2-stat": {
    "datasetId": "official_04_energy_raw_mer_t11_06_aa6ddc226e",
    "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
    "asOf": "Aug 2026",
@@ -761,38 +804,6 @@
    "rows": [
     6273,
     6260
-   ]
-  },
-  "power-sector-co2-coal": {
-   "datasetId": "official_04_energy_raw_mer_t11_06_aa6ddc226e",
-   "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
-   "asOf": "Aug 2026",
-   "figure": "72.1",
-   "figureUnit": "Million Metric Tons of Carbon Dioxide",
-   "headline": "Carbon dioxide emissions from coal in the electric power sector were 72.1 Million Metric Tons of Carbon Dioxide in Aug 2026, 0.8% above Aug 2025.",
-   "rows": [
-    697,
-    684
-   ]
-  },
-  "egrid-state-renewables": {
-   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
-   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
-   "asOf": "2023",
-   "figure": "148,843,208",
-   "figureUnit": "MWh",
-   "headline": "48 had the largest state annual total renewables net generation of 52 places (the 50 states, DC and Puerto Rico) on 2023.",
-   "rows": [
-    45,
-    5,
-    49,
-    13,
-    37,
-    38,
-    35,
-    17,
-    15,
-    6
    ]
   }
  }

@@ -35,6 +35,8 @@ export type ScaleUnit = {
   base: { currency: "$" } | { words: string };
   /** The value axis title at each reader scale, in the publisher's own style. */
   axis: Record<ReaderScaleName, string>;
+  /** A round 6 unit that asked for the entry; its tile lands with that unit's branch. */
+  requested?: string;
 };
 
 export const SCALE_UNITS: readonly ScaleUnit[] = [
@@ -70,6 +72,15 @@ export const SCALE_UNITS: readonly ScaleUnit[] = [
       billion: "Billion Barrels per Day",
       trillion: "Trillion Barrels per Day",
     },
+  },
+  {
+    // CMS Medicare Part D spending by drug (CMS_PARTD_2024): whole dollars, as the dictionary of snapshot ad25a8c7 states
+    // the unit of Tot_Spndng (checked on production 26 Nov 2026).
+    unit: "USD nominal gross drug spending",
+    exponent: 0,
+    base: { currency: "$" },
+    axis: { one: "USD", million: "USD millions", billion: "USD billions", trillion: "USD trillions" },
+    requested: "sectors",
   },
   {
     // FRED copy of BLS manufacturing employment.

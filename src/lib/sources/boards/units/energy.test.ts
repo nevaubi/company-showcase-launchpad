@@ -7,10 +7,10 @@ import type { SourceColumn } from "../../schema";
 import { isRankSpec, isSeriesSpec } from "../compute";
 import { BOARDS, boardSpec, tileSpec } from "../specs";
 import type { CompareTileSpec, MixTileSpec, RankTileSpec, SeriesTileSpec, StatTileSpec, TileSeriesSpec } from "../types";
-import { NEXT, SPECS, UTILITIES_BOARD } from "./energy";
-import { merKey, replayRankTile, replayTile, type EnergyFixtures } from "./energy-replay";
+import { SPECS, UTILITIES_BOARD } from "./energy";
+import { merKey, replayTile, type EnergyFixtures } from "./energy-replay";
 
-const FIXTURES = JSON.parse(readFileSync("src/lib/sources/boards/units/energy.fixtures.json", "utf8")) as EnergyFixtures;
+const FIXTURES = JSON.parse(readFileSync("src/lib/sources/boards/units/energy.rows.json", "utf8")) as EnergyFixtures;
 const CHECKS = JSON.parse(readFileSync("src/lib/sources/boards/units/energy.checks.json", "utf8")) as {
   series: { table: string; snapshotId: string; msn: string; records: number; md5: string }[];
   states: Record<string, { snapshotId: string; places: number; fields: string[]; compared: number; equal: number }>;
@@ -134,24 +134,12 @@ describe("energy tiles", () => {
     expect(result.gaps.count).toBe(0);
   });
 
-  it("rank a whole period: every place of the cross-section, each once", () => {
-    for (const spec of SPECS.tiles.filter(isRankSpec)) {
-      const result = replayRankTile(spec, FIXTURES, "profile");
-      expect(result.ok, spec.id).toBe(true);
-      if (!result.ok) continue;
-      const places = spec.datasetId === EGRID ? 52 : 51;
-      expect(result.derivation?.formula).toContain(`${places} records of ${spec.across.period}`);
-      expect(result.headline).toContain(` in ${spec.across.period}.`);
-      expect(result.points).toHaveLength(spec.across.top);
-    }
-  });
-
   it("refuse a record that states another unit or description", () => {
-    const spec = tileSpec("generation-solar") as SeriesTileSpec;
+    const spec = tileSpec("crude-oil-imports") as SeriesTileSpec;
     const key = merKey(spec) as string;
-    const renamed: EnergyFixtures = { ...FIXTURES, mer: { ...FIXTURES.mer, [key]: { ...FIXTURES.mer[key], unit: "Billion Kilowatthours" } } };
+    const renamed: EnergyFixtures = { ...FIXTURES, mer: { ...FIXTURES.mer, [key]: { ...FIXTURES.mer[key], unit: "Million Barrels per Day" } } };
     expect(replayTile(spec, renamed)).toMatchObject({ ok: false });
-    const redefined: EnergyFixtures = { ...FIXTURES, mer: { ...FIXTURES.mer, [key]: { ...FIXTURES.mer[key], description: "Electricity Net Generation From Solar, Electric Power Sector" } } };
+    const redefined: EnergyFixtures = { ...FIXTURES, mer: { ...FIXTURES.mer, [key]: { ...FIXTURES.mer[key], description: "Crude Oil Imports, SPR" } } };
     expect(replayTile(spec, redefined)).toMatchObject({ ok: false });
   });
 });
@@ -222,45 +210,41 @@ describe("energy tiles of the round 6 forms", () => {
       }
     }
   });
-
-  it("fill the next boards within their bounds, with tiles defined once", () => {
-    const ids = new Set(SPECS.tiles.map((t) => t.id));
-    expect(ids.size).toBe(SPECS.tiles.length);
-    for (const id of [...NEXT.energy, ...NEXT.utilities, ...NEXT.library]) expect(ids.has(id), id).toBe(true);
-    expect(4 + NEXT.energy.length).toBeLessThanOrEqual(18);
-    expect(NEXT.utilities.length).toBeGreaterThanOrEqual(12);
-    expect(NEXT.utilities.length).toBeLessThanOrEqual(16);
-    expect(new Set(NEXT.energy).size).toBe(NEXT.energy.length);
-    expect(new Set(NEXT.utilities).size).toBe(NEXT.utilities.length);
-    for (const id of [...NEXT.energy, ...NEXT.utilities]) expect(tileSpec(id)?.section, id).toBeTruthy();
-  });
 });
 
 describe("energy boards", () => {
-  it("fill Energy with 14 to 18 tiles and Power and utilities with 12 to 16", () => {
+  it("fill Energy with 18 tiles and Power and utilities with 13, every tile under a section", () => {
     const energy = boardSpec("04_energy");
     const utilities = boardSpec("05_utilities");
-    expect(energy?.tiles.length).toBeGreaterThanOrEqual(14);
-    expect(energy?.tiles.length).toBeLessThanOrEqual(18);
+    expect(energy?.tiles).toHaveLength(18);
     expect(utilities?.title).toBe("Power and utilities");
-    expect(utilities?.tiles.length).toBeGreaterThanOrEqual(12);
-    expect(utilities?.tiles.length).toBeLessThanOrEqual(16);
+    expect(utilities?.tiles).toHaveLength(13);
     expect(UTILITIES_BOARD.tiles).toEqual(utilities?.tiles);
+    for (const id of [...SPECS.boardTiles["04_energy"], ...UTILITIES_BOARD.tiles]) expect(tileSpec(id)?.section, id).toBeTruthy();
+    const sections = (ids: readonly string[]) => [...new Set(ids.map((id) => tileSpec(id)?.section))];
+    expect(sections(SPECS.boardTiles["04_energy"])).toEqual(["Production", "Consumption", "Trade", "Stocks", "Prices", "Emissions"]);
+    expect(sections(UTILITIES_BOARD.tiles)).toEqual(["Generation by fuel", "Sales and prices", "Emissions", "Plants and states", "Capacity"]);
   });
 
-  it("add two tiles to the landing board and define no board twice", () => {
+  it("put every energy tile on a board, add two to the landing board and define no board twice", () => {
+    const onBoards = new Set(BOARDS.flatMap((b) => b.tiles));
+    for (const t of SPECS.tiles) expect(onBoards.has(t.id), t.id).toBe(true);
     const library = boardSpec("library");
     for (const id of SPECS.boardTiles.library) expect(library?.tiles).toContain(id);
     expect(SPECS.boardTiles.library).toHaveLength(2);
     expect(BOARDS.filter((b) => b.id === "05_utilities")).toHaveLength(1);
   });
 
-  it("hold record counts that sum to each snapshot's rows, for the count tiles", () => {
+  it("hold record counts that sum to each snapshot's rows", () => {
     const counts = FIXTURES.counts ?? {};
     expect(Object.keys(counts)).toHaveLength(3);
     for (const [id, c] of Object.entries(counts)) {
       expect(c.values.reduce((n, v) => n + v.rows, 0), id).toBe(c.rows);
       expect(new Set(c.values.map((v) => v.value)).size).toBe(c.values.length);
+    }
+    const cells = FIXTURES.cells ?? {};
+    for (const [id, c] of Object.entries(cells)) {
+      expect(c.rows.map((r) => r[0]), id).toEqual(Array.from({ length: c.rows.length }, (_, i) => i + 1));
       expect(SPECS.tiles.some((t) => t.datasetId === id && t.transform === "records")).toBe(true);
     }
   });

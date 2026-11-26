@@ -2,41 +2,50 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import { FakeSourceDb } from "../../read.fake";
 import { resetReadState } from "../../read.server";
-import { readBoard, resetBoardCache } from "../board.server";
-import { fixtureTables } from "../fixtures";
+import { BOARD_READ_BUDGET, readBoard, resetBoardCache } from "../board.server";
+import { boardFixtureTables, fixtureTables } from "../fixtures";
 import type { Board } from "../types";
 import { SPECS } from "./energy";
 import { energyFixtureTables, type EnergyTableFixtures } from "./energy-tables";
+import { withUnitFixtures } from "./fixtures";
 
 /**
- * The Energy, Power and utilities and landing boards computed by the board server itself (its reads, its cache, its
- * compute) on a fake member client holding the core fixture rows and the energy fixture rows, all of them production
- * rows (energy report, round 6). The tiles must give the figures the energy checks recorded.
+ * The Energy, Power and utilities and landing boards computed by the board server itself (its reads, its read budget,
+ * its compute) on a fake member client holding the core rows and the energy fixture rows, all production rows (energy
+ * report, round 6). Every energy tile must give the figures the energy checks recorded, on the trimmed rows of
+ * `energy.fixtures.json` and on the untrimmed rows of `energy.rows.json` alike.
  */
 
-const FIXTURES = JSON.parse(readFileSync("src/lib/sources/boards/units/energy.fixtures.json", "utf8")) as EnergyTableFixtures;
+const ROWS = JSON.parse(readFileSync("src/lib/sources/boards/units/energy.rows.json", "utf8")) as EnergyTableFixtures;
 const CHECKS = JSON.parse(readFileSync("src/lib/sources/boards/units/energy.checks.json", "utf8")) as {
-  tiles: Record<string, { snapshotId: string; asOf: string; figure: string; headline: string; rows: number[] }>;
+  tiles: Record<string, { datasetId: string; snapshotId: string; asOf: string; figure: string; figureUnit: string; headline: string; rows: number[] }>;
 };
+const MINE = new Set(SPECS.tiles.map((t) => t.id));
+const NOW = Date.UTC(2026, 10, 26, 6);
 
-function tables() {
-  const core = fixtureTables();
-  const energy = energyFixtureTables(FIXTURES);
-  const coreIds = new Set(core.source_datasets.map((d) => d.id));
-  const coreRows = new Set(core.source_records.map((r) => `${r.snapshot_id}:${r.row_number}`));
-  return {
-    source_datasets: [...core.source_datasets, ...energy.source_datasets.filter((d) => !coreIds.has(d.id))],
-    source_snapshots: [...core.source_snapshots, ...energy.source_snapshots.filter((s) => !coreIds.has(s.dataset_id))],
-    // a table both hold (MER T03.01) keeps the core rows; the energy rows of other series of it are added
-    source_records: [...core.source_records, ...energy.source_records.filter((r) => !coreRows.has(`${r.snapshot_id}:${r.row_number}`))],
-  };
+/** Every tile of a board through as many requests as its read budget takes, each request's selects counted. */
+async function wholeBoard(db: FakeSourceDb, id: string): Promise<{ board: Board; requests: number[] }> {
+  const requests: number[] = [];
+  const tiles: Board["tiles"] = [];
+  const refused: Board["refused"] = [];
+  let left: string[] | undefined;
+  for (let round = 0; round < 12; round += 1) {
+    const before = db.calls.length;
+    const read = await readBoard(db, id, NOW, left);
+    if (!read.ok) throw new Error(read.message);
+    requests.push(db.calls.length - before);
+    tiles.push(...read.data.tiles);
+    refused.push(...read.data.refused);
+    left = read.data.deferred;
+    if (!left?.length) return { board: { ...read.data, tiles, refused, deferred: undefined }, requests };
+  }
+  throw new Error(`board ${id} still defers tiles after 12 requests`);
 }
 
-const board = async (id: string, db: FakeSourceDb): Promise<Board> => {
-  const read = await readBoard(db, id, Date.UTC(2026, 10, 26, 5));
-  if (!read.ok) throw new Error(read.message);
-  return read.data;
-};
+const summary = (t: Board["tiles"][number]) =>
+  t.result.ok
+    ? { datasetId: t.source.datasetId, snapshotId: t.result.refs.snapshotId, asOf: t.result.asOf, figure: t.result.figure, figureUnit: t.result.figureUnit, headline: t.result.headline, rows: t.result.refs.rows }
+    : null;
 
 beforeEach(() => {
   resetBoardCache();
@@ -44,40 +53,33 @@ beforeEach(() => {
 });
 
 describe("energy boards on production rows, through the board server", () => {
-  it.each(["04_energy", "05_utilities", "library"])("%s: every energy tile computes the checked figures", async (id) => {
-    const db = new FakeSourceDb(tables());
-    const b = await board(id, db);
-    const mine = new Set(SPECS.tiles.map((t) => t.id));
-    expect(b.refused.filter((r) => mine.has(r.id))).toEqual([]);
-    for (const tile of b.tiles.filter((t) => mine.has(t.id))) {
-      const check = CHECKS.tiles[tile.id];
-      expect(check, tile.id).toBeDefined();
-      expect(tile.result.ok).toBe(true);
-      if (!tile.result.ok) continue;
-      expect({ snapshotId: tile.result.refs.snapshotId, asOf: tile.result.asOf, figure: tile.result.figure, headline: tile.result.headline, rows: tile.result.refs.rows }).toEqual({
-        snapshotId: check.snapshotId,
-        asOf: check.asOf,
-        figure: check.figure,
-        headline: check.headline,
-        rows: check.rows,
-      });
-      expect(tile.source.snapshotId).toBe(check.snapshotId);
+  it.each(["04_energy", "05_utilities", "library"])("%s: every energy tile computes the checked figures within the read budget", async (id) => {
+    const db = new FakeSourceDb(boardFixtureTables());
+    const { board, requests } = await wholeBoard(db, id);
+    expect(board.refused.filter((r) => MINE.has(r.id))).toEqual([]);
+    for (const n of requests) expect(n).toBeLessThanOrEqual(BOARD_READ_BUDGET);
+    const mine = board.tiles.filter((t) => MINE.has(t.id));
+    expect(mine.length).toBeGreaterThan(0);
+    for (const tile of mine) {
+      expect(summary(tile), tile.id).toEqual(CHECKS.tiles[tile.id]);
+      expect(tile.source.snapshotId).toBe(CHECKS.tiles[tile.id].snapshotId);
       expect(tile.section, tile.id).toBeTruthy();
+      expect(tile.result.ok && tile.result.headline).not.toMatch(/—/);
     }
   });
 
-  it("reads each MER tile with one cell-filtered series read of one page, after one select for the dataset", async () => {
-    const db = new FakeSourceDb(tables());
-    await board("05_utilities", db);
-    const records = db.calls.filter((c) => c.table === "source_records");
-    const datasets = db.calls.filter((c) => c.table === "source_datasets");
-    const tiles = SPECS.boards[0].tiles.length;
-    expect(records.length).toBe(tiles);
-    // T07.02A holds six of the tiles: its dictionary is read once and shared
-    expect(datasets.length).toBeLessThan(tiles);
-    for (const c of records) {
-      expect(c.filters.some((f) => f.startsWith("values->>0"))).toBe(true);
-      expect(c.limit).toBeLessThanOrEqual(1000);
+  it("gives the same figures on the untrimmed rows", async () => {
+    const full = withUnitFixtures(fixtureTables(), [{ unit: "energy", tables: energyFixtureTables(ROWS) }]);
+    for (const id of ["04_energy", "05_utilities"]) {
+      resetBoardCache();
+      resetReadState();
+      const { board } = await wholeBoard(new FakeSourceDb(full), id);
+      expect(board.refused.filter((r) => MINE.has(r.id))).toEqual([]);
+      for (const tile of board.tiles.filter((t) => MINE.has(t.id))) expect(summary(tile), tile.id).toEqual(CHECKS.tiles[tile.id]);
     }
+  });
+
+  it("records a check for every energy tile and for nothing else", () => {
+    expect(Object.keys(CHECKS.tiles).sort()).toEqual([...MINE].sort());
   });
 });

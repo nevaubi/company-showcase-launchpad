@@ -3,7 +3,7 @@
  * fake member client serves (`../../read.fake.ts`), so the board server's own reads can compute the energy tiles in
  * the shared board tests. Pure: the caller passes the parsed fixtures. Dictionaries are as long as production's, each
  * field at its production position; a field no tile reads is named "unread field N", and a cell that was not read on
- * production is null. Nothing else is filled in.
+ * production is null or, past the last cell read, absent (it reads as null). Nothing else is filled in.
  */
 import type { SourceColumn } from "../../schema";
 import type { EnergyFixtures } from "./energy-replay";
@@ -78,8 +78,10 @@ export function energyFixtureTables(fixtures: EnergyTableFixtures): { source_dat
     const d = snapshotOf(datasetId);
     if (d.snapshot !== cross.snapshotId) throw new Error(`${datasetId}: the cross-section fixture is of another snapshot`);
     const positions = fixtures.positions[datasetId] ?? {};
+    // the array ends at the last cell read: a later element reads as null, as PostgREST reads a missing one
+    const width = Math.max(...cross.fields.map((f) => positions[f] ?? -1)) + 1;
     for (const r of cross.rows) {
-      const values: (string | null)[] = new Array(d.fields).fill(null);
+      const values: (string | null)[] = new Array(width).fill(null);
       cross.fields.forEach((field, i) => {
         const at = positions[field];
         if (at === undefined) throw new Error(`${datasetId}: no position for ${field}`);
@@ -95,6 +97,19 @@ export function energyFixtureTables(fixtures: EnergyTableFixtures): { source_dat
         geo_name: r.geoName,
         values,
       });
+    }
+  }
+  for (const [datasetId, table] of Object.entries(fixtures.cells ?? {})) {
+    const d = snapshotOf(datasetId);
+    if (d.snapshot !== table.snapshotId) throw new Error(`${datasetId}: the cell fixture is of another snapshot`);
+    const fields = Object.entries(table.positions);
+    if (fields.length !== 1) throw new Error(`${datasetId}: a cell fixture holds one field`);
+    const [label, at] = fields[0];
+    for (const [row, cell] of table.rows) {
+      // the array ends at the cell read: a later element reads as null, as PostgREST reads a missing one
+      const values: (string | null)[] = new Array(at + 1).fill(null);
+      values[at] = cell;
+      records.push({ snapshot_id: d.snapshot, row_number: row, period: null, ...(table.geo === label ? { geo_code: cell } : {}), values });
     }
   }
   return { source_datasets: datasets, source_snapshots: snapshots, source_records: records };
