@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TileChart } from "@/components/alt/library/boards/tile-chart";
+import { RANK_STACKED_ROW } from "@/components/alt/library/boards/ranked-layout";
+import { TILE_CHART_HEIGHT, TileChart } from "@/components/alt/library/boards/tile-chart";
 import { StateGrid } from "@/components/alt/library/charts/state-grid";
 import { Segmented } from "@/components/app/segmented";
 import { getLookCross, type LookCrossRead } from "@/lib/sources/boards/board.functions";
@@ -132,6 +133,8 @@ export function RankingView({
           <TileChart
             form="ranked-bars"
             points={result.points}
+            // a row a bar, as many as the ranking shows (15 or 40), never squeezed into a board tile's height
+            height={Math.max(TILE_CHART_HEIGHT, RANK_STACKED_ROW * result.points.length)}
             unit={result.plotUnit}
             label={`${measure.label}, ${result.plotUnit}, ${result.asOf}`}
             recordHref={(row) => recordHref(datasetId, snapshot.id, row)}

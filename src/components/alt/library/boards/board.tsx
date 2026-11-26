@@ -66,7 +66,7 @@ function Loader({ board, ids, enabled, report }: { board: string; ids: readonly 
 function SkeletonTile({ tile }: { tile: BoardLayoutTile }) {
   if (tile.form === "stat")
     return (
-      <div aria-hidden className="flex h-[6.25rem] flex-col gap-2 rounded-md border bg-card px-3 py-2.5 shadow-paper">
+      <div aria-hidden className="flex h-[6.5625rem] flex-col gap-2 rounded-md border bg-card px-3 py-2.5 shadow-paper">
         <div className="h-3 w-2/3 animate-pulse rounded-sm bg-muted motion-reduce:animate-none" />
         <div className="h-6 w-1/2 animate-pulse rounded-sm bg-muted motion-reduce:animate-none" />
         <div className="h-3 w-3/4 animate-pulse rounded-sm bg-muted/70 motion-reduce:animate-none" />
@@ -160,11 +160,14 @@ export function BoardSection({
   section,
   heading = true,
   only,
+  className,
 }: {
   board: string;
   section: BoardLayoutSection;
   heading?: boolean;
   only?: readonly string[];
+  /** Placement in a packed board (`sectionSpan`); the section then lays its tiles out by its own width. */
+  className?: string;
 }) {
   const [ref, near] = useNear();
   const [slots, setSlots] = useState<Map<string, Slot>>(() => new Map());
@@ -188,7 +191,7 @@ export function BoardSection({
   };
   const shown = only ? section.tiles.filter((t) => only.includes(t.id)) : section.tiles;
   return (
-    <section ref={ref} data-section={section.title ?? undefined} className="min-w-0">
+    <section ref={ref} data-section={section.title ?? undefined} className={cn("min-w-0", className)}>
       {heading && section.title && <h3 className="mb-2 text-[14px] font-semibold tracking-tight">{section.title}</h3>}
       {requests.map((ids) => (
         <Loader key={`${attempt}:${ids.join(",")}`} board={board} ids={ids} enabled={near} report={report} />
@@ -199,14 +202,31 @@ export function BoardSection({
   );
 }
 
-/** A whole board: its sections in order, each loading as it nears the viewport. */
+/** The columns a tile takes in a section's grid: two for a wide one, one otherwise. */
+const slotsOf = (section: BoardLayoutSection) => section.tiles.reduce((n, t) => n + (t.size === "wide" && t.form !== "stat" ? 2 : 1), 0);
+
+/**
+ * Where a section stands in a packed board: as many of the board's columns as its tiles fill, at most all of them, so
+ * sections of one or two tiles sit side by side instead of each leaving a row mostly empty. The section is a container
+ * of its own, so its tiles take the columns of its width.
+ */
+export function sectionSpan(section: BoardLayoutSection): string {
+  const slots = slotsOf(section);
+  return cn("@container", slots >= 3 ? "@2xl:col-span-2 @5xl:col-span-3" : slots === 2 ? "@2xl:col-span-2" : "");
+}
+
+/**
+ * A whole board: its sections in order, each loading as it nears the viewport. The landing board, whose sections are
+ * its collections (many with a tile or two), packs them into the board's columns; a collection board stacks them.
+ */
 export function BoardView({ id, section }: { id: string; section: string }) {
   const layout = boardLayout(id);
   if (!layout) return null;
+  const packed = id === "library";
   return (
-    <div data-section={section} className="@container min-w-0 space-y-6">
+    <div data-section={section} className={cn("@container min-w-0", packed ? "grid grid-cols-1 content-start gap-x-3 gap-y-6 @2xl:grid-cols-2 @5xl:grid-cols-3" : "space-y-6")}>
       {layout.sections.map((s) => (
-        <BoardSection key={s.title ?? "lead"} board={id} section={s} />
+        <BoardSection key={s.title ?? "lead"} board={id} section={s} className={packed ? sectionSpan(s) : undefined} />
       ))}
     </div>
   );

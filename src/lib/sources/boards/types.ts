@@ -205,7 +205,7 @@ export type MixTileSpec = FormBase & {
  * One measure (or its change over a year) at one period across US states, on the state tile grid (`form: "map"`):
  * each state a square at its usual place, DC included, territories listed beneath the grid when present. Levels take
  * a sequential scale (one hue, light to dark); a change (`change-12m`, the same period a year earlier read as its own
- * cross-section) a diverging scale centred on zero. A legend states the value range. A state without a figure is
+ * cross-section) a diverging scale centered on zero. A legend states the value range. A state without a figure is
  * hatched and named in the caption. Records are matched to states by the indexed dimension `across.by` holding a
  * postal code, a two-digit FIPS code or the state's name; places that are not states or territories (the nation, a
  * region) are counted and named, never drawn. A period's cross-section must be complete (at most 1,000 records).

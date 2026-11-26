@@ -3,7 +3,7 @@ import * as d3 from "d3";
 import type { ScaleAxis } from "@/lib/sources/boards/scale";
 import type { TileLine, TilePoint } from "@/lib/sources/boards/types";
 import { tickFormat } from "../boards/tile-chart";
-import { SeriesLegend, SeriesReadout, day, slot, timeTicks, useWidth } from "./primitives";
+import { SeriesLegend, SeriesReadout, day, slot, tickAnchor, timeTicks, useWidth } from "./primitives";
 
 /**
  * The parts of a whole over time, stacked from a zero baseline in their fixed order (the first part at the bottom):
@@ -56,7 +56,8 @@ export function StackedChart({ parts, whole, draw, share, label, recordHref, onO
   const iw = Math.max(40, width - margin.left - margin.right);
   const ih = Math.max(40, height - margin.top - margin.bottom);
   const top = d3.max(periods, (p) => p.layers[p.layers.length - 1]?.y1 ?? 0) ?? 1;
-  const y = d3.scaleLinear().domain([0, share ? Math.max(100, top) : top || 1]).nice(4).range([ih, 0]);
+  // shares stand on an axis that ends at 100 (or the parts' sum, where rounding puts it a little above)
+  const y = share ? d3.scaleLinear().domain([0, Math.max(100, top)]).range([ih, 0]) : d3.scaleLinear().domain([0, top || 1]).nice(4).range([ih, 0]);
   const ticks = y.ticks(4);
   const step = ticks.length > 1 ? Math.abs(ticks[1] - ticks[0]) : 1;
   const band = d3.scaleBand<number>().domain(periods.map((p) => p.i)).range([0, iw]).paddingInner(0.2);
@@ -136,16 +137,10 @@ export function StackedChart({ parts, whole, draw, share, label, recordHref, onO
             {draw === "columns"
               ? periods.map((p, i) =>
                   i % every === (periods.length - 1) % every ? (
-                    <text key={`x${p.i}`} x={cx(p)} y={ih + 15} textAnchor="middle" className="fill-muted-foreground font-mono text-[10px]">
-                      {p.label.replace(/^Q(\d) \d{2}(\d{2})$/, "Q$1 $2")}
-                    </text>
+                    <AxisLabel key={`x${p.i}`} x={cx(p)} y={ih + 15} text={p.label.replace(/^Q(\d) \d{2}(\d{2})$/, "Q$1 $2")} left={-margin.left} right={iw + margin.right} />
                   ) : null,
                 )
-              : xt.map((d) => (
-                  <text key={+d} x={x(d)} y={ih + 15} textAnchor="middle" className="fill-muted-foreground font-mono text-[10px]">
-                    {format(d)}
-                  </text>
-                ))}
+              : xt.map((d) => <AxisLabel key={+d} x={x(d)} y={ih + 15} text={format(d)} left={-margin.left} right={iw + margin.right} />)}
             {hovered && draw === "areas" && <line x1={cx(hovered)} x2={cx(hovered)} y1={0} y2={ih} stroke="var(--muted-foreground)" strokeWidth={1} opacity={0.6} pointerEvents="none" />}
             <rect
               width={iw}
@@ -177,5 +172,15 @@ export function StackedChart({ parts, whole, draw, share, label, recordHref, onO
         )}
       </div>
     </div>
+  );
+}
+
+/** A time-axis label kept inside the chart (`tickAnchor`). */
+function AxisLabel({ x, y, text, left, right }: { x: number; y: number; text: string; left: number; right: number }) {
+  const at = tickAnchor(x, text, left, right);
+  return (
+    <text x={at.x} y={y} textAnchor={at.anchor} className="fill-muted-foreground font-mono text-[10px]">
+      {text}
+    </text>
   );
 }

@@ -53,6 +53,24 @@ export const QUIET = "var(--chart-5)";
 
 export const slot = (i: number) => SLOTS[i % SLOTS.length];
 
+/**
+ * The dash of a series past the fifth: it takes a slot's hue again with a dashed stroke (hue and dash together), so
+ * no hue is generated and no two series read alike. Solid (undefined) for the first five.
+ */
+export const dashOf = (i: number): string | undefined => (i >= SLOTS.length ? "5 3" : undefined);
+
+/**
+ * Where an axis label goes so it stays inside the chart: centered on its tick, or ending (starting) there when half
+ * its width would cross the right (left) edge. `left` and `right` are the edges in the plot's own coordinates
+ * (-margin.left and the plot width plus margin.right). Ten-pixel monospace digits are about 6px wide.
+ */
+export function tickAnchor(x: number, text: string, left: number, right: number): { x: number; anchor: "start" | "middle" | "end" } {
+  const half = (text.length * 6) / 2;
+  if (x + half > right) return { x: Math.min(x, right), anchor: "end" };
+  if (x - half < left) return { x: Math.max(x, left), anchor: "start" };
+  return { x, anchor: "middle" };
+}
+
 /** The true minus sign. */
 export const MINUS = "−";
 
@@ -130,12 +148,20 @@ export function SeriesReadout({
   );
 }
 
-/** Time-axis ticks: one per year (every two or five on long spans) from two years on, months below. */
+/** Year steps of a long time axis, the smallest first. */
+const YEAR_STEPS = [1, 2, 5, 10, 20, 25, 50, 100];
+
+/**
+ * Time-axis ticks: years from two years on, in the smallest step of 1, 2, 5, 10 ... years that leaves every label
+ * room (about 52px a year label), months below, days on a span of a few months.
+ */
 export function timeTicks(x: d3.ScaleTime<number, number>, width: number): { ticks: Date[]; format: (d: Date) => string } {
   const [a, b] = x.domain();
   const span = (b.getTime() - a.getTime()) / 86_400_000;
   if (span > 700) {
-    const every = span > 3700 ? 5 : span > 1900 ? 2 : 1;
+    const room = Math.max(2, Math.floor(width / 52));
+    const years = span / 365.25;
+    const every = YEAR_STEPS.find((s) => Math.floor(years / s) + 1 <= room) ?? YEAR_STEPS[YEAR_STEPS.length - 1];
     return { ticks: x.ticks(d3.utcYear.every(every) as d3.TimeInterval), format: d3.utcFormat("%Y") };
   }
   return { ticks: x.ticks(width < 360 ? 3 : 4), format: d3.utcFormat(span > 120 ? "%b %Y" : "%b %d") };
@@ -145,12 +171,18 @@ export function timeTicks(x: d3.ScaleTime<number, number>, width: number): { tic
 export const day = (iso: string | undefined) => new Date(`${iso ?? "1970-01-01"}T00:00:00Z`);
 
 /** The legend of a multi-series chart: a short line key (or a swatch for fills) beside each name, in spec order. */
-export function SeriesLegend({ items, fill = false }: { items: { key: string; label: string; color: string }[]; fill?: boolean }) {
+export function SeriesLegend({ items, fill = false }: { items: { key: string; label: string; color: string; dash?: string }[]; fill?: boolean }) {
   return (
     <ul className="mb-1 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground" aria-label="Legend">
       {items.map((i) => (
         <li key={i.key} className="flex min-w-0 items-center gap-1.5">
-          <span aria-hidden className={fill ? "inline-block size-2 shrink-0 rounded-[2px]" : "inline-block h-0.5 w-3 shrink-0 rounded-full"} style={{ background: i.color }} />
+          {i.dash && !fill ? (
+            <svg aria-hidden width={14} height={2} className="shrink-0">
+              <line x1={0} x2={14} y1={1} y2={1} stroke={i.color} strokeWidth={2} strokeDasharray={i.dash} />
+            </svg>
+          ) : (
+            <span aria-hidden className={fill ? "inline-block size-2 shrink-0 rounded-[2px]" : "inline-block h-0.5 w-3 shrink-0 rounded-full"} style={{ background: i.color }} />
+          )}
           <span className="truncate">{i.label}</span>
         </li>
       ))}

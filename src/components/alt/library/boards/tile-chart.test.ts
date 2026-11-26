@@ -53,3 +53,33 @@ describe("the last column's label", () => {
     expect(columnEndLabel(values(-1, -3), 19, "\u22121.0", band, 12, y).y).toBe(y(-3) + 11);
   });
 });
+
+describe("chart primitives", () => {
+  it("keep an axis label inside the chart: centered, or ending or starting at its tick near an edge", async () => {
+    const { tickAnchor, dashOf, slot } = await import("../charts/primitives");
+    expect(tickAnchor(150, "Oct 2026", -40, 310)).toEqual({ x: 150, anchor: "middle" });
+    expect(tickAnchor(300, "Oct 2026", -40, 310)).toEqual({ x: 300, anchor: "end" });
+    expect(tickAnchor(-30, "Oct 2026", -40, 310)).toEqual({ x: -30, anchor: "start" });
+    // a sixth series takes the first hue again, dashed; the first five are solid
+    expect([0, 1, 2, 3, 4].map(dashOf)).toEqual([undefined, undefined, undefined, undefined, undefined]);
+    expect(dashOf(5)).toBe("5 3");
+    expect(slot(5)).toBe(slot(0));
+  });
+});
+
+describe("time axis ticks", () => {
+  it("thin the years of a long span to the room a phone leaves, never two labels on one place", async () => {
+    const { timeTicks } = await import("../charts/primitives");
+    const x = d3.scaleUtc().domain([new Date(Date.UTC(1960, 0, 1)), new Date(Date.UTC(2020, 0, 1))]).range([0, 280]);
+    const phone = timeTicks(x, 330);
+    expect(phone.ticks.length).toBeLessThanOrEqual(Math.floor(330 / 52));
+    expect(phone.ticks.map(phone.format)).toEqual(["1960", "1980", "2000", "2020"]);
+    const wide = timeTicks(x.copy().range([0, 640]), 700);
+    expect(wide.ticks.length).toBeLessThanOrEqual(Math.floor(700 / 52));
+    expect(wide.ticks.map(wide.format).slice(0, 3)).toEqual(["1960", "1965", "1970"]);
+    // a few weeks read as days, never the same month twice
+    const weeks = timeTicks(d3.scaleUtc().domain([new Date(Date.UTC(2026, 10, 1)), new Date(Date.UTC(2026, 10, 24))]).range([0, 280]), 330);
+    const labels = weeks.ticks.map(weeks.format);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+});

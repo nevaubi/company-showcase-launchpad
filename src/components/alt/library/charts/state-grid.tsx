@@ -3,7 +3,7 @@ import { GRID_COLUMNS, GRID_PLACES, GRID_ROWS } from "@/lib/sources/geo/us-state
 import type { MapPlace } from "@/lib/sources/boards/types";
 import { cn } from "@/lib/utils";
 import { ChartTooltip, useWidth } from "./primitives";
-import { HATCH, fillCss, gridFill, gridNeighbor, gridWidthFor, rampCss, type Direction, type GridScale } from "./state-grid-model";
+import { HATCH, fillCss, gridFill, gridNeighbor, gridWidthFor, inkClass, rampCss, type Direction, type GridScale } from "./state-grid-model";
 
 /**
  * The US state tile grid: each state and DC one square near its usual place, eleven columns by eight rows, the
@@ -125,8 +125,7 @@ export function StateGrid({
                 }}
                 className={cn(
                   "flex aspect-square min-w-0 items-center justify-center rounded-[3px] font-mono text-[9px] font-semibold leading-none outline-none transition-opacity duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card motion-reduce:transition-none @md:text-[10px]",
-                  fill.hue ? (fill.lightInkLight ? "text-card" : "text-foreground") : "text-muted-foreground",
-                  fill.hue ? (fill.lightInkDark ? "dark:text-card" : "dark:text-foreground") : "",
+                  inkClass(fill),
                   opens ? "cursor-pointer" : "cursor-default",
                   hover && hover !== p.code ? "opacity-80" : "",
                   selected === p.code && "ring-2 ring-ring ring-offset-1 ring-offset-card",
@@ -182,7 +181,7 @@ export function GridLegend({ scale, rangeLabels, unit, hatched }: { scale: GridS
         <span className="num text-foreground">{rangeLabels[1]}</span>
         <span>{unit}</span>
       </span>
-      {scale === "diverging" && <span>Centred on zero</span>}
+      {scale === "diverging" && <span>Centered on zero</span>}
       {hatched && (
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-2.5 rounded-[2px]" style={{ background: HATCH }} />

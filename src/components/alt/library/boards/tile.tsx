@@ -329,7 +329,8 @@ function StatTile({
   const value = result.reader ? result.reader.figure : `${result.figure}${percent ? "%" : ""}`;
   return (
     <article data-section={tile.title} className={`flex min-w-0 flex-col gap-1 rounded-md border bg-card px-3 py-2.5 shadow-paper ${className ?? ""}`}>
-      <h3 className="truncate text-[11px] font-medium text-muted-foreground" title={tile.title}>
+      {/* two lines held for every title, so a row of stats lines up and a long name is not cut on a phone */}
+      <h3 className="line-clamp-2 h-[2.4em] text-[11px] font-medium leading-[1.2] text-muted-foreground" title={tile.title}>
         {tile.title}
       </h3>
       <div className="flex min-w-0 items-end gap-2">
