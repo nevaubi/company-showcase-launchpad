@@ -64,9 +64,9 @@ export function CurveChart({ latest, earlier, latestLabel, earlierLabel, unit, l
           onBlur={() => setHover(null)}
           onKeyDown={(e) => {
             const at = hover ?? latest.length - 1;
-            if (e.key === "ArrowLeft") (e.preventDefault(), setHover(Math.max(0, at - 1)));
-            else if (e.key === "ArrowRight") (e.preventDefault(), setHover(Math.min(latest.length - 1, at + 1)));
-            else if (e.key === "Enter") (e.preventDefault(), onOpen(recordHref(at, latest[at].row)));
+            if (e.key === "ArrowLeft") { e.preventDefault(); setHover(Math.max(0, at - 1)); }
+            else if (e.key === "ArrowRight") { e.preventDefault(); setHover(Math.min(latest.length - 1, at + 1)); }
+            else if (e.key === "Enter") { e.preventDefault(); onOpen(recordHref(at, latest[at].row)); }
           }}
         >
           <g transform={`translate(${margin.left},${margin.top})`}>

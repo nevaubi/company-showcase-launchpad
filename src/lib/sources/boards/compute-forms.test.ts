@@ -268,7 +268,14 @@ describe("distribution", () => {
     if (r.shape?.kind !== "distribution") throw new Error("shape");
     expect(r.shape.count).toBe(496);
     expect(r.shape.bins?.reduce((s, b) => s + b.count, 0)).toBe(496);
-    expect(r.shape.bins?.map((b) => b.label)).toEqual(["1000000 to 5000000", "5000000 to 10000000", "10000000 to 50000000", "50000000 and above"]);
+    expect(r.shape.bins?.map((b) => b.label)).toEqual(["1,000,000 to 5,000,000", "5,000,000 to 10,000,000", "10,000,000 to 50,000,000", "50,000,000 and above"]);
+    // the edges stay decimal text in the unit as filed, for the chart's scale
+    expect(r.shape.bins?.map((b) => [b.from, b.to])).toEqual([
+      ["1000000", "5000000"],
+      ["5000000", "10000000"],
+      ["10000000", "50000000"],
+      ["50000000", null],
+    ]);
     expect(r.derivation?.inputs).toHaveLength(2);
   });
 
@@ -453,5 +460,33 @@ describe("rank wording by the profile's cadence", () => {
   it("refuses bars that would carry one label twice", () => {
     const r = computeRankTile(spec as RankTileSpec, ctx("d", "v", "Number", "year", "year"), cells("2025", ["Harrison", "Harrison", "Polk"]));
     expect(r).toEqual({ ok: false, reason: 'Two bars would both read "Harrison" (rows 1 and 2); the tile must name a field that tells them apart (labelWith).' });
+  });
+});
+
+describe("figures right-aligned with spaces", () => {
+  const spec: StatTileSpec = {
+    ...base,
+    id: "padded",
+    datasetId: "nmfp",
+    measure: "TOTALVALUE",
+    subject: "Total value",
+    unit: "USD",
+    decimals: 1,
+    form: "stat",
+    transform: "level",
+    headline: "level",
+    series: { whole: true },
+    changeAs: "percent",
+  };
+  // Jan 2025 to Jan 2026, as a fixed-width file writes them
+  const texts = ["   1000.0", "   1100.0", "", "  1200.5", "", "", "", "", "", "", "", "", "   1260.5"];
+  const cells: CellInput[] = texts.map((text, i) => ({ row: i + 1, period: `${2025 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`, text }));
+
+  it("are read when the measure declares the padding, and stay text when it does not", () => {
+    const padded = ok(computeStatTile(spec, { ...ctx("nmfp", "TOTALVALUE", "USD"), padding: "leading-spaces" }, cells));
+    expect(padded.figure).toBe("1,260.5");
+    expect(padded.shape).toMatchObject({ kind: "stat", change: { display: "+26.1", unit: "%" } });
+    expect(padded.points.find((p) => p.key === "2025-04-01")?.text).toBe("  1200.5");
+    expect(computeStatTile(spec, ctx("nmfp", "TOTALVALUE", "USD"), cells)).toMatchObject({ ok: false });
   });
 });

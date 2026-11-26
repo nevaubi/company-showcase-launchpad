@@ -3,7 +3,7 @@ import { FakeSourceDb } from "../../read.fake";
 import { resetReadState } from "../../read.server";
 import { readTiles, resetBoardCache } from "../board.server";
 import { boardFixtureTables } from "../fixtures";
-import { BOARDS } from "../specs";
+import { BOARDS, CORE_TILES } from "../specs";
 import { SPECS } from "./forms";
 
 /**
@@ -42,6 +42,12 @@ const HEADLINES: [string, string, string][] = [
     ["construction-spending-mix", "Nonresidential construction was 60.6% of total construction spending in Sep 2026.", "Sep 2026"],
     ["new-home-sales", "New one-family houses sold were 701 Thousands in Oct 2026, 7.5% above Oct 2025.", "Oct 2026"],
     ["vacancy-rates", "The rental vacancy rate was 7.6% in Q3 2026, 0.5 percentage points above Q3 2025.", "Q3 2026"],
+    // production snapshot 5161b586, period 20260930: median (6,115,842 + 6,115,843) / 2 and the quartiles equal SQL on production
+    [
+      "fdic-cohort-assets",
+      "The median total assets of 496 institutions in the FDIC cohort was 6,115,843 USD thousands (monetary measures) on Sep 30, 2026; the middle half were between 3,564,855 and 15,901,271.",
+      "Sep 30, 2026",
+    ],
 ];
 
 describe("the forms tiles on production rows", () => {
@@ -58,6 +64,36 @@ describe("the forms tiles on production rows", () => {
       expect(t?.result.ok && t.result.asOf, id).toBe(asOf);
     }
     expect(HEADLINES).toHaveLength(SPECS.tiles.length);
+  });
+
+  it("draw the FDIC cohort in the bins counted on production", async () => {
+    resetBoardCache();
+    resetReadState();
+    const spec = SPECS.tiles.find((t) => t.id === "fdic-cohort-assets")!;
+    const b = await readTiles(new FakeSourceDb(boardFixtureTables()), [spec], Date.UTC(2026, 10, 26, 6), 1000);
+    const r = b.tiles[0]?.result;
+    if (!r?.ok || r.shape?.kind !== "distribution") throw new Error("no distribution");
+    expect(r.shape.bins?.map((x) => [x.label, x.count])).toEqual([
+      ["1,000,000 to 3,000,000", 57],
+      ["3,000,000 to 10,000,000", 278],
+      ["10,000,000 to 30,000,000", 90],
+      ["30,000,000 to 100,000,000", 38],
+      ["100,000,000 to 300,000,000", 19],
+      ["300,000,000 and above", 14],
+    ]);
+  });
+
+  it("fill the landing board with the core tiles and seven of forms, across six collections, no series twice", () => {
+    const landing = BOARDS.find((x) => x.id === "library")!;
+    const own = SPECS.boardTiles.library;
+    expect(own).toHaveLength(7);
+    const coreAndOwn = landing.tiles.filter((t) => !SPECS.tiles.some((s) => s.id === t) || own.includes(t));
+    expect(coreAndOwn.length).toBeGreaterThanOrEqual(16);
+    const specs = coreAndOwn.map((id) => SPECS.tiles.find((s) => s.id === id) ?? CORE_TILES.find((s) => s.id === id)!);
+    expect(new Set(specs.map((s) => s.collection)).size).toBeGreaterThanOrEqual(6);
+    // the core's 30-year mortgage line is there, so the 30- and 15-year comparison is not
+    expect(landing.tiles).toContain("mortgage-rate-30y");
+    expect(landing.tiles).not.toContain("mortgage-30y-15y");
   });
 
   it("hold at least 30 tiles, each on a board, no collection board over 18 tiles", () => {

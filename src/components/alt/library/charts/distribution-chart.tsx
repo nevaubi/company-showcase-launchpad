@@ -26,6 +26,13 @@ type Props = {
   height: number;
 };
 
+/** A bin edge (decimal text in the unit as filed) as an axis tick: compact above 10,000, as the other charts' ticks. */
+function edgeTick(edge: string | null): string {
+  if (edge === null) return "";
+  const v = Number(edge);
+  return tickFormat(v, Math.abs(v) || 1);
+}
+
 export function DistributionChart(props: Props) {
   return props.draw === "histogram" && props.bins ? <Histogram {...props} bins={props.bins} /> : <Strip {...props} />;
 }
@@ -86,7 +93,7 @@ function Histogram({ bins, median, unit, label, periodHref, onOpen, height }: Pr
           {bins.map((b, i) =>
             i % every === 0 || i === bins.length - 1 ? (
               <text key={`x${b.label}`} x={(band(i) ?? 0) + band.bandwidth() / 2} y={ih + 14} textAnchor="middle" className="fill-muted-foreground font-mono text-[9px]">
-                {b.from === null ? `< ${b.to}` : b.to === null ? `≥ ${b.from}` : b.from}
+                {b.from === null ? `< ${edgeTick(b.to)}` : b.to === null ? `≥ ${edgeTick(b.from)}` : edgeTick(b.from)}
               </text>
             ) : null,
           )}
@@ -111,7 +118,7 @@ function Histogram({ bins, median, unit, label, periodHref, onOpen, height }: Pr
               onBlur={() => setHover(null)}
               onClick={() => onOpen(periodHref)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") (e.preventDefault(), onOpen(periodHref));
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(periodHref); }
               }}
             />
           ))}
@@ -155,7 +162,10 @@ function Strip({ points, median, unit, label, recordHref, onOpen, height }: Prop
     let dist = Infinity;
     for (const d of placed) {
       const dd = Math.hypot(x(d.p.value as number) - mx, laneY(d.lane) - my);
-      if (dd < dist) (dist = dd), (best = d);
+      if (dd < dist) {
+        dist = dd;
+        best = d;
+      }
     }
     return dist < 24 ? best : null;
   };

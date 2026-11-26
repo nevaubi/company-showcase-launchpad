@@ -75,6 +75,7 @@ import { Route as ApiPublicOfficeJwksRouteImport } from './routes/api/public/off
 import { Route as ApiPublicPartnerTaskRouteImport } from './routes/api/public/partner/$task'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 import { Route as LovableEmailTransactionalPreviewRouteImport } from './routes/lovable/email/transactional/preview'
+import { Route as AuthenticatedAppAltDataLibraryChartsRouteImport } from './routes/_authenticated/app.alt-data_.library_.charts'
 import { Route as AuthenticatedAppCompaniesTickerIndexRouteImport } from './routes/_authenticated/app.companies.$ticker.index'
 import { Route as AuthenticatedAppCompaniesTickerAltDataRouteImport } from './routes/_authenticated/app.companies.$ticker.alt-data'
 import { Route as AuthenticatedAppCompaniesTickerCallsRouteImport } from './routes/_authenticated/app.companies.$ticker.calls'
@@ -454,6 +455,12 @@ const LovableEmailTransactionalPreviewRoute =
     path: '/lovable/email/transactional/preview',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AuthenticatedAppAltDataLibraryChartsRoute =
+  AuthenticatedAppAltDataLibraryChartsRouteImport.update({
+    id: '/alt-data_/library_/charts',
+    path: '/alt-data/library/charts',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppCompaniesTickerIndexRoute =
   AuthenticatedAppCompaniesTickerIndexRouteImport.update({
     id: '/',
@@ -641,6 +648,7 @@ export interface FileRoutesByFullPath {
   '/app/firm/': typeof AuthenticatedAppFirmIndexRoute
   '/app/office/': typeof AuthenticatedAppOfficeIndexRoute
   '/app/theses/': typeof AuthenticatedAppThesesIndexRoute
+  '/app/alt-data/library/charts': typeof AuthenticatedAppAltDataLibraryChartsRoute
   '/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
   '/app/companies/$ticker/earnings': typeof AuthenticatedAppCompaniesTickerEarningsRoute
@@ -725,6 +733,7 @@ export interface FileRoutesByTo {
   '/app/firm': typeof AuthenticatedAppFirmIndexRoute
   '/app/office': typeof AuthenticatedAppOfficeIndexRoute
   '/app/theses': typeof AuthenticatedAppThesesIndexRoute
+  '/app/alt-data/library/charts': typeof AuthenticatedAppAltDataLibraryChartsRoute
   '/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
   '/app/companies/$ticker/earnings': typeof AuthenticatedAppCompaniesTickerEarningsRoute
@@ -814,6 +823,7 @@ export interface FileRoutesById {
   '/_authenticated/app/firm/': typeof AuthenticatedAppFirmIndexRoute
   '/_authenticated/app/office/': typeof AuthenticatedAppOfficeIndexRoute
   '/_authenticated/app/theses/': typeof AuthenticatedAppThesesIndexRoute
+  '/_authenticated/app/alt-data_/library_/charts': typeof AuthenticatedAppAltDataLibraryChartsRoute
   '/_authenticated/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/_authenticated/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
   '/_authenticated/app/companies/$ticker/earnings': typeof AuthenticatedAppCompaniesTickerEarningsRoute
@@ -903,6 +913,7 @@ export interface FileRouteTypes {
     | '/app/firm/'
     | '/app/office/'
     | '/app/theses/'
+    | '/app/alt-data/library/charts'
     | '/app/companies/$ticker/alt-data'
     | '/app/companies/$ticker/calls'
     | '/app/companies/$ticker/earnings'
@@ -987,6 +998,7 @@ export interface FileRouteTypes {
     | '/app/firm'
     | '/app/office'
     | '/app/theses'
+    | '/app/alt-data/library/charts'
     | '/app/companies/$ticker/alt-data'
     | '/app/companies/$ticker/calls'
     | '/app/companies/$ticker/earnings'
@@ -1075,6 +1087,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/firm/'
     | '/_authenticated/app/office/'
     | '/_authenticated/app/theses/'
+    | '/_authenticated/app/alt-data_/library_/charts'
     | '/_authenticated/app/companies/$ticker/alt-data'
     | '/_authenticated/app/companies/$ticker/calls'
     | '/_authenticated/app/companies/$ticker/earnings'
@@ -1582,6 +1595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LovableEmailTransactionalPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/app/alt-data_/library_/charts': {
+      id: '/_authenticated/app/alt-data_/library_/charts'
+      path: '/alt-data/library/charts'
+      fullPath: '/app/alt-data/library/charts'
+      preLoaderRoute: typeof AuthenticatedAppAltDataLibraryChartsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/companies/$ticker/': {
       id: '/_authenticated/app/companies/$ticker/'
       path: '/'
@@ -1836,6 +1856,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppDocsIndexRoute: typeof AuthenticatedAppDocsIndexRoute
   AuthenticatedAppOfficeIndexRoute: typeof AuthenticatedAppOfficeIndexRoute
   AuthenticatedAppThesesIndexRoute: typeof AuthenticatedAppThesesIndexRoute
+  AuthenticatedAppAltDataLibraryChartsRoute: typeof AuthenticatedAppAltDataLibraryChartsRoute
   AuthenticatedAppOfficePdfIdRoute: typeof AuthenticatedAppOfficePdfIdRoute
   AuthenticatedAppOfficeSheetsIdRoute: typeof AuthenticatedAppOfficeSheetsIdRoute
   AuthenticatedAppOfficeSlidesIdRoute: typeof AuthenticatedAppOfficeSlidesIdRoute
@@ -1891,6 +1912,8 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppDocsIndexRoute: AuthenticatedAppDocsIndexRoute,
   AuthenticatedAppOfficeIndexRoute: AuthenticatedAppOfficeIndexRoute,
   AuthenticatedAppThesesIndexRoute: AuthenticatedAppThesesIndexRoute,
+  AuthenticatedAppAltDataLibraryChartsRoute:
+    AuthenticatedAppAltDataLibraryChartsRoute,
   AuthenticatedAppOfficePdfIdRoute: AuthenticatedAppOfficePdfIdRoute,
   AuthenticatedAppOfficeSheetsIdRoute: AuthenticatedAppOfficeSheetsIdRoute,
   AuthenticatedAppOfficeSlidesIdRoute: AuthenticatedAppOfficeSlidesIdRoute,

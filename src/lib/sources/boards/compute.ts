@@ -85,7 +85,23 @@ export type TileContext = {
   cadence: Cadence;
   markers?: readonly string[];
   grouping?: "," | "none";
+  /** The measure's padding (`MeasureSpec.padding`): leading spaces passed over before a cell is read. */
+  padding?: "leading-spaces" | "none";
 };
+
+/** The reading options of a context's measure, for `readNative`. */
+export const readingOf = (context: Pick<TileContext, "markers" | "grouping" | "padding">) => ({
+  markers: context.markers,
+  grouping: context.grouping,
+  padding: context.padding,
+});
+
+/** The exact decimal of a number reading: the cell without the padding and the separators its reading allowed. */
+export function decimalOfReading(reading: NativeReading, context: Pick<TileContext, "padding">): Decimal | null {
+  if (reading.kind !== "number") return null;
+  const body = context.padding === "leading-spaces" ? reading.text.replace(/^ +/, "") : reading.text;
+  return parseDecimal(body.replace(/,/g, ""));
+}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const EN_DASH = "–";
@@ -220,8 +236,8 @@ function place(
     const prior = byId.get(id);
     if (prior)
       return { ok: false, reason: `Two records for ${label} (rows ${prior.cell.row} and ${cell.row}): the selection is not one series.` };
-    const reading = readNative(cell.text, { markers: context.markers, grouping: context.grouping });
-    const value = reading.kind === "number" ? parseDecimal(reading.text.replace(/,/g, "")) : null;
+    const reading = readNative(cell.text, readingOf(context));
+    const value = decimalOfReading(reading, context);
     byId.set(id, { cell, parsed, id, label, reading, value });
   }
   const placed = [...byId.values()].sort((a, b) => a.parsed.order - b.parsed.order);
@@ -546,10 +562,10 @@ export function crossValues(
   for (const cell of cells) {
     if (keys.has(cell.key)) return { ok: false, reason: `${cell.key} appears twice in the ${table ? "table" : "cross-section"} (row ${cell.row}).` };
     keys.add(cell.key);
-    const reading = readNative(cell.text, { markers: context.markers, grouping: context.grouping });
+    const reading = readNative(cell.text, readingOf(context));
     countReading(gaps, reading, cell.name ?? cell.key);
     if (reading.kind !== "number") continue;
-    const value = parseDecimal(reading.text.replace(/,/g, ""));
+    const value = decimalOfReading(reading, context);
     if (value) valued.push({ cell, value });
   }
   if (valued.length === 0) return { ok: false, reason: `No record of ${label} has a figure for ${context.field}.` };

@@ -32,6 +32,8 @@ import {
   computeChange,
   computeSeriesTile,
   crossValues,
+  decimalOfReading,
+  readingOf,
   emptyGaps,
   figureUnitOf,
   named,
@@ -81,8 +83,7 @@ const integer = (n: number) => n.toLocaleString("en-US");
 
 /** The cell of a point as an exact decimal, through the same reading the compute used. */
 function decimalOf(text: string | null, context: TileContext): Decimal | null {
-  const reading = readNative(text, { markers: context.markers, grouping: context.grouping });
-  return reading.kind === "number" ? parseDecimal(reading.text.replace(/,/g, "")) : null;
+  return decimalOfReading(readNative(text, readingOf(context)), context);
 }
 
 /** A series of a multi-series tile as a series tile, so it is read and checked as one. */
@@ -150,7 +151,7 @@ function trimTrailing(input: LineInput): { input: LineInput; dropped: TileGaps }
     .sort((a, b) => a.parsed.order - b.parsed.order);
   const drop = new Set<CellInput>();
   for (let i = placed.length - 1; i >= 0; i -= 1) {
-    const reading = readNative(placed[i].cell.text, { markers: input.context.markers, grouping: input.context.grouping });
+    const reading = readNative(placed[i].cell.text, readingOf(input.context));
     if (reading.kind === "number") break;
     drop.add(placed[i].cell);
     dropped.count += 1;
@@ -542,10 +543,12 @@ export function computeDistributionTile(spec: DistributionTileSpec, context: Til
       if (compareDecimal(edges[i - 1]!, edges[i]!) >= 0) return refuse("The bin edges must rise.");
     const e = edges as Decimal[];
     const texts = spec.draw.edges;
+    // labels print each edge as the figures are printed, digits grouped ("1,000,000"), never rescaled
+    const said = e.map((d) => formatDecimal(d, { decimals: spec.decimals }));
     const buckets: { from: string | null; to: string | null; label: string; members: { name: string; value: Decimal }[] }[] = [
-      { from: null, to: texts[0], label: `below ${texts[0]}`, members: [] },
-      ...texts.slice(0, -1).map((t, i) => ({ from: t, to: texts[i + 1], label: `${t} to ${texts[i + 1]}`, members: [] as { name: string; value: Decimal }[] })),
-      { from: texts[texts.length - 1], to: null, label: `${texts[texts.length - 1]} and above`, members: [] },
+      { from: null, to: texts[0], label: `below ${said[0]}`, members: [] },
+      ...texts.slice(0, -1).map((t, i) => ({ from: t, to: texts[i + 1], label: `${said[i]} to ${said[i + 1]}`, members: [] as { name: string; value: Decimal }[] })),
+      { from: texts[texts.length - 1], to: null, label: `${said[said.length - 1]} and above`, members: [] },
     ];
     for (const v of sorted) {
       let at = 0;

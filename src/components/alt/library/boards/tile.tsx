@@ -9,6 +9,7 @@ import { DistributionChart } from "../charts/distribution-chart";
 import { Sparkline } from "../charts/sparkline";
 import { StackedChart } from "../charts/stacked-chart";
 import { StateGrid } from "../charts/state-grid";
+import { caveatLines } from "./caveats";
 import { TileChart } from "./tile-chart";
 
 /**
@@ -292,18 +293,7 @@ export function Tile({ tile, className, focusable }: { tile: BoardTile; classNam
 
 /** Gaps, missing states, places that are not states and counts without a period, each in one plain sentence. */
 function Caveats({ result }: { result: Extract<TileResult, { ok: true }> }) {
-  const lines: string[] = [];
-  const g = result.gaps;
-  if (g.count > 0) lines.push(`${g.count} ${g.count === 1 ? "period has" : "periods have"} no figure in the source and ${g.count === 1 ? "is" : "are"} left out.`);
-  if (g.noBase > 0) lines.push(`${g.noBase} ${g.noBase === 1 ? "figure has" : "figures have"} no figure a year earlier.`);
-  const shape = result.shape;
-  if (shape?.kind === "map") {
-    if (shape.missing.length) lines.push(`No figure: ${shape.missing.map((m) => m.name).join(", ")}.`);
-    if (shape.others.length) lines.push(`${shape.others.length} ${shape.others.length === 1 ? "record is" : "records are"} not a state and not drawn (${shape.others.slice(0, 3).join(", ")}${shape.others.length > 3 ? ", …" : ""}).`);
-    if (shape.territories.length) lines.push(`Territories: ${shape.territories.map((t) => `${t.name} ${t.display}`).join(", ")}.`);
-  }
-  if (shape?.kind === "mix") lines.push(`Parts and the publisher's total agree within ${shape.largestGap} in every period drawn.`);
-  if (shape?.kind === "records" && shape.rest > 0) lines.push(`${shape.rest.toLocaleString("en-US")} records of other values are not drawn.`);
+  const lines = caveatLines(result);
   if (!lines.length) return null;
   return (
     <>
