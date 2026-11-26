@@ -3,7 +3,7 @@
 // is re-read from the parsed cell and scaled here, so a stored fact can never carry a number that
 // isn't printed in the source document.
 import { inFullUnits, printedScale, screenRows } from "@/lib/ir/scale-check";
-import { decodeHtml, parseNumber, type ParsedTable } from "@/lib/ir/tables";
+import { decodeHtml, parseNumber, parseRowCell, type ParsedTable } from "@/lib/ir/tables";
 
 export const CATEGORIES = ["segment", "product", "geography", "customer", "channel", "cost", "kpi", "balance"] as const;
 export const METRICS = [
@@ -262,7 +262,8 @@ export function factsFromModel(out: ModelOutput, tables: ParsedTable[], filed?: 
         const key = `${tb.t}:${row.r}:${cell.c}`;
         if (seen.has(key)) continue;
         const text = table.rows[row.r]?.[cell.c];
-        const n = text == null ? null : parseNumber(text);
+        // Row-aware: "(32.5" closed by "%)" in the next cell is negative; unclosed, it is rejected.
+        const n = text == null ? null : parseRowCell(table.rows[row.r], cell.c);
         const per = periods.get(cell.p);
         const okPeriod = !!per && PERIOD_MONTHS.includes(per.months) && ISO.test(per.period_end) && Date.parse(per.period_end) <= latest && monthSpanOk(per);
         if (n == null || !okPeriod || !SCALES.has(unitScale) || !label) {

@@ -56,6 +56,8 @@ export interface PayloadCell {
   flags?: PayloadCellFlag[];
   /** set at read time: the figure is the section table's own printing, not the line's shown cell (`rowCells`) */
   own?: boolean;
+  /** "printed": read by the build from the stored document's table (table fill), not by a model */
+  how?: "printed";
 }
 /** A failed read-time check at one figure: what failed and the arithmetic, in words. */
 export interface PayloadCellFlag {
@@ -126,10 +128,12 @@ export type PayloadAt = [number, number, number] | [number, number, number, Prin
 
 /**
  * Version of what the build stores. 2: label-map drops keep printed table figures (kpis.ts `applyLabelMap`)
- * and `series.at` carries each printing's differing figures. A stored payload with a lower `build` (or none)
- * still lays out, with the rows and figures of its own build: the worker should rebuild it.
+ * and `series.at` carries each printing's differing figures. 3: table fill (rows the readers left out, read
+ * from the stored documents, cells marked `how: "printed"`), the printed row layout (`PayloadTable.rows`),
+ * fill conflicts and `stats.quality`. A stored payload with a lower `build` (or none) still lays out, with the
+ * rows and figures of its own build: the worker should rebuild it.
  */
-export const BUILD_FORMAT = 2;
+export const BUILD_FORMAT = 3;
 
 /** Whether a stored payload predates the current build format (the worker rebuilds such companies first). */
 export const needsRebuild = (p: Pick<IrPayload, "build">) => (p.build ?? 1) < BUILD_FORMAT;
@@ -166,7 +170,10 @@ export interface PayloadDoc {
   accn: string | null;
   doc: string | null;
   kind: string | null;
+  /** filing date: the facts' own, else the document row's (build format 3) */
   filed: string | null;
+  /** "supplement": stored under another kind, the document calls itself a supplement (title or first page) */
+  hint?: "supplement";
 }
 /**
  * What a stored document prints around one of its tables (table-captions.ts), kept for the tables the
@@ -178,6 +185,65 @@ export interface PayloadTable {
   unit?: string;
   heads?: [number, string][];
   blank?: number[];
+  /**
+   * Printed layout of the table's figure and heading rows (build format 3, table-fill.ts): [row, indent level,
+   * flags, printed name], level 0 the least indented label of the table, flags 1 bold, 2 a rule above, 4 the
+   * row's figures were read from the document by the build; the name is the row's own label cells as printed
+   * (a name wrapped over two printed rows joined, footnote marks taken off), for model-read rows too.
+   */
+  rows?: [number, number, number, string][];
+}
+/** A stored fact the document prints differently at its own position (kept as stored; shown in the checks). */
+export interface PayloadFillConflict {
+  d: number;
+  t: number;
+  r: number;
+  c: number;
+  /** what the document prints there */
+  printed: string;
+  /** what the stored fact says it read there */
+  stored: string;
+  v: number;
+}
+/**
+ * Quality summary of one build (stats.quality), small enough to audit every company with one query over
+ * ir_company_series. Field meanings: `qualityOf` in table-fill-build.ts.
+ */
+export interface IrQuality {
+  v: 1;
+  sections: number;
+  mainSections: number;
+  mainDoc: { filed: string | null; kind: string | null } | null;
+  rows: {
+    printed: number;
+    before: number;
+    after: number;
+    filled: number;
+    missing: Partial<Record<string, number>>;
+  };
+  main: {
+    printed: number;
+    before: number;
+    after: number;
+    missing: Partial<Record<string, number>>;
+  };
+  fill: {
+    docs: number;
+    read: number;
+    failed: number;
+    tables: number;
+    cells: number;
+    shownCells: number;
+    conflicts: number;
+    signs: number;
+    moved: number;
+  };
+  dupLabels: number;
+  mixedScale: number;
+  orphanHeads: number;
+  latest: string | null;
+  newest: { filed: string; kind: string | null } | null;
+  ties: { ok: number; total: number };
 }
 export interface IrPayload {
   v: 2;
@@ -200,6 +266,8 @@ export interface IrPayload {
   tables?: Record<string, PayloadTable>;
   /** `BUILD_FORMAT` of the build that wrote it (absent before format 2) */
   build?: number;
+  /** stored facts the stored document prints differently at their own position (first 200, and the count) */
+  fill?: { conflicts: PayloadFillConflict[]; n: number };
 }
 export interface IrStats {
   series: number;
@@ -224,6 +292,8 @@ export interface IrStats {
   tidied?: { groupsBefore: number; seriesBefore: number };
   /** `BUILD_FORMAT` of the build, copied here so the worker finds stale payloads from the table alone */
   build?: number;
+  /** what the build read and how complete the statements are (build format 3) */
+  quality?: IrQuality;
 }
 
 const locOf = (f: IrFact): PayloadLocator | undefined => {
@@ -317,6 +387,7 @@ export function buildPayload(
       };
     if (!c.fact) return { v: c.v };
     const out: PayloadCell = { v: c.v, ...factCell(c.fact) };
+    if (c.fact.method === "printed") out.how = "printed";
     if (c.suspect) Object.assign(out, { w: "suspect" as const, why: c.suspect });
     if (c.alt) out.alt = altOf(c.alt);
     return out;
@@ -363,7 +434,10 @@ export function buildPayload(
         const id = at.join(":");
         let pos = byPos.get(id);
         if (!pos) {
-          const name = f.label.replace(/\s*[®™©℠]+/g, "").replace(/\s{2,}/g, " ").trim();
+          const name = f.label
+            .replace(/\s*[®™©℠]+/g, "")
+            .replace(/\s{2,}/g, " ")
+            .trim();
           byPos.set(id, (pos = { at, v: {}, n: name !== s.label ? name : undefined }));
         }
         const d = differs(s, f);

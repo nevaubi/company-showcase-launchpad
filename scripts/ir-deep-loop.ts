@@ -15,6 +15,10 @@
  *   bun scripts/ir-deep-loop.ts [--batch=10] [--wait-minutes=10] [--mirror-hours=3] [--detail-hours=12] [--seed=CVS,MCK]
  * Priority (off unless set, scripts/lib/ir-priority.ts): IR_PRIORITY_GROUP=banks and/or
  * IR_PRIORITY_TICKERS=JPM,BAC put those companies ahead of every other one while they have files waiting.
+ * Fresh lane (on by default, scripts/lib/ir-fresh.ts): before each next company, one pass reads the
+ * newest unread table files (IR_FRESH_DAYS=45) of the top IR_FRESH_TOP=200 and the priority campaign,
+ * at most IR_FRESH_MAX_FILES=60, newest first, so a new release does not wait behind old files.
+ * IR_FRESH_DAYS=0 turns it off.
  */
 import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -23,6 +27,7 @@ import { CONFIG_STATUS_LIKE, REREAD_WINDOW_DAYS, requeueEnabled, requeueLimit, r
 import { canonResetAllowed, catchupDueAfter, clearStalePausesNow, countsAgainstCompany, creditStopAfter, exitCode, healConfigDue, healedSince, laneBudget, LOOP_REQUEST_MAX, LOOP_REQUEST_PREFIX, loopRunRow, loopSleepMs, nextDue, planLoopRequests, proseMode, stepLimit } from "./lib/loop-schedule";
 import { loadRank } from "./lib/rank";
 import { REBUILD_STATE, rebuildDue, rebuildSettings, type RebuildState } from "./lib/ir-rebuild-stale";
+import { FRESH_MAX_TRIES, freshCompanies, freshDue, freshLine, freshOutcome, freshSettings, freshSince, planFresh, settleFresh, type FreshDoc, type FreshPlan } from "./lib/ir-fresh";
 import { priorityCampaign, priorityCandidates, priorityKey, priorityList, priorityMaxRuns, restorePriority, settlePriority, unknownGroups, type PriorityState } from "./lib/ir-priority";
 import { COVERAGE } from "@/lib/coverage";
 import { fairOrder } from "@/lib/jobs/priority";
@@ -168,6 +173,8 @@ interface LoopState {
   lastRegistrantDrift?: string | null;
   /** priority campaign (IR_PRIORITY_GROUP / IR_PRIORITY_TICKERS); kept while the settings are unchanged */
   priority?: PriorityState | null;
+  /** fresh lane: lane tries per file id (at most FRESH_MAX_TRIES, then the file is left to the normal order) */
+  fresh?: { tries: Record<string, number> };
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -385,7 +392,7 @@ async function maybeRebuildStale(laneStarted: boolean) {
   const due = rebuildDue({
     enabled: REBUILD.enabled,
     running: rebuildingStale,
-    busy: busy.size,
+    busy: lanesBusy(),
     laneStarted,
     otherRebuilder: canoning,
     memUsedGB: memUsedGB(),
@@ -567,7 +574,7 @@ async function maybeProse(laneStarted = false) {
   if (prosing || !sideReady() || process.env.IR_PROSE_SWEEP === "0") return;
   // While the route is open nothing could be read. While it probes, a company lane takes the probe;
   // with no lane (deep builds idle) the sweep itself probes with one worker and one item (review F4).
-  const mode = proseMode(decision(PROSE_ROUTE).state, busy.size, laneStarted);
+  const mode = proseMode(decision(PROSE_ROUTE).state, lanesBusy(), laneStarted);
   if (!mode) return;
   if (mode === "run" && state.lastProse && Date.now() - Date.parse(state.lastProse) < 10 * 60_000) return;
   prosing = true;
@@ -916,7 +923,7 @@ async function runCompany(t: string) {
       state: decision(READER_ROUTE).state,
       healedDuringRun: healedSince(READER_ROUTE.flatMap((id) => (circuits.get(providerKey(id)) ? [circuits.get(providerKey(id))!] : [])), t0),
     });
-    log(`${t}: stopped on credits (${stopped.slice(0, 160)})${creditStop ? " — waiting the fixed interval" : ""}`);
+    log(`${t}: stopped on credits (${stopped.slice(0, 160)})${creditStop ? "; waiting the fixed interval" : ""}`);
     // A priority company keeps its place: credit stops never count against it.
     return;
   }
@@ -940,6 +947,97 @@ async function runCompany(t: string) {
       if (!p.queue.includes(t)) log(`${t}: priority: ${PRIORITY_MAX_RUNS} runs without finishing, back to the normal order`);
     }
   }
+}
+
+// ---------- fresh lane (scripts/lib/ir-fresh.ts) ----------
+const FRESH = freshSettings(process.env);
+/** a pass is reading (it holds one lane) */
+let freshRunning = false;
+let freshPasses = 0;
+let companiesSinceFresh = 0;
+/** companies of the running pass: no company run starts on them meanwhile */
+const freshBusy = new Set<string>();
+const lanesBusy = () => busy.size + (freshRunning ? 1 : 0);
+const withFresh = (b: Set<string>) => (freshBusy.size ? new Set([...b, ...freshBusy]) : b);
+if (FRESH.days > 0) {
+  state.fresh ??= { tries: {} };
+  log(`fresh lane on: files filed in the last ${FRESH.days} days of the top ${FRESH.top} and the priority campaign, at most ${FRESH.maxFiles} a pass, ${FRESH_MAX_TRIES} tries a file`);
+} else log("fresh lane off (IR_FRESH_DAYS=0)");
+
+/** Unread fresh table files of the served companies, newest first (same filter as `unread`). */
+async function freshCandidates(companies: string[]): Promise<{ docs: FreshDoc[]; truncated: boolean }> {
+  const since = freshSince(FRESH, Date.now())!;
+  const docs: FreshDoc[] = [];
+  let truncated = false;
+  for (let i = 0; i < companies.length; i += 100) {
+    await dbGate(JOB);
+    const { data, error } = await sb.from("ir_documents").select("id, ticker, kind, filed, accn").in("ticker", companies.slice(i, i + 100)).is("extract_status", null).is("extracted_at", null).or("ext.in.(htm,html),rendition_path.like.%html").filter("kind", "in", EXTRACTABLE).or("pages.is.null,pages.lte.90").gte("filed", since).order("filed", { ascending: false }).order("id").limit(1000);
+    if (error) throw new Error(error.message);
+    if ((data ?? []).length >= 1000) truncated = true;
+    docs.push(...((data ?? []) as FreshDoc[]));
+  }
+  return { docs, truncated };
+}
+
+/** One pass when due (at start, then after each company start); true when it took a lane. */
+async function startFresh(): Promise<boolean> {
+  if (!freshDue({ settings: FRESH, running: freshRunning, companiesStartedSincePass: companiesSinceFresh, passes: freshPasses })) return false;
+  freshPasses++;
+  companiesSinceFresh = 0;
+  try {
+    let rank = await loadRank();
+    // Ranking off or unreadable: the universe's own order stands in for the rank.
+    if (!rank.size) rank = new Map((await universe()).slice(0, FRESH.top).map((c, i) => [c.ticker, i + 1]));
+    const companies = freshCompanies(priorityOrder, rank, FRESH.top);
+    const { docs, truncated } = await freshCandidates(companies);
+    const plan = planFresh(docs, { settings: FRESH, nowMs: Date.now(), companies, busy, review: state.review!, tries: state.fresh!.tries, truncated });
+    state.fresh!.tries = plan.tries;
+    log(freshLine(plan, docs.length));
+    if (!plan.ids.length) return false;
+    freshRunning = true;
+    for (const t of plan.tickers) freshBusy.add(t);
+    void runFresh(plan).finally(() => {
+      freshRunning = false;
+      freshBusy.clear();
+      void saveState(state);
+    });
+    return true;
+  } catch (e) {
+    log(`fresh lane: candidates unreadable (${(e as Error).message.slice(0, 160)}); next company instead`);
+    return false;
+  }
+}
+
+/** The pass: ir-deep.ts --fresh-ids (same reader, circuits, leases and ledger as a company run). */
+async function runFresh(plan: FreshPlan) {
+  const t0 = Date.now();
+  const out = `${OUT}/fresh`;
+  mkdirSync(out, { recursive: true });
+  const lastRun = `${out}/last-run.json`;
+  rmSync(lastRun, { force: true });
+  const code = await run("fresh", "scripts/ir-deep.ts", [`--tickers=${plan.tickers.join(",")}`, `--fresh-ids=${plan.ids.join(",")}`, `--out=${out}`], `${OUT}/fresh.run.log`, childEnv);
+  let stopped: string | null = code === 0 ? null : `exit ${code}`;
+  let done: { read?: number; facts?: number; rebuilt?: string[] } = {};
+  if (existsSync(lastRun)) {
+    const j = JSON.parse(readFileSync(lastRun, "utf8")) as { stopped: string | null; fresh?: typeof done };
+    stopped = j.stopped ?? stopped;
+    done = j.fresh ?? {};
+  }
+  const outcome = freshOutcome(stopped);
+  settleFresh(state.fresh!.tries, plan.ids, outcome);
+  if (outcome === "credits") {
+    // As after a company stopped on credits: the circuit holds the lanes; the files stay waiting.
+    await refreshCircuits(true);
+    creditStop = creditStopAfter({
+      circuitOn: circuitEnabled(),
+      readable: circuitsReadable,
+      state: decision(READER_ROUTE).state,
+      healedDuringRun: healedSince(READER_ROUTE.flatMap((id) => (circuits.get(providerKey(id)) ? [circuits.get(providerKey(id))!] : [])), t0),
+    });
+    log(`fresh lane: stopped on credits (${stopped!.slice(0, 160)}), files left waiting${creditStop ? "; waiting the fixed interval" : ""}`);
+    return;
+  }
+  log(`fresh lane: pass ended in ${((Date.now() - t0) / 60000).toFixed(1)} min: ${done.read ?? 0} of ${plan.ids.length} files read, ${done.facts ?? 0} figures, rebuilt ${done.rebuilt?.join(", ") || "none"}${stopped ? ` (${outcome === "not-run" ? "reader did not start: " : ""}${stopped.slice(0, 120)})` : ""}`);
 }
 
 // ---------- freshness remedies and stale pauses ----------
@@ -1033,12 +1131,19 @@ for (;;) {
   const lanes = BATCH_ARG ?? LANES;
   // One decision for every lane: none while the route is open, one probe lane when it is due, and
   // after a heal one more lane every 5 minutes. The memory guard stays in force on top of it.
-  let allowed = laneBudget(decision(READER_ROUTE), lanes, busy.size, healedAt, Date.now());
+  let allowed = laneBudget(decision(READER_ROUTE), lanes, lanesBusy(), healedAt, Date.now());
   let laneStarted = false;
-  while (!creditStop && !rebuildingStale && allowed > 0 && memUsedGB() < MEM_GB * 0.8 && busy.size < lanes) {
+  while (!creditStop && !rebuildingStale && allowed > 0 && memUsedGB() < MEM_GB * 0.8 && lanesBusy() < lanes) {
     allowed--;
-    const t = await pickNext(busy);
+    // Fresh lane: one pass of newest files before the next company (off with IR_FRESH_DAYS=0).
+    if (await startFresh()) {
+      idleLogged = false;
+      laneStarted = true;
+      continue;
+    }
+    const t = await pickNext(withFresh(busy));
     if (!t) break;
+    companiesSinceFresh++;
     idleLogged = false;
     laneStarted = true;
     busy.add(t);
@@ -1054,15 +1159,15 @@ for (;;) {
   await maybeProse(laneStarted);
   // Idle or closed on credit (no lane started, none running): rebuild stale payloads, which needs no model.
   await maybeRebuildStale(laneStarted);
-  if (!busy.size && !creditStop && !idleLogged) {
+  if (!lanesBusy() && !creditStop && !idleLogged) {
     log("nothing readable left — waiting for the mirror to bring more files");
     idleLogged = true;
   }
   await saveState(state);
-  if (creditStop && !busy.size) {
+  if (creditStop && !lanesBusy()) {
     // Circuit could not be written or is switched off: the old fixed wait, then the next company probes.
     log(`waiting ${WAIT_MS / 60000} min for credits, then probing again`);
     await sleep(WAIT_MS);
     creditStop = false;
-  } else await sleep(loopSleepMs(busy.size, reader.state === "open" ? reader.retryAt : undefined, Date.now()));
+  } else await sleep(loopSleepMs(lanesBusy(), reader.state === "open" ? reader.retryAt : undefined, Date.now()));
 }

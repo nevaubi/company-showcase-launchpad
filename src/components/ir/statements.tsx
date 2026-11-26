@@ -27,6 +27,7 @@ import {
   type ShownRow,
 } from "@/components/ir/statement-section";
 import { IR } from "@/components/ir/typography";
+import { basisTag, isBlank, isRatioLine, notePrinted, stripes, totalKinds } from "@/components/ir/table-style";
 import type { VizLine } from "@/components/ir/viz-slots";
 import { useSource } from "@/components/source/source-context";
 import { Button } from "@/components/ui/button";
@@ -217,6 +218,29 @@ function sectionView(
   let flagged = 0;
   let held = 0;
   const lines: VizLine[] = [];
+  // Which periods each printed table of the section prints, so a cell its own table leaves empty reads as
+  // blank and a period no document prints as missing.
+  const printed = new Map<string, Set<string>>();
+  for (const m of merged.values())
+    for (const e of cols) {
+      const c = m.cells[e] ?? m.held[e];
+      if (c) notePrinted(printed, c.d, c.l, e);
+    }
+  const kinds = totalKinds(
+    rows.map((r) =>
+      r.kind === "line"
+        ? {
+            kind: "line" as const,
+            depth: r.depth,
+            total: r.total,
+            // printed marks, once the section rows carry them (finding irstyle-01)
+            bold: (r as { bold?: boolean }).bold,
+            rule: (r as { rule?: "single" | "double" }).rule,
+          }
+        : { kind: r.kind },
+    ),
+  );
+  const bands = stripes(rows);
   const shown: ShownRow[] = rows.map((r, i) => {
     if (r.kind === "gap") return { kind: "gap", id: `g${i}` };
     if (r.kind === "head") return { kind: "head", id: `h${i}`, text: r.text, depth: r.depth };
@@ -256,13 +280,26 @@ function sectionView(
       cells: cells.map((x) => (x && !x.held ? x.c : null)),
     });
     const note = sec.id === "text" ? (s.unit === "usd" ? "" : "") : scaleNote(div, s, sec.div);
+    const label = rowLabel(r, byKey);
     return {
       kind: "line",
       id: `l${i}:${r.k}`,
       s,
       depth: r.depth,
       total: r.total,
-      label: rowLabel(r, byKey),
+      tk: kinds[i],
+      stripe: bands[i],
+      mark: suffix,
+      // a money line printed in dollars inside a table in millions is a per-share line
+      ratio: isRatioLine(s.unit, s.unit === "usd" && div === 1 && sec.div > 1),
+      tag:
+        (r as { basis?: string }).basis === "restated"
+          ? "Restated"
+          : (r as { basis?: string }).basis === "older"
+            ? "Older basis"
+            : basisTag(label),
+      blank: cols.map((e, j) => !cells[j] && isBlank(r.at, e, printed)),
+      label,
       note,
       match: !!match?.(s),
       cells,

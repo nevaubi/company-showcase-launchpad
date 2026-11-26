@@ -18,6 +18,7 @@ import { EXT_PREFIX } from "@/lib/ir/external";
 import { fmtDate } from "@/lib/format";
 import { libraryTitle } from "@/lib/ir/display";
 import { cn } from "@/lib/utils";
+import "@/components/ir/table.css";
 
 const KIND_LABEL: Record<string, string> = {
   "press-release": "Releases",
@@ -232,7 +233,7 @@ export function IrLibrary({
       {!list.length ? (
         <p className="px-4 py-4 text-[13px] text-muted-foreground">{documents.length ? "No documents match these filters." : "No stored documents yet. The collector adds files for each company in rotation."}</p>
       ) : (
-        <ul className="divide-y">
+        <ul className="irt-list">
           {list.slice(0, limit).map((d) => {
             const dup = copies.get(d.id);
             return (

@@ -31,6 +31,7 @@ import type { IrPayload } from "@/lib/ir/payload";
 import { companyQuery } from "@/lib/data";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import "@/components/ir/table.css";
 
 const monthYear = (iso: string) =>
   new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -265,7 +266,14 @@ function IrXbrlBreakdowns({ ticker }: { ticker: string }) {
         title="Breakdowns tagged in the filings"
         subtitle="Segment, product and geography figures as the 10-K and 10-Q tag them in XBRL, each opening the tagged value in the filing"
       >
-        {on ? <FilingDetailView ticker={ticker} /> : <Skeleton className="m-4 h-40" />}
+        {on ? (
+          // The filings' tables take the statements' table language (head band, stripes, hover).
+          <div className="irt-root irt-scope">
+            <FilingDetailView ticker={ticker} />
+          </div>
+        ) : (
+          <Skeleton className="m-4 h-40" />
+        )}
       </IrPanel>
     </div>
   );

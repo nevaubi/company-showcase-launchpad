@@ -11,11 +11,13 @@
 // unit and total in the same printed scale with no figure in conflict); lines only other copies print (an older
 // supplement, the release's version of the table) are listed apart in the "more" group ("lines only other
 // copies print"), and a figure printed at another scale never fills a row.
-import { CATEGORY_LABEL, shownLabel } from "@/lib/ir/display";
+import { CATEGORY_LABEL, METRIC_LABEL, shownLabel } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadSeries, PayloadTable, PrintedAt, PrintedExtra } from "@/lib/ir/payload";
 import { cellsFor, heldFor, type IrPeriodKind } from "@/lib/ir/periods";
 import { parseNumber } from "@/lib/ir/tables";
 import { capitalWords, sentenceCase, type TableCaption } from "@/lib/ir/table-captions";
+import { shapeRows } from "@/lib/ir/statement-tree";
+import { basisOf } from "@/lib/ir/kpis";
 
 export type StatementRow =
   /** `k` is the line shown; `ks` every line printed in this row (the same printed cell, or the same name under the
@@ -31,8 +33,16 @@ export type StatementRow =
       /** the first printed line of a label the table wraps over two rows ("Federal funds purchased and
        *  securities loaned or" over "sold under repurchase agreements"), read before the row's own name */
       wrap?: string;
-      /** brought to its siblings' level under the total that closes its block (it lost that total in the build) */
+      /** a part the total that closes its block got back from the table (it lost that total in the build) */
       sib?: boolean;
+      /** index in the section's rows of the row it is printed as a part of (`shapeRows`) */
+      up?: number;
+      /** what tells this line from the other lines printed on the same row (column groups: "Operating
+       *  income", "margin"), shown after the printed name */
+      twin?: string;
+      /** the heading printed over it, when its stored name repeats that heading ("Cloud Memory Business Unit:
+       *  Revenue" under "Cloud Memory Business Unit"): the row reads "Revenue" */
+      under?: string;
     }
   | { kind: "head"; text: string; depth: number }
   | { kind: "gap" };
@@ -81,6 +91,10 @@ interface Table {
   rows: Map<string, number>;
   /** further printings of a line in the same table (a total that closes two blocks), as [key, row] */
   again: [string, number][];
+  /** "<key>|<row>" → the period ends whose shown or held figure this printing gives */
+  ends: Map<string, Set<string>>;
+  /** "<key>|<row>" → the first printed column of the line on that row */
+  col: Map<string, number>;
 }
 
 /** A slot of a section: a line key, or "<key>\u0001<row>" for a line printed again further down the same table. */
@@ -106,6 +120,18 @@ function placeOf(c: {
   return null;
 }
 
+function* endsOf(s: PayloadSeries): Generator<[string, PayloadCell]> {
+  for (const [kind, m] of [
+    ["q", s.q],
+    ["y", s.y],
+    ["m", s.mo ?? {}],
+    ["q", s.held?.q ?? {}],
+    ["y", s.held?.y ?? {}],
+    ["m", s.held?.mo ?? {}],
+  ] as const)
+    for (const [e, c] of Object.entries(m)) yield [`${kind}:${e}`, c];
+}
+
 function* cellsOf(s: PayloadSeries): Generator<PayloadCell> {
   for (const m of [s.q, s.y, s.mo ?? {}, s.held?.q ?? {}, s.held?.y ?? {}, s.held?.mo ?? {}])
     for (const c of Object.values(m)) yield c;
@@ -114,11 +140,20 @@ function* cellsOf(s: PayloadSeries): Generator<PayloadCell> {
 /** Every printed table of the payload with the lines it prints (from shown, held and alternative printings). */
 function tablesOf(p: IrPayload): Table[] {
   const by = new Map<string, Table>();
-  const add = (k: string, c: { d?: number; l?: PayloadCell["l"] }) => {
+  const add = (k: string, c: { d?: number; l?: PayloadCell["l"]; e?: string }, end?: string) => {
     const at = placeOf(c);
     if (!at) return;
     let t = by.get(at.id);
-    if (!t) by.set(at.id, (t = { id: at.id, d: at.d, t: at.t, rows: new Map(), again: [] }));
+    if (!t) by.set(at.id, (t = { id: at.id, d: at.d, t: at.t, rows: new Map(), again: [], ends: new Map(), col: new Map() }));
+    if (end) {
+      const id = `${k}|${at.r}`;
+      t.ends.set(id, (t.ends.get(id) ?? new Set()).add(end));
+    }
+    if (end && isTableLoc(c.l)) {
+      const id = `${k}|${at.r}`;
+      const c0 = t.col.get(id);
+      if (c0 == null || c.l[2] < c0) t.col.set(id, c.l[2]);
+    }
     const r0 = t.rows.get(k);
     if (r0 == null) t.rows.set(k, at.r);
     else if (at.r !== r0 && !t.again.some(([k2, r2]) => k2 === k && r2 === at.r)) {
@@ -129,8 +164,8 @@ function tablesOf(p: IrPayload): Table[] {
     }
   };
   for (const s of p.series) {
-    for (const c of cellsOf(s)) {
-      add(s.k, c);
+    for (const [end, c] of endsOf(s)) {
+      add(s.k, c, end);
       if (c.alt) add(s.k, c.alt);
     }
     for (const [d, t, r] of s.at ?? []) add(s.k, { d, l: [t, r, 0] });
@@ -181,12 +216,30 @@ function drafts(p: IrPayload): Draft[] {
   const out: Draft[] = [];
   const index = new Map<string, Draft[]>();
   for (const t of tables) {
-    const rows = [...t.rows.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k);
+    // Printed order; lines printed on one row (a row of several column groups) in column order.
+    const colOf = (k: string, r: number) => t.col.get(`${k}|${r}`) ?? 0;
+    const rows = [...t.rows.entries()].sort((a, b) => a[1] - b[1] || colOf(a[0], a[1]) - colOf(b[0], b[1])).map(([k]) => k);
     // The section sharing most lines with this table, among those with no copy from this document yet.
     const shared = new Map<Draft, number>();
+    // A second table of one document joins a section only as the same table printed for other periods
+    // (Intel prints its segment matrix once for this quarter and once for last year's).
+    const otherPeriods = (s: Draft) => {
+      let known = 0;
+      for (const k of rows) {
+        const a = s.anchor.rows.get(k);
+        if (a == null) continue;
+        const mine = t.ends.get(`${k}|${t.rows.get(k)}`);
+        const theirs = s.anchor.ends.get(`${k}|${a}`);
+        if (!mine?.size || !theirs?.size) continue;
+        if ([...mine].some((e) => theirs.has(e))) return false;
+        known++;
+      }
+      return known >= 2;
+    };
     for (const k of rows)
       for (const s of index.get(k) ?? [])
-        if (!s.docs.has(t.d)) shared.set(s, (shared.get(s) ?? 0) + 1);
+        if (!s.docs.has(t.d) || (s.anchor.d === t.d && otherPeriods(s)))
+          shared.set(s, (shared.get(s) ?? 0) + 1);
     let best: Draft | null = null;
     let n = 0;
     for (const [s, c] of shared)
@@ -238,6 +291,11 @@ function drafts(p: IrPayload): Draft[] {
         // One row per printed row: another line already standing for this row keeps it.
         if ([...best.slotR.entries()].some(([x, rx]) => rx === r && best!.order.includes(x)))
           continue;
+        // A printing that gives only periods the first printing does not is the same row's history, printed
+        // in another block of a matrix table (Coca-Cola's prior-year "Reported (GAAP)" row of segment columns).
+        const mine = t.ends.get(`${k}|${r}`);
+        const first = t.ends.get(`${k}|${t.rows.get(k)}`);
+        if (mine?.size && first?.size && ![...mine].some((e) => first.has(e))) continue;
         let after = -1;
         best.order.forEach((x, i) => {
           const rx = best!.slotR.get(x);
@@ -360,6 +418,29 @@ function agree(a: PayloadSeries, b: PayloadSeries) {
  * name under the same total, in the same unit, with no period where their figures differ. Groups keep the
  * section order; the first line of a group (printed in the newest copy) is the one shown.
  */
+/** A printed name without footnote marks ("(a)", "(1)", "*", "†") and a closing colon, normalised. */
+export const nameCore = (x: string) =>
+  norm(x.replace(/\s*(?:\((?:[a-z]|\d{1,2})\)|[*†‡]+)(?=\s|$|:)/g, "").replace(/:\s*$/, ""));
+
+/**
+ * Two lines carry the same printed name: equal up to footnote marks and case, or one is the other under its
+ * block's name ("Stock-based compensation expense: cost of revenue" for "Cost of revenue" under "Total
+ * stock-based compensation expense", as Broadcom's older releases were stored).
+ */
+export function sameName(a: PayloadSeries, b: PayloadSeries, byKey: Map<string, PayloadSeries>): boolean {
+  const na = nameCore(lineLabel(a));
+  const nb = nameCore(lineLabel(b));
+  if (na === nb) return true;
+  const [long, short] = na.length > nb.length ? [na, nb] : [nb, na];
+  if (!short || !long.endsWith(` ${short}`)) return false;
+  const head = long.slice(0, long.length - short.length - 1).trim();
+  const blocks = [a, b].flatMap((s) => {
+    const par = s.parent ? byKey.get(s.parent) : undefined;
+    return [par ? nameCore(lineLabel(par)).replace(/^total /, "") : "", s.bd ? nameCore(s.bd) : ""];
+  });
+  return blocks.some((x) => x && x === head);
+}
+
 /** "<doc>:<table>:<row>" without its document: the table and row number a copy prints a line at. */
 const rowOfPlace = (x: string) => x.slice(x.indexOf(":") + 1);
 
@@ -375,7 +456,7 @@ export function sameRows(
   };
   // The same name, unit and role, under the same total; or in the same named table when one lost its total.
   const same = (a: PayloadSeries, b: PayloadSeries) =>
-    norm(a.label) === norm(b.label) &&
+    sameName(a, b, byKey) &&
     a.unit === b.unit &&
     !!a.total === !!b.total &&
     (pl(a) === pl(b) || ((!a.parent || !b.parent) && !!a.bd && norm(a.bd) === norm(b.bd ?? "")));
@@ -400,7 +481,7 @@ export function sameRows(
       groups.find((g) => {
         const o = byKey.get(g.ks[0])!;
         return (
-          norm(o.label) === norm(s.label) &&
+          sameName(o, s, byKey) &&
           o.unit === s.unit &&
           !!o.total === !!s.total &&
           ![...docsIn(g.at)].some((d) => mine.has(d)) &&
@@ -448,12 +529,75 @@ export function lineLabel(s: PayloadSeries): string {
  * after merging), else the line's name.
  */
 export function rowLabel(
-  r: { k: string; ks: string[]; at?: [number, number, number]; wrap?: string },
+  r: { k: string; ks: string[]; at?: [number, number, number]; wrap?: string; twin?: string; under?: string },
   byKey: Map<string, PayloadSeries>,
 ): string {
-  const name = printedName(r, byKey);
+  let own = printedName(r, byKey);
+  if (r.under) {
+    const u = nameCore(r.under);
+    const i = own.indexOf(":");
+    if (i > 0 && nameCore(own.slice(0, i)) === u && own.slice(i + 1).trim()) {
+      const rest = own.slice(i + 1).trim();
+      own = rest.charAt(0).toUpperCase() + rest.slice(1);
+    }
+  }
+  const name = r.twin ? `${own}: ${r.twin}` : own;
   if (!r.wrap || norm(name).startsWith(norm(r.wrap))) return name;
   return `${r.wrap} ${/^[A-Z][a-z]/.test(name) && !/^[A-Z][a-z]+\s+[A-Z]/.test(name) ? name[0].toLowerCase() + name.slice(1) : name}`;
+}
+
+/** What a line measures, in words, for telling lines printed on one row apart. */
+function measureWord(s: PayloadSeries): string {
+  if (s.unit === "pct") return s.met === "margin" || /margin/i.test(s.label) ? "margin" : "percent";
+  if (s.unit === "usdPerShare") return "per share";
+  return (METRIC_LABEL[s.met] ?? s.met).toLowerCase();
+}
+
+/**
+ * Lines printed on one row of the anchor table under one name (a row of several column groups: Coca-Cola's
+ * segment revenue and operating income, P&G's net sales, pretax and net earnings) are told apart by what
+ * they measure, else by their stored table name; never two rows under one name.
+ */
+function nameTwins(rows: StatementRow[], byKey: Map<string, PayloadSeries>) {
+  const byRow = new Map<string, LineRow[]>();
+  for (const r of rows)
+    if (r.kind === "line" && r.at) {
+      const id = r.at.join(":");
+      byRow.set(id, [...(byRow.get(id) ?? []), r]);
+    }
+  for (const list of byRow.values()) {
+    if (list.length < 2) continue;
+    const names = new Map<string, LineRow[]>();
+    for (const r of list) {
+      const n = nameCore(printedName(r, byKey));
+      names.set(n, [...(names.get(n) ?? []), r]);
+    }
+    for (const same of names.values()) {
+      if (same.length < 2) continue;
+      const tries = [
+        (r: LineRow) => measureWord(byKey.get(r.k)!),
+        (r: LineRow) => byKey.get(r.k)!.bd ?? "",
+      ];
+      for (const q of tries) {
+        const words = same.map(q);
+        if (words.every(Boolean) && new Set(words.map((w) => w.toLowerCase())).size === same.length) {
+          same.forEach((r, i) => (r.twin = words[i]));
+          break;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * A printed heading as the document prints it: only one shouted in capitals ("NONINTEREST EXPENSE") is put in
+ * sentence case; "Client and Gaming Segment" keeps its case. A closing colon goes.
+ */
+export function headText(h: string, keep: Set<string>): string {
+  const t = h.trim().replace(/\s*:\s*$/, "");
+  const words = t.split(/\s+/).filter((w) => /[a-z]{2}/i.test(w));
+  const caps = words.filter((w) => !/[a-z]/.test(w)).length;
+  return shownLabel(caps * 2 >= words.length ? sentenceCase(t, keep) : t);
 }
 
 /** Words a printed label can break after only mid-phrase: a row ending in one continues on the next row. */
@@ -466,8 +610,10 @@ function printedName(
   byKey: Map<string, PayloadSeries>,
 ): string {
   const s = byKey.get(r.k)!;
+  // A balance's period change the build split off the same cells ("<name>: net change") names the row last.
+  const derived = (k: string) => /:\s*net change$/i.test(byKey.get(k)?.label ?? "");
   if (r.at)
-    for (const k of r.ks) {
+    for (const k of [...r.ks.filter((x) => !derived(x)), ...r.ks.filter(derived)]) {
       const hit = byKey
         .get(k)
         ?.at?.find((x) => x[0] === r.at![0] && x[1] === r.at![1] && x[2] === r.at![2]);
@@ -489,6 +635,7 @@ export function tableTitle(t: string): boolean {
     x.length > 0 &&
     x.length <= 90 &&
     !/^[•·▪◦‣*-]/.test(x) &&
+    !(/[a-z]\.\s*$/.test(x) && x.split(/\s+/).length >= 4) &&
     !/\d\s*%|\$\s*\d|\d\s*(bps|basis points)\b/i.test(x)
   );
 }
@@ -538,6 +685,11 @@ export function assembleStatements(p: IrPayload): Statement[] {
     const wraps = new Map((cap?.heads ?? []).filter(([, h]) => wrapped(h)));
     const blank = new Set(cap?.blank ?? []);
     const onTable = !dr.anchor.t.startsWith("p");
+    // A table printing one set of lines under two bases (reported and comparable): each block is headed by its
+    // basis where the document's own heading was not kept.
+    const basisOfKey = (k: string) => basisOf(byKey.get(k)?.bd);
+    const bases = new Set(keys.map(basisOfKey).filter(Boolean));
+    let lastBasis: string | null = null;
     const rows: StatementRow[] = [];
     let prevR: number | null = null;
     for (const { slot, ks } of groups) {
@@ -550,12 +702,17 @@ export function assembleStatements(p: IrPayload): Statement[] {
         let gap = false;
         for (let i = prevR + 1; i < r; i++) {
           const h = heads.get(i);
-          if (h) between.push({ kind: "head", text: shownLabel(sentenceCase(h, keep)), depth: 0 });
+          if (h) between.push({ kind: "head", text: headText(h, keep), depth: 0 });
           else if (blank.has(i) || !cap) {
             // A spacer band closes the headings above it: their rows are not in this section (the reader
             // did not keep them), so they would head the wrong lines.
             between.length = 0;
             gap = true;
+          } else if (!wraps.has(i)) {
+            // A printed row the reader did not keep: the headings above it head that row, not this line
+            // (Oracle's growth-rate headings over unread percentage rows).
+            if (between.length) gap = true;
+            between.length = 0;
           }
         }
         if (between.length) {
@@ -564,9 +721,21 @@ export function assembleStatements(p: IrPayload): Statement[] {
             rows.push({ ...h, depth: Math.max(0, depth - 1) } as StatementRow);
         } else if (gap) rows.push({ kind: "gap" });
       } else if (r != null && prevR == null && cap) {
-        const before = [...heads.entries()].filter(([i]) => i < r && i >= r - 2);
+        const before = [...heads.entries()].filter(
+          ([i]) => i < r && i >= r - 2 && [...Array(r - i - 1).keys()].every((x) => heads.has(i + 1 + x) || blank.has(i + 1 + x) || wraps.has(i + 1 + x)),
+        );
         for (const [, h] of before)
-          rows.push({ kind: "head", text: shownLabel(sentenceCase(h, keep)), depth: Math.max(0, depth - 1) });
+          rows.push({ kind: "head", text: headText(h, keep), depth: Math.max(0, depth - 1) });
+      }
+      if (bases.size > 1) {
+        const b = basisOfKey(k);
+        if (b && b !== lastBasis) {
+          if (rows.at(-1)?.kind !== "head") {
+            if (rows.at(-1)?.kind === "line") rows.push({ kind: "gap" });
+            rows.push({ kind: "head", text: shownLabel(sentenceCase(byKey.get(k)!.bd!, keep)), depth: 0 });
+          }
+          lastBasis = b;
+        }
       }
       if (r != null) prevR = r;
       // Bold with a rule only where the section prints parts of it; a total of parts printed elsewhere reads as a line.
@@ -582,10 +751,31 @@ export function assembleStatements(p: IrPayload): Statement[] {
         ...(r != null && wraps.has(r - 1) ? { wrap: wraps.get(r - 1)!.trim() } : {}),
       });
     }
-    levelSiblings(rows, byKey);
+    nameTwins(rows, byKey);
+    let head = "";
+    for (const r of rows) {
+      if (r.kind === "head") head = r.text;
+      else if (r.kind === "gap") continue;
+      else if (head) {
+        const own = printedName(r, byKey);
+        const i = own.indexOf(":");
+        if (i > 0 && nameCore(own.slice(0, i)) === nameCore(head)) r.under = head;
+      }
+    }
+    shapeRows(
+      rows,
+      byKey,
+      (r) => rowLabel(r as LineRow, byKey),
+      (r, f) => rowCells(r.ks, byKey, f, (r as LineRow).at).cells,
+    );
     const lines = keys.map((k) => byKey.get(k)!);
     const money = lines.filter((s) => s.unit === "usd");
-    const div = mode(money.map(lineDiv)) ?? 1;
+    // The section's scale is the one its own table prints (a line can also be printed in another table at
+    // another scale).
+    const ownDiv = rows.flatMap((r) =>
+      r.kind === "line" && byKey.get(r.k)?.unit === "usd" ? (mode(ownScale(r.ks, byKey, r.at).ownDivs) ?? []) : [],
+    );
+    const div = mode(ownDiv.length ? ownDiv : money.map(lineDiv)) ?? 1;
     const bds = lines.map((s) => s.bd).filter((x): x is string => !!x);
     const printed = cap?.title && tableTitle(cap.title) ? shownLabel(sentenceCase(cap.title, keep)) : "";
     const bd = mode(bds);
@@ -707,7 +897,8 @@ function mergeFragments(p: IrPayload, small: Statement[], main: number | undefin
       text: s.source ? `${s.title} (${s.source})` : s.title,
       depth: 0,
     });
-    for (const r of s.rows) if (r.kind === "line") rows.push({ ...r, depth: 0, total: false });
+    for (const r of s.rows)
+      if (r.kind === "line") rows.push({ ...r, depth: 0, total: false, up: undefined, sib: undefined });
   }
   const divs = small.map((s) => s.div);
   return {
@@ -725,6 +916,32 @@ function mergeFragments(p: IrPayload, small: Statement[], main: number | undefin
     cat: mode(small.map((s) => s.cat)) ?? "kpi",
     doc: main ?? small[0].doc,
   };
+}
+
+/** The scales a row's own table prints its figures at (cells located there and the table's own printings). */
+function ownScale(ks: string[], byKey: Map<string, PayloadSeries>, at?: [number, number, number]) {
+  const ownDivs: number[] = [];
+  const ownOf = (k: string) =>
+    at
+      ? ((byKey.get(k)?.at?.find((x) => x[0] === at[0] && x[1] === at[1] && x[2] === at[2] && x.length > 3)?.[3] as
+          | PrintedExtra
+          | undefined)?.v ?? {})
+      : {};
+  if (at)
+    for (const k of ks) {
+      const s = byKey.get(k);
+      if (!s || (s.unit !== "usd" && s.unit !== "count")) continue;
+      for (const c of cellsOf(s))
+        if (c.d === at[0] && Array.isArray(c.l) && c.l[0] === at[1]) {
+          const d = printedDiv(c);
+          if (d != null) ownDivs.push(d);
+        }
+      for (const [val, , text] of Object.values(ownOf(k))) {
+        const d = printedDiv({ v: val, x: text });
+        if (d != null) ownDivs.push(d);
+      }
+    }
+  return { ownDivs, ownOf };
 }
 
 /**
@@ -747,36 +964,42 @@ export function rowCells(
   const held: Record<string, PayloadCell> = {};
   const from: Record<string, string> = {};
   const lead = byKey.get(ks[0]);
-  const rowDiv = lead ? knownDiv(lead) : null;
+  // The row's printed scale: its own table's printing where it has one (Netflix prints regional revenue in
+  // thousands in one table and in millions in another; one series holds both), else the lead line's.
+  const { ownDivs, ownOf } = ownScale(ks, byKey, at);
+  const rowDiv = mode(ownDivs) ?? (lead ? knownDiv(lead) : null);
   const fits = (c: PayloadCell) => {
     if (rowDiv == null) return true;
     const d = printedDiv(c);
     return d == null || d === rowDiv;
   };
+  // A shown figure printed at another scale than the row's table: kept aside, in case the table's own
+  // printing of that period replaces it below.
+  const other: Record<string, [PayloadCell, string]> = {};
   for (const [i, k] of ks.entries()) {
     const s = byKey.get(k);
     if (!s) continue;
     for (const [e, c] of Object.entries(cellsFor(s, freq)))
-      if (!cells[e] && !held[e] && (i === 0 || fits(c))) {
+      if (!cells[e] && !held[e] && ((i === 0 && !ownDivs.length) || fits(c))) {
         cells[e] = c;
         from[e] = k;
-      }
+      } else if (!other[e]) other[e] = [c, k];
     for (const [e, c] of Object.entries(heldFor(s, freq)))
-      if (!cells[e] && !held[e] && (i === 0 || fits(c))) {
+      if (!cells[e] && !held[e] && ((i === 0 && !ownDivs.length) || fits(c))) {
         held[e] = c;
         from[e] = k;
       }
   }
   if (at && (freq === "q" || freq === "y"))
     for (const k of ks) {
-      const own = byKey
-        .get(k)
-        ?.at?.find((x) => x[0] === at[0] && x[1] === at[1] && x[2] === at[2] && x.length > 3);
-      const v = (own?.[3] as PrintedExtra | undefined)?.v;
-      if (!v) continue;
+      const v = ownOf(k);
       for (const [key, [val, col, text]] of Object.entries(v)) {
         const [kind, e] = key.split(":");
         if (kind !== freq) continue;
+        if (!cells[e] && !held[e] && other[e]?.[1] === k) {
+          cells[e] = other[e][0];
+          from[e] = k;
+        }
         const c = cells[e];
         if (!c || from[e] !== k || c.v === val) continue;
         cells[e] = {
@@ -797,65 +1020,15 @@ export function rowCells(
 
 type LineRow = Extract<StatementRow, { kind: "line" }>;
 
-/** Whether a row's line (any of its identities) is stored under the total row `t`. */
-const childOf = (r: LineRow, t: LineRow, byKey: Map<string, PayloadSeries>) =>
-  r.ks.some((k) => {
-    const par = byKey.get(k)?.parent;
-    return !!par && t.ks.includes(par);
-  });
-const orphan = (r: LineRow, byKey: Map<string, PayloadSeries>) =>
-  r.ks.every((k) => !byKey.get(k)?.parent);
-
-/**
- * The parts a total row closes, as its own table prints them: the lines of its block above it (up to a
- * heading or a line of the total's own level that belongs elsewhere; spacer bands are crossed), one level under it, and
- * lines at its own level stored under it or under no total at all (siblings that lost their total in the
- * build). Rows deeper than that are parts of a part. Indexes into `rows`.
- */
-export function blockParts(rows: StatementRow[], i: number, byKey: Map<string, PayloadSeries>): number[] {
+/** The parts a total row closes, as its own table prints them (`shapeRows`): indexes into `rows`. */
+export function blockParts(rows: StatementRow[], i: number, _byKey?: Map<string, PayloadSeries>): number[] {
   const t = rows[i];
   if (t?.kind !== "line" || !t.total) return [];
   const out: number[] = [];
-  for (let j = i - 1; j >= 0; j--) {
-    const r = rows[j];
-    // A spacer band can sit inside a block (JPM prints one in the middle of noninterest revenue).
-    if (r.kind === "gap") continue;
-    if (r.kind !== "line") break;
-    if (r.depth > t.depth + 1) continue;
-    // A row at its parts' level is a part; one at the total's own level only when it lost its total.
-    if (r.depth <= t.depth && !childOf(r, t, byKey) && (r.total || !orphan(r, byKey))) break;
-    out.unshift(j);
-  }
-  return out;
-}
-
-/**
- * Siblings printed at one level render at one level: when a total's block has a part stored under it (one
- * level in) beside parts that lost their total in the build (Commercial & Investment Bank's noninterest
- * expense, also printed as the top of its own segment table), those come in to the same level, with the rows
- * printed under them.
- */
-function levelSiblings(rows: StatementRow[], byKey: Map<string, PayloadSeries>) {
-  rows.forEach((t, i) => {
-    if (t.kind !== "line" || !t.total) return;
-    const parts = blockParts(rows, i, byKey);
-    const want = t.depth + 1;
-    if (!parts.some((j) => (rows[j] as LineRow).depth === want && childOf(rows[j] as LineRow, t, byKey))) return;
-    const inBlock = new Set(parts);
-    for (const j of parts) {
-      const r = rows[j] as LineRow;
-      const shift = want - r.depth;
-      if (shift <= 0) continue;
-      const from = r.depth;
-      r.depth = want;
-      r.sib = true;
-      for (let x = j + 1; x < i; x++) {
-        const u = rows[x];
-        if (u.kind !== "line" || inBlock.has(x) || u.depth <= from) break;
-        u.depth += shift;
-      }
-    }
+  rows.forEach((r, j) => {
+    if (r.kind === "line" && r.up === i) out.push(j);
   });
+  return out;
 }
 
 /**
@@ -880,9 +1053,7 @@ export function sectionChecks(
     if (t.kind !== "line" || !t.total) return;
     // The rows of its block stored under it, and the siblings brought to their level; other rows the block
     // shows at that level (stored under another line) are not its parts.
-    const parts = blockParts(sec.rows, i, byKey)
-      .map((j) => sec.rows[j] as LineRow)
-      .filter((r) => r.depth === t.depth + 1 && (childOf(r, t, byKey) || r.sib));
+    const parts = blockParts(sec.rows, i).map((j) => sec.rows[j] as LineRow);
     for (const freq of ["q", "y"] as const) {
       const tc = rowCells(t.ks, byKey, freq, t.at);
       const pc = parts.map((r) => rowCells(r.ks, byKey, freq, r.at).cells);

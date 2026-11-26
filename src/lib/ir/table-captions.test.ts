@@ -37,6 +37,36 @@ describe("tableCaptions", () => {
   });
 });
 
+// Shapes of Micron's Q4 FY26 release (title in the table's first row over "FQ4-26" heads, a highlight bullet
+// before the table) and Texas Instruments' Q3 2026 release (the legal name above the table, the title in the
+// label cell of the period-heads row), as the SEC copies print them (audb-06).
+const MU = `<p>• Operating cash flow of $89.68 billion versus $17.53 billion for the prior year</p>
+<table><tr><td></td></tr><tr><td>Quarterly Financial Results</td></tr><tr><td>(in millions, except per share amounts)</td><td>GAAP (1)</td><td></td><td>Non-GAAP (2)</td></tr>
+<tr><td>FQ4-26</td><td>FQ3-26</td><td>FQ4-25</td></tr><tr><td>Revenue</td><td>$</td><td>54,229</td><td>41,456</td></tr></table>`;
+const TXN = `<p>TEXAS INSTRUMENTS INCORPORATED AND SUBSIDIARIES</p>
+<table><tr><td></td></tr><tr><td>Consolidated Statements of Income</td><td></td><td>For Three Months Ended September 30,</td></tr>
+<tr><td>(In millions, except per-share amounts)</td><td></td><td>2026</td><td></td><td>2025</td></tr><tr><td>Revenue</td><td>$</td><td>6,055</td><td>$</td><td>4,742</td></tr></table>`;
+
+// Netflix's Q3'26 letter: a paragraph ends with "Our summary results, and forecast for Q4, are below." over an
+// untitled table (audd-07).
+const NFLX = `<p>Our summary results, and forecast for Q4, are below.</p>
+<table><tr><td>(in millions except per share data)</td><td>Q3'25</td><td>Q3'26</td></tr><tr><td>Revenue</td><td>$</td><td>11,510</td><td>12,874</td></tr></table>`;
+
+describe("tableCaptions: titles inside the table", () => {
+  it("NFLX: a paragraph's closing sentence is not a title", () => {
+    const [c] = tableCaptions(NFLX, "Netflix");
+    expect(c.title).toBeUndefined();
+  });
+  it("MU: a first-row title over quarter marks, never the highlight bullet before the table", () => {
+    const [c] = tableCaptions(MU, "Micron");
+    expect(c.title).toBe("Quarterly Financial Results");
+  });
+  it("TXN: the title in the period-heads row's label cell, never the legal name over the statements", () => {
+    const [c] = tableCaptions(TXN, "Texas Instruments");
+    expect(c.title).toBe("Consolidated Statements of Income");
+  });
+});
+
 describe("sentenceCase", () => {
   const keep = capitalWords([
     "CCB average balances",

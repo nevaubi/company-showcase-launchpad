@@ -10,6 +10,7 @@ import { useSource } from "@/components/source/source-context";
 import { partnerFile } from "@/lib/data";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import "@/components/ir/table.css";
 
 /** [end, value, period label, doc id, page, quote, sheet, cell, derived formula, printed value] */
 type StdPoint = [
@@ -236,7 +237,7 @@ export function IrStandardKpis({ ticker }: { ticker: string }) {
         </Link>
       }
     >
-      <div className="relative overflow-x-auto scrollbar-thin">
+      <div className="irt-root irt-scope relative overflow-x-auto scrollbar-thin">
         <table className={cn("w-full min-w-[34rem] border-separate border-spacing-0", IR.row)}>
           <thead className={IR.caption}>
             <tr>

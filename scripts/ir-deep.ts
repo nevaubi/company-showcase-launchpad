@@ -10,6 +10,10 @@
  * left; without it the run is uncapped (owner, Nov 13) and the ledger only records spend.
  *   bun scripts/ir-deep.ts --tickers=CVS,MCK [--budget=200] [--model=google/gemini-3.1-flash-lite]
  *     [--escalate=openai/gpt-6-luna] [--chunk=16000] [--skip-prepare] [--include-existing] [--continue=CVS] [--reset-ledger]
+ * Fresh lane (scripts/lib/ir-fresh.ts): --fresh-ids=<id,id> reads only those table files of the
+ * --tickers companies with the same reader and settings, then rebuilds each company that gained
+ * figures (rebuildCompany, as after a company's tables); no dates, conversion, slides, text, retry or
+ * report, so a company's stage is unchanged. last-run.json in --out carries the stop reason.
  */
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -201,6 +205,49 @@ async function report(ticker: string, parts: Record<string, unknown>) {
   await sb.storage.from("ir-documents").upload(`ops/ir-deep/${ticker}.json`, new Blob([JSON.stringify(r)], { type: "application/json" }), { upsert: true, contentType: "application/json" }).then(undefined, () => undefined);
   log(`REPORT ${JSON.stringify(r)}`);
   return r;
+}
+
+// ---------- fresh lane: only the given files ----------
+if (args["fresh-ids"] !== undefined) {
+  const ids = args["fresh-ids"].split(",").map((s) => s.trim()).filter(Boolean);
+  const startedAt = new Date().toISOString();
+  const logFile = join(OUT, "fresh.extract.log");
+  log(`fresh: ${ids.length} files of ${TICKERS.join(", ")}`);
+  let stop: string | null = null;
+  let read = 0;
+  let gained = 0;
+  const rebuilt: string[] = [];
+  const c = await cap(1);
+  if (ids.length && c < 0.5) stop = "budget spent";
+  else if (ids.length) {
+    const r = await run("fresh-extract", "scripts/ir-extract.ts", [...readerArgs(TICKERS.join(","), c), `--ids=${ids.join(",")}`, `--chunk=${CHUNK}`, `--concurrency=${process.env.IR_EXTRACT_CONCURRENCY ?? "20"}`, "--chunk-concurrency=4", `--max=${ids.length}`], logFile);
+    if (r.spend) {
+      await addSpend(r.spend.credits);
+      read = r.spend.done;
+      gained = r.spend.facts;
+      stop = r.spend.stop;
+    } else stop = `extract exited ${r.code} without a spend report (see ${logFile})`;
+    // Companies whose files were read in this pass and whose payload is older than that read.
+    await dbGate("ir-deep");
+    const { data: done } = await sb.from("ir_documents").select("ticker, extracted_at, extract_facts").in("id", ids).gte("extracted_at", startedAt);
+    const lastRead = new Map<string, string>();
+    for (const d of done ?? []) if ((d.extract_facts ?? 0) > 0 && d.extracted_at && d.extracted_at > (lastRead.get(d.ticker) ?? "")) lastRead.set(d.ticker, d.extracted_at);
+    for (const [t, at] of lastRead) {
+      const { data: row } = await sb.from("ir_company_series").select("built_at").eq("ticker", t).maybeSingle();
+      if (row?.built_at && Date.parse(row.built_at) > Date.parse(at)) continue;
+      try {
+        await dbGate("ir-deep");
+        await rebuildCompany(t);
+        rebuilt.push(t);
+      } catch (e) {
+        log(`${t}: rebuild failed: ${(e as Error).message.slice(0, 160)}`);
+      }
+    }
+  }
+  await ledgerLock;
+  writeFileSync(join(OUT, "last-run.json"), JSON.stringify({ at: new Date().toISOString(), queue: TICKERS, stopped: stop, fresh: { files: ids.length, read, facts: gained, rebuilt } }));
+  log(`fresh: ${read} of ${ids.length} files read, ${gained} figures, rebuilt ${rebuilt.join(", ") || "none"}${stop ? ` (stopped: ${stop})` : ""}`);
+  process.exit(0);
 }
 
 // ---------- main ----------

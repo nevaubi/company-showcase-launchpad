@@ -22,6 +22,7 @@ import type { IrPayload, PayloadCell, PayloadCheck, PayloadSeries } from "@/lib/
 import type { SecCheck } from "@/lib/ir/sec-check";
 import { assembleStatements, lineLabel, sectionChecks, type Statement } from "@/lib/ir/statements";
 import { cn } from "@/lib/utils";
+import "@/components/ir/table.css";
 
 /** Items per list before the rest is counted. */
 const CAP = 150;
@@ -152,13 +153,15 @@ export function IrChecksDrawer({
   const openItem = (x: Item) => openIrCell(src.open, ticker, payload, x.s, x.e, x.kind, x.c);
   const list = (title: string, items: Item[], mark: ReactNode, note: string) =>
     items.length > 0 && (
-      <section className="border-t px-4 py-3" data-section={`IR checks: ${title}`}>
-        <h3 className={IR.group}>
-          {title}{" "}
-          <span className={cn("font-normal", IR.caption)}>· {items.length.toLocaleString()}</span>
-        </h3>
-        <p className={cn("mb-1.5", IR.caption)}>{note}</p>
-        <ul className="grid grid-cols-1 gap-0.5">
+      <section className="irt-root pb-3" data-section={`IR checks: ${title}`}>
+        <div className="irt-sec-head mb-1.5 px-4 py-1.5">
+          <h3 className={IR.group}>
+            {title}{" "}
+            <span className={cn("font-normal", IR.caption)}>· {items.length.toLocaleString()}</span>
+          </h3>
+          <p className={IR.caption}>{note}</p>
+        </div>
+        <ul className="irt-list mx-3 grid grid-cols-1">
           {items.slice(0, CAP).map((x, i) => (
             <li key={`${x.s.k}|${x.kind}|${x.e}|${i}`}>
               <button

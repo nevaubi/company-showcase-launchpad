@@ -15,7 +15,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AltMark, CheckDot, HeldMark } from "@/components/ir/marks";
-import { DASH, IR, indentStyle } from "@/components/ir/typography";
+import { DASH, IR } from "@/components/ir/typography";
+import { BLANK, labelStyle, levelClass, splitMark, type TotalKind } from "@/components/ir/table-style";
+import "@/components/ir/table.css";
 import { IrSectionViz, hasSectionViz, type VizLine } from "@/components/ir/viz-slots";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadSeries } from "@/lib/ir/payload";
 import type { IrPeriodKind, PeriodHead } from "@/lib/ir/periods";
@@ -34,6 +36,18 @@ export type ShownRow =
       s: PayloadSeries;
       depth: number;
       total: boolean;
+      /** subtotal or grand total as set (`totalKinds`) */
+      tk: TotalKind;
+      /** a faint band on every other line of a block */
+      stripe: boolean;
+      /** the unit mark printed after the figures (%, ×, bps), set muted */
+      mark: string;
+      /** a ratio, percentage, basis-point or per-share line */
+      ratio: boolean;
+      /** a small label for a restated or older-basis line */
+      tag: string | null;
+      /** per column: the section's own table prints the period but nothing in this row */
+      blank: boolean[];
       label: string;
       /** quiet note after the label ("in billions", "at period end") */
       note: string;
@@ -112,8 +126,13 @@ export const StatementSection = memo(function StatementSection({
   const body = useRef<HTMLDivElement>(null);
   const chartable = hasSectionViz(view.lines);
   // The head strip follows the body's sideways scroll; long histories open at the newest columns.
+  const root = useRef<HTMLElement>(null);
   const sync = useCallback(() => {
-    if (head.current && body.current) head.current.scrollLeft = body.current.scrollLeft;
+    const b = body.current;
+    if (!b) return;
+    if (head.current) head.current.scrollLeft = b.scrollLeft;
+    // The first column casts a soft edge while columns are hidden under it.
+    root.current?.toggleAttribute("data-scrolled", b.scrollLeft > 1);
   }, []);
   useEffect(() => {
     const b = body.current;
@@ -133,6 +152,9 @@ export const StatementSection = memo(function StatementSection({
   );
   const col = colWidth(widest);
   const minWidth = `calc(var(--fc) + ${cols.length} * var(--col))`;
+  // A short history keeps its figures near their labels, as a printed page does: the label column grows by
+  // at most 12rem past its set width, and the table leaves the rest of the row empty.
+  const width = `min(100%, calc(var(--fc) + 12rem + ${cols.length} * var(--col)))`;
   const colgroup = (
     <colgroup>
       <col style={{ width: "var(--fc)" }} />
@@ -150,12 +172,13 @@ export const StatementSection = memo(function StatementSection({
 
   return (
     <section
+      ref={root}
       aria-labelledby={titleId}
       data-statement={sec.id}
-      className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px)+0.5rem)] pt-3", FIRST)}
+      className={cn("irt-root min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px)+0.5rem)] pt-4", FIRST)}
       style={{ "--col": col } as CSSProperties}
     >
-      <header className="flex flex-col gap-x-3 gap-y-1.5 px-4 pb-2 sm:flex-row sm:items-start">
+      <header className="irt-sec-head flex flex-col gap-x-3 gap-y-1.5 px-4 py-2 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className={IR.group}>
             {sec.title}
@@ -281,28 +304,27 @@ export const StatementSection = memo(function StatementSection({
             ref={head}
             aria-hidden
             data-head-strip
-            className="sticky top-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px))] z-20 overflow-hidden border-y bg-card"
+            className="irt-colhead sticky top-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px))] z-20 overflow-hidden"
           >
             <table
-              className={cn("w-full table-fixed border-separate border-spacing-0", IR.row)}
-              style={{ minWidth }}
+              className={cn("table-fixed border-separate border-spacing-0", IR.row)}
+              style={{ minWidth, width }}
             >
               {colgroup}
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-card py-1 pl-4 pr-3 text-left align-bottom font-normal" />
+                  <th className="irt-fc sticky left-0 z-10 py-1 pl-4 pr-3 text-left align-bottom font-normal" />
                   {heads.map((h, i) => (
                     <th
                       key={cols[i]}
-                      className="whitespace-nowrap py-1 pl-2 pr-5 text-right align-bottom font-normal"
+                      className={cn(
+                        "whitespace-nowrap py-1 pl-2 pr-5 text-right align-bottom font-normal",
+                        i === heads.length - 1 && "irt-latest",
+                      )}
                       title={periodLong(cols[i], freq)}
                     >
-                      <span className="num block text-[11px] font-medium text-foreground">
-                        {h.main}
-                      </span>
-                      {h.sub && (
-                        <span className="num block text-[11px] text-muted-foreground">{h.sub}</span>
-                      )}
+                      <span className="irt-period num block text-[11px]">{h.main}</span>
+                      {h.sub && <span className="irt-date num block text-[11px]">{h.sub}</span>}
                     </th>
                   ))}
                 </tr>
@@ -316,8 +338,8 @@ export const StatementSection = memo(function StatementSection({
           >
             <table
               aria-labelledby={titleId}
-              className={cn("w-full table-fixed border-separate border-spacing-0", IR.row)}
-              style={{ minWidth }}
+              className={cn("table-fixed border-separate border-spacing-0", IR.row)}
+              style={{ minWidth, width }}
             >
               {colgroup}
               <thead className="sr-only">
@@ -330,45 +352,51 @@ export const StatementSection = memo(function StatementSection({
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="irt-body">
                 {rows.map((r) => {
                   if (r.kind === "gap")
                     return (
-                      <tr key={r.id} aria-hidden>
+                      <tr key={r.id} aria-hidden className="irt-gap">
                         <td colSpan={cols.length + 1} className="h-1.5 p-0" />
                       </tr>
                     );
                   if (r.kind === "head")
                     return (
-                      <tr key={r.id}>
+                      <tr key={r.id} className="irt-group">
                         <th
                           scope="rowgroup"
                           colSpan={cols.length + 1}
-                          className="whitespace-nowrap bg-card pb-0 pr-3 pt-1 text-left text-[12px] font-medium leading-5 text-muted-foreground"
-                          style={indentStyle(r.depth)}
+                          className="whitespace-nowrap py-0.5 pr-3 text-left leading-5"
+                          style={labelStyle(r.depth)}
                         >
                           <span className="sticky left-4">{r.text}</span>
                         </th>
                       </tr>
                     );
-                  const rule = r.total ? "border-t border-t-foreground/25" : "";
+                  const last = cols.length - 1;
                   return (
-                    <tr key={r.id} className="group">
+                    <tr
+                      key={r.id}
+                      className={cn(
+                        "irt-line",
+                        levelClass(r.depth),
+                        r.stripe && "irt-stripe",
+                        r.tk !== "none" && `irt-${r.tk}`,
+                        r.ratio && "irt-ratio",
+                        r.match && "irt-match",
+                      )}
+                    >
                       <th
                         scope="row"
-                        className={cn(
-                          "sticky left-0 z-[1] truncate bg-card py-0.5 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary",
-                          r.total && IR.total,
-                          rule,
-                          r.match && "bg-highlight-soft",
-                        )}
-                        style={indentStyle(r.depth)}
+                        className="irt-fc sticky left-0 z-[1] truncate py-0.5 pr-3 text-left font-normal"
+                        style={labelStyle(r.depth)}
                         title={r.note ? `${r.label} (${r.note})` : r.label}
                       >
                         {r.label}
                         {r.note && (
                           <span className={cn("ml-1 font-normal", IR.caption)}>{r.note}</span>
                         )}
+                        {r.tag && <span className="irt-tag">{r.tag}</span>}
                       </th>
                       {r.cells.map((x, i) => {
                         const e = cols[i];
@@ -377,25 +405,21 @@ export const StatementSection = memo(function StatementSection({
                             <td
                               key={e}
                               className={cn(
-                                "py-0.5 pl-2 pr-5 transition-colors duration-150 group-hover:bg-secondary/60",
+                                "py-0.5 pl-2 pr-5",
                                 IR.num,
-                                IR.missing,
-                                rule,
+                                "irt-missing",
+                                i === last && "irt-latest",
                               )}
+                              title={r.blank[i] ? "The table prints nothing here" : "No stored document prints this period"}
                             >
-                              {DASH}
+                              {r.blank[i] ? BLANK : DASH}
                             </td>
                           );
                         const off = x.check && !x.check.ok && !x.check.partial;
                         const tied = x.check?.ok && !x.check.partial;
+                        const [fig, mark] = splitMark(x.text, r.mark);
                         return (
-                          <td
-                            key={e}
-                            className={cn(
-                              "p-0 transition-colors duration-150 group-hover:bg-secondary/60",
-                              rule,
-                            )}
-                          >
+                          <td key={e} className={cn("p-0", i === last && "irt-latest")}>
                             <button
                               type="button"
                               onClick={() => openCell(x.s, e, x.c)}
@@ -405,11 +429,13 @@ export const StatementSection = memo(function StatementSection({
                                 "py-0.5",
                                 IR.num,
                                 CELL_LAYOUT,
-                                r.total && IR.total,
                                 x.held && "text-muted-foreground",
                               )}
                             >
-                              <span className={cn(x.c.f && IR.derived)}>{x.text}</span>
+                              <span className={cn(x.c.f && IR.derived)}>
+                                {fig}
+                                {mark && <span className="irt-mark">{mark}</span>}
+                              </span>
                               <span aria-hidden data-gutter className={GUTTER}>
                                 {x.held ? (
                                   <HeldMark />

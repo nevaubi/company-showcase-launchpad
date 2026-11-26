@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { partnerFile } from "@/lib/data";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import "@/components/ir/table.css";
 
 /** Tables parsed server-side from stored IR documents (pipeline: etl/docling_ingest.py, Docling layout + TableFormer). */
 interface DocTablesIndex {
@@ -64,7 +65,7 @@ function TableView({ t }: { t: DocTablesFile["tables"][number] }) {
   const head = t.rows.slice(0, nHeader);
   const body = t.rows.slice(nHeader);
   return (
-    <div className="overflow-x-auto rounded-md border scrollbar-thin">
+    <div className="irt-root irt-scope overflow-x-auto rounded-md border scrollbar-thin">
       <table className="w-full text-[13px]">
         <thead>
           {head.map((r, i) => (

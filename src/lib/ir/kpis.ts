@@ -650,6 +650,9 @@ export function buildIrSeries(
     else if (Math.abs(prev - f.value) > Math.max(Math.abs(prev) * 0.001, 1)) conflicts.add(seriesKey(f));
   }
   for (const k of levelSplits(facts)) conflicts.add(k);
+  // One document printing a line under two bases (Coca-Cola's reported and comparable revenue by segment):
+  // two lines even in a period where the figures agree.
+  for (const k of basisSplits(facts)) conflicts.add(k);
   const scopeOf = (f: IrFact) => (conflicts.has(seriesKey(f)) ? scopeName(f.breakdown) || "unscoped" : null);
   for (const f of facts) {
     const scope = scopeOf(f);
@@ -962,6 +965,9 @@ function mergeFlattened(bySeries: Map<string, IrSeries>, qv: Map<string, Map<str
           for (const [end, vs] of src) dst.set(end, [...(dst.get(end) ?? []), ...vs]);
           m.delete(flat.key);
         }
+        // The flattened copy's printings stay: its table prints the line too (GE's segment tables print
+        // "Revenue", which the summary prints under "Adjusted revenue").
+        if (flat.printed?.length) deep.printed = [...(deep.printed ?? []), ...flat.printed];
         if (nine.has(flat.key)) nine.set(deep.key, [...(nine.get(deep.key) ?? []), ...nine.get(flat.key)!]);
         nine.delete(flat.key);
         bySeries.delete(flat.key);
@@ -1054,6 +1060,32 @@ export const scopeName = (bd: string | null | undefined) =>
     .replace(/\b(segments?|results?|summary|selected|financial|data|highlights|information|and|the|of|by|for|key|metrics|line)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+/** The basis a table states in its name: reported (GAAP) or a non-GAAP basis, as one word; null when none. */
+export function basisOf(bd: string | null | undefined): string | null {
+  const t = (bd ?? "").toLowerCase();
+  if (/\bnon[- ]?gaap\b/.test(t)) return "non-gaap";
+  const m = t.match(/\b(comparable|adjusted|organic|constant currency|currency[- ]neutral|pro forma|managed|underlying|core|operating basis)\b/);
+  if (m) return m[1].replace(/[- ]/g, " ");
+  if (/\b(gaap|reported|as reported)\b/.test(t)) return "reported";
+  return null;
+}
+
+/** Series keys one document prints under two different stated bases. */
+export function basisSplits(facts: IrFact[]): Set<string> {
+  const by = new Map<string, Set<string>>();
+  for (const f of facts) {
+    const b = basisOf(f.breakdown);
+    if (!b) continue;
+    const k = `${seriesKey(f)}\u0001${docOf(f)}`;
+    let set = by.get(k);
+    if (!set) by.set(k, (set = new Set()));
+    set.add(b);
+  }
+  const out = new Set<string>();
+  for (const [k, set] of by) if (set.size > 1) out.add(k.split("\u0001")[0]);
+  return out;
+}
 
 /** A child's table scope: its own when split, else its table's breakdown name. */
 const kidScope = (s: IrSeries) => s.scope ?? scopeName(s.breakdown);

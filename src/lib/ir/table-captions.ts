@@ -26,6 +26,9 @@ const SCALE =
   /\(?\s*(\$\s*)?(in|amounts in|dollars in|\$ in)\s+(millions|thousands|billions)\b[^)]*\)?/i;
 const ENTITY =
   /\b(inc|corp|corporation|co|company|ltd|plc|llc|n\.a|holdings|group|incorporated)\.?\s*$/i;
+/** The company's legal name over its statements: "TEXAS INSTRUMENTS INCORPORATED AND SUBSIDIARIES". */
+const SUBSIDIARIES =
+  /\b(inc|corp|corporation|co|company|incorporated|ltd|plc|llc|n\.v|s\.a|ag|se)\.?,?\s+(and|&)\s+(its\s+)?(consolidated\s+)?subsidiaries\s*$/i;
 const NOISE = /^\(?(unaudited|continued|in \w+)\)?$/i;
 
 const text = (s: string) =>
@@ -57,11 +60,16 @@ function titleLike(s: string, company?: string) {
     return false;
   if (!/[a-z]{3,}/i.test(s)) return false;
   if (NOISE.test(s) || SCALE.test(s)) return false;
-  if (ENTITY.test(s)) return false;
+  if (ENTITY.test(s) || SUBSIDIARIES.test(s)) return false;
+  // A clause ending a paragraph ("Our summary results, and forecast for Q4, are below.") is running text.
+  if (/[a-z]\.\s*$/.test(s) && s.split(/\s+/).length >= 4) return false;
+  // A bullet or a sentence carrying figures names a highlight, not the table.
+  if (/^[•·▪◦‣*]/.test(s) || /\d\s*%|\$\s*\d/.test(s)) return false;
   if (/[.;]\s+\S/.test(s) && s.split(" ").length > 14) return false;
   if (
     PERIODISH.test(s) &&
-    (MONTH.test(s) || /\b(19|20)\d{2}\b/.test(s) || /months?|quarter/i.test(s))
+    // "Quarterly Financial Results" is a title; "Three months ended" and "Quarter ended" are period heads.
+    (MONTH.test(s) || /\b(19|20)\d{2}\b/.test(s) || /\b(months?|quarters?|weeks?)\s+(ended|ending)\b|^(three|six|nine|twelve)\s+months\b|\b(trailing|last|next)\s+(\d+|twelve)\s+months\b/i.test(s))
   )
     return false;
   return true;
@@ -78,12 +86,15 @@ function captionOf(t: ParsedTable, before: string[], company?: string): TableCap
   const first = firstFigureRow(t);
   // Title rows sit above the period heads; a label row under them ("Net sales:") is a heading, not a title.
   const top = first < 0 ? t.rows : t.rows.slice(0, first);
+  // Period heads: a month, a year, "months ended", a quarter mark ("Q4", "4Q", Micron's "FQ4-26"); "quarterly"
+  // only beside other heads, so a title row "Quarterly Financial Results" stays a title.
   const heads0 = top.findIndex((r) =>
     filled(r).some(
       (c) =>
         MONTH.test(c) ||
         /\b(19|20)\d{2}\b/.test(c) ||
-        /months? ended|quarterly|\bq[1-4]\b|\b[1-4]q\b/i.test(c),
+        /months? ended|\bf?q[1-4]\b|\b[1-4]q\b/i.test(c) ||
+        (filled(r).length > 1 && /quarterly/i.test(c)),
     ),
   );
   for (const r of heads0 < 0 ? top : top.slice(0, heads0)) {
@@ -92,6 +103,12 @@ function captionOf(t: ParsedTable, before: string[], company?: string): TableCap
     const s = f[0];
     if (!out.unit && SCALE.test(s)) out.unit = s.match(SCALE)![0].trim();
     else if (!out.title && titleLike(s, company)) out.title = s;
+  }
+  // A title printed in the label cell of the period-heads row (Texas Instruments: "Consolidated Statements of
+  // Income" beside "For Three Months Ended September 30,").
+  if (!out.title && heads0 >= 0) {
+    const c0 = top[heads0][0]?.trim() ?? "";
+    if (c0 && !SCALE.test(c0) && titleLike(c0, company)) out.title = c0;
   }
   // Text before the table: the nearest title-like line, and a scale line beside it.
   for (let i = before.length - 1, seen = 0; i >= 0 && seen < 6; i--, seen++) {

@@ -12,6 +12,7 @@ import type { IrPayload } from "@/lib/ir/payload";
 import { STD_LABEL, type SecCheck, type SecItem } from "@/lib/ir/sec-check";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import "@/components/ir/table.css";
 
 const STATUS: Record<SecItem["status"], string> = { agree: "agrees", held: "held", flagged: "differs", released: "agrees, shown again", later: "later filing only (possibly recast)" };
 const ORDER: Record<SecItem["status"], number> = { held: 0, flagged: 1, later: 2, released: 3, agree: 4 };
@@ -73,7 +74,8 @@ export function IrChecksLine({ ticker, payload, check, consistency, timings, lat
               <p className={IR.group}>Checked against the 10-Q and 10-K</p>
               <p className={IR.caption}>Held figures are kept out of totals and charts; differing figures stay, marked at the figure. Same sign, and equal within 0.5% (per share: one cent or 1%), or at the precision a round figure prints. A figure that differs only from a later filing's comparative is not counted as differing. Click a figure to open its source.</p>
             </div>
-            <table className="w-full table-fixed text-[13px]">
+            <div className="irt-root irt-scope">
+            <table className="irt-blocks w-full table-fixed text-[13px]">
               <thead className={IR.caption}>
                 <tr className="border-b">
                   <th scope="col" className="px-3 py-1 text-left font-normal">Line</th>
@@ -115,6 +117,7 @@ export function IrChecksLine({ ticker, payload, check, consistency, timings, lat
                 );
               })}
             </table>
+            </div>
           </PopoverContent>
         </Popover>
       )}

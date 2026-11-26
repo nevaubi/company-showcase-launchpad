@@ -1,0 +1,194 @@
+/*
+ * Statement tables typeset like a printed financial supplement. Rules and their reasons are in
+ * table-style.ts. Colours are mixes of the theme's own ink and card, so light and dark follow the theme
+ * and every sticky cell stays opaque. Not in a cascade layer on purpose: these rules beat the utility
+ * classes of a table they are applied to (the XBRL breakdowns), so hover and focus are restated here.
+ */
+.irt-root {
+  --irt-band: color-mix(in oklab, var(--foreground) 4.5%, var(--card));
+  --irt-head: color-mix(in oklab, var(--foreground) 2.5%, var(--card));
+  --irt-stripe: color-mix(in oklab, var(--foreground) 2.25%, var(--card));
+  --irt-hover: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  --irt-latest: color-mix(in oklab, var(--foreground) 2.5%, transparent);
+  --irt-guide: color-mix(in oklab, var(--foreground) 16%, transparent);
+  --irt-rule: color-mix(in oklab, var(--foreground) 32%, transparent);
+  --irt-rule-strong: color-mix(in oklab, var(--foreground) 72%, transparent);
+  --irt-edge: color-mix(in oklab, black 22%, transparent);
+}
+.dark .irt-root {
+  --irt-band: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  --irt-head: color-mix(in oklab, var(--foreground) 4%, var(--card));
+  --irt-stripe: color-mix(in oklab, var(--foreground) 3.25%, var(--card));
+  --irt-hover: color-mix(in oklab, var(--foreground) 10%, var(--card));
+  --irt-latest: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+  --irt-guide: color-mix(in oklab, var(--foreground) 20%, transparent);
+  --irt-rule: color-mix(in oklab, var(--foreground) 34%, transparent);
+  --irt-rule-strong: color-mix(in oklab, var(--foreground) 70%, transparent);
+  --irt-edge: color-mix(in oklab, black 60%, transparent);
+}
+
+/* Section head strip: a quiet band under a firm rule. */
+.irt-sec-head {
+  background: var(--irt-band);
+  border-top: 1px solid var(--irt-rule);
+}
+
+/* Column head strip: fiscal period over calendar date, ruled underneath. */
+/* The band and its rule end with the table, so a short table reads as one block. */
+.irt-colhead th {
+  background: var(--irt-head);
+  border-bottom: 1px solid var(--irt-rule);
+}
+.irt-colhead .irt-period {
+  font-weight: 500;
+  color: var(--foreground);
+}
+.irt-colhead .irt-date {
+  color: var(--muted-foreground);
+}
+.irt-colhead th.irt-latest .irt-period {
+  font-weight: 700;
+}
+.irt-colhead th.irt-latest .irt-date {
+  color: var(--foreground);
+}
+
+/* Body cells: opaque card, a faint band on every other line, hover over everything. */
+.irt-body > tr > * {
+  background-color: var(--card);
+  transition: background-color 120ms ease-out;
+}
+.irt-body > tr.irt-stripe > * {
+  background-color: var(--irt-stripe);
+}
+.irt-body > tr > td.irt-latest {
+  background-image: linear-gradient(var(--irt-latest), var(--irt-latest));
+}
+.irt-body > tr.irt-line:hover > * {
+  background-color: var(--irt-hover);
+}
+.irt-body > tr.irt-match > th {
+  background-color: var(--highlight-soft);
+}
+
+/* Printed row headings: semibold on a faint band. */
+.irt-body > tr.irt-group > th {
+  background-color: var(--irt-band);
+  color: color-mix(in oklab, var(--foreground) 82%, var(--card));
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.005em;
+}
+
+/* Levels: indent from the label style; deeper levels a shade quieter. */
+.irt-body > tr.irt-l2 > th,
+.irt-body > tr.irt-l3 > th {
+  color: color-mix(in oklab, var(--foreground) 86%, var(--card));
+}
+
+/* Totals: rules over the figures only, as printed. */
+.irt-body > tr.irt-sub > th,
+.irt-body > tr.irt-sub > td {
+  font-weight: 600;
+}
+.irt-body > tr.irt-sub > td {
+  border-top: 1px solid var(--irt-rule);
+}
+.irt-body > tr.irt-grand > th,
+.irt-body > tr.irt-grand > td {
+  font-weight: 700;
+  color: var(--foreground);
+}
+.irt-body > tr.irt-grand > td {
+  border-top: 1px solid var(--irt-rule-strong);
+  border-bottom: 3px double var(--irt-rule-strong);
+}
+.irt-body > tr.irt-grand + tr:not(.irt-gap) > * {
+  padding-top: 3px;
+}
+
+/* Unit marks of ratios, per-share and basis-point lines: set after the figure, muted. */
+.irt-mark {
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+/* A period no document prints. */
+.irt-missing,
+.irt-body > tr > td.irt-missing {
+  color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+  font-weight: 400;
+}
+/* Restated or older-basis line. */
+.irt-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--irt-rule);
+  border-radius: 3px;
+  font-size: 10.5px;
+  line-height: 14px;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  vertical-align: 1px;
+}
+
+/* Sticky first column: a soft edge once the table is scrolled sideways. */
+.irt-fc {
+  transition: box-shadow 120ms ease-out;
+}
+.irt-root[data-scrolled] .irt-fc {
+  box-shadow: 8px 0 8px -8px var(--irt-edge);
+  clip-path: inset(0 -16px 0 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .irt-body > tr > *,
+  .irt-fc {
+    transition: none;
+  }
+}
+
+/*
+ * The same language on a table this page does not render itself (the filings' XBRL breakdowns, the
+ * Financials tab): put `irt-root irt-scope` on a wrapper. Heads get the head band and rule, body rows the
+ * stripes and hover, and a row the table marks as a total keeps its own rule.
+ */
+.irt-scope table > thead > tr > th {
+  background-color: var(--irt-head);
+  border-bottom-color: var(--irt-rule);
+}
+.irt-scope table > tbody > tr > * {
+  background-color: var(--card);
+}
+.irt-scope table > tbody > tr:nth-child(even) > * {
+  background-color: var(--irt-stripe);
+}
+.irt-scope table > tbody > tr:hover > * {
+  background-color: var(--irt-hover);
+}
+/* A table that groups each item's rows in its own tbody (a line and its phone-only detail row). */
+.irt-scope table.irt-blocks > tbody > tr > * {
+  background-color: var(--card);
+}
+.irt-scope table.irt-blocks > tbody:nth-of-type(even) > tr > * {
+  background-color: var(--irt-stripe);
+}
+.irt-scope table.irt-blocks > tbody:hover > tr > * {
+  background-color: var(--irt-hover);
+}
+
+/* Lists in the same language (source documents, the checks panel): a faint band on every other item. */
+.irt-list > li:nth-child(even) {
+  background-color: color-mix(in oklab, var(--foreground) 2.5%, transparent);
+}
+.dark .irt-list > li:nth-child(even) {
+  background-color: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+}
+.irt-list > li:hover {
+  background-color: color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+/* Ratio, percentage and per-share lines: figures a shade quieter than money lines. */
+.irt-body > tr.irt-ratio:not(.irt-sub):not(.irt-grand) > td {
+  color: color-mix(in oklab, var(--foreground) 86%, var(--card));
+}

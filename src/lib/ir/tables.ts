@@ -97,6 +97,40 @@ export function parseNumber(text: string): number | null {
   return (m[1] && m[4]) || m[2] ? -v : v;
 }
 
+/**
+ * A cell that opens a parenthesis around one number and does not close it: "(32.5", "$ (1,234",
+ * "(12.5%". Releases often print the ")" (or "%)", ")%") in the next cell. Text with letters,
+ * a closed "(1)" and two numbers are never such a cell.
+ */
+export function opensParenthesis(text: string): boolean {
+  if (text.includes(")") || /[a-z]/i.test(text)) return false;
+  const t = text.replace(/(\d),\s+(?=\d{3}(?!\d))/g, "$1,");
+  if (TWO_NUMBERS.test(t)) return false;
+  return /^[$€£]*\([$€£]*\d+(?:\.\d+)?%?$/.test(t.replace(/[\s,]/g, ""));
+}
+
+/** A cell that only closes a parenthesis: ")", "%)", ")%", ") %". */
+const CLOSES = /^%?\)%?$/;
+
+/**
+ * The number of cell `c` of a parsed row. Same as `parseNumber`, except a cell that opens a
+ * parenthesis (`opensParenthesis`): it is negative when the first non-empty cell after it closes
+ * the parenthesis, and null (never read as positive) when anything else, or nothing, follows.
+ */
+export function parseRowCell(row: string[], c: number): number | null {
+  const text = row[c];
+  if (text == null) return null;
+  if (!opensParenthesis(text)) return parseNumber(text);
+  for (let j = c + 1; j < row.length; j++) {
+    const next = row[j].replace(/\s+/g, "");
+    if (!next) continue;
+    if (!CLOSES.test(next)) return null;
+    const n = parseNumber(text.replace("(", ""));
+    return n == null ? null : -Math.abs(n);
+  }
+  return null;
+}
+
 /** Compact text rendering of numeric tables for the extractor; cell references are exact DOM indexes. */
 export function renderTablesForModel(tables: ParsedTable[], maxChars = 90_000): string {
   const out: string[] = [];

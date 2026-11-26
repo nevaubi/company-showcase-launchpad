@@ -29,6 +29,8 @@ export const STEP_LIMITS_MS: Record<string, number> = {
   "form4-repair": 30 * 60_000,
   "registrant-drift": 10 * 60_000,
   company: 6 * 3600_000,
+  // fresh lane: at most IR_FRESH_MAX_FILES newest files and their rebuilds (scripts/lib/ir-fresh.ts)
+  fresh: 90 * 60_000,
   // stale payload lane: at most 30 min of new companies, then the one in progress (scripts/lib/ir-rebuild-stale.ts)
   "ir-rebuild": 45 * 60_000,
 };

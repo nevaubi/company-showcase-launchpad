@@ -5,7 +5,7 @@
 // Each file is kept byte-for-byte in the private `ir-documents` bucket with a sha256.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { companyCiks, type CoverageCompany } from "@/lib/coverage";
-import { classifyIrDocument, irFileExt, IR_FILE_RE } from "@/lib/ir/classify";
+import { classifyIrDocument, irFileExt, IR_FILE_RE, leadingText } from "@/lib/ir/classify";
 import { isIrFileAllowed } from "@/lib/ir/source-guard";
 import { judgeHit, networkFolder } from "@/lib/jobs/ir-site-match";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
@@ -32,7 +32,10 @@ interface Candidate {
   cik?: string;
 }
 
-async function store(c: CoverageCompany, k: Candidate): Promise<{ stored: boolean; reason?: string; bytes?: number }> {
+/** `duplicate`: the id of the document of this ticker that already holds the same bytes (nothing stored). */
+type StoreResult = { stored: boolean; reason?: string; bytes?: number; duplicate?: string };
+
+async function store(c: CoverageCompany, k: Candidate): Promise<StoreResult> {
   const res = k.sec ? await fetchSec(k.url) : await fetch(k.url, { headers: { "User-Agent": BROWSER_UA, Accept: "*/*" }, redirect: "follow" });
   if (!res.ok) return { stored: false, reason: `HTTP ${res.status}` };
   const buf = await res.arrayBuffer();
@@ -41,11 +44,19 @@ async function store(c: CoverageCompany, k: Candidate): Promise<{ stored: boolea
   if (!k.sec && /text\/html/.test(contentType) && !/\.html?$/i.test(k.url)) return { stored: false, reason: "not a file" };
   const ext = irFileExt(k.url, contentType);
   const hash = await sha256(buf);
+  // The same file under another address (an exhibit filed twice, a site copy of an exhibit, a logo
+  // repeated every quarter) is stored once per ticker.
+  const { data: same, error: sameError } = await supabaseAdmin.from("ir_documents").select("id").eq("ticker", c.ticker).eq("sha256", hash).limit(1);
+  if (sameError) throw new Error(sameError.message);
+  if (same?.length) return { stored: false, reason: "same file already stored", duplicate: same[0].id as string };
   const path = `${c.ticker}/${k.accn ?? "site"}/${hash.slice(0, 12)}.${ext}`;
   const { error } = await supabaseAdmin.storage.from(BUCKET).upload(path, new Uint8Array(buf), { contentType, upsert: true });
   if (error) throw new Error(error.message);
   const name = decodeURIComponent(k.url.split("/").pop() ?? "");
-  const { kind, title } = classifyIrDocument({ exhibit: k.exhibit, description: k.description, name, ext });
+  // An exhibit's own first lines name it when its file name and SEC description do not ("c-ex99d2.htm",
+  // "EX-99.2": Citigroup's Quarterly Financial Data Supplement).
+  const heading = /^html?$/.test(ext) ? leadingText(new TextDecoder().decode(buf.slice(0, 400_000))) : undefined;
+  const { kind, title } = classifyIrDocument({ exhibit: k.exhibit, description: k.description, name, ext, heading });
   const { error: e2 } = await supabaseAdmin.from("ir_documents").upsert(
     {
       ticker: c.ticker,
@@ -68,6 +79,37 @@ async function store(c: CoverageCompany, k: Candidate): Promise<{ stored: boolea
   );
   if (e2) throw new Error(e2.message);
   return { stored: true, bytes: buf.byteLength };
+}
+
+/** Addresses per lookup of held files: about 110 characters each keeps the request line near 5 KB. */
+export const HELD_CHUNK = 40;
+
+/** Held rows of a filing's files (partner copies carry no exhibit number, some no accession). */
+interface HeldFile {
+  source_url: string;
+  accn: string | null;
+  exhibit: string | null;
+  source?: string | null;
+}
+
+/**
+ * Gives a held copy of a listed exhibit the exhibit number (and accession) the filing index shows,
+ * where the stored row has none. Returns the number of rows completed.
+ */
+async function completeHeld(c: CoverageCompany, files: Candidate[], held: Map<string, HeldFile>): Promise<number> {
+  let n = 0;
+  for (const k of files) {
+    const h = held.get(k.url);
+    if (!h || h.exhibit || !k.exhibit) continue;
+    const patch: { exhibit: string; accn?: string } = { exhibit: k.exhibit };
+    if (!h.accn && k.accn) patch.accn = k.accn;
+    const { error } = await supabaseAdmin.from("ir_documents").update(patch).eq("ticker", c.ticker).eq("source_url", k.url).is("exhibit", null);
+    if (error) throw new Error(error.message);
+    h.exhibit = k.exhibit;
+    if (patch.accn) h.accn = patch.accn;
+    n++;
+  }
+  return n;
 }
 
 interface FilingColumns {
@@ -193,23 +235,36 @@ export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]>
 /** Store up to `max` not-yet-stored files for a company (`since` bounds the SEC history). */
 export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 8, opts: { since?: string; onFiling?: (accn: string, files: number) => void } = {}) {
   // Banks have thousands of stored files; page past the 1,000-row response cap.
-  const have: { source_url: string; accn: string | null }[] = [];
+  const have: HeldFile[] = [];
   for (let from = 0; from < 20_000; from += 1000) {
-    const { data, error } = await supabaseAdmin.from("ir_documents").select("source_url, accn").eq("ticker", c.ticker).order("id").range(from, from + 999);
+    const { data, error } = await supabaseAdmin.from("ir_documents").select("source_url, accn, exhibit, source").eq("ticker", c.ticker).order("id").range(from, from + 999);
     if (error) throw new Error(error.message);
-    have.push(...(data ?? []));
+    have.push(...((data ?? []) as HeldFile[]));
     if (!data || data.length < 1000) break;
   }
-  const known = new Set(have.map((d) => d.source_url));
-  const doneAccn = new Set(have.map((d) => d.accn).filter(Boolean));
+  const held = new Map(have.map((d) => [d.source_url, d]));
+  const known = new Set(held.keys());
   let todo: Candidate[] = [];
+  /** Files of each filing this pass lists, to write its scan row once all are held. */
+  const byFiling = new Map<string, Candidate[]>();
   if (mode === "sec") {
-    // Whole filings only, so a filing is either fully stored or untouched (lets us skip stored accessions).
+    // A filing is skipped only when this collector stored it (its own rows, or a done/empty scan row).
+    // Rows copied from the partner corpus do not count: they carry no exhibit numbers and no page
+    // images, so the filing is still listed, its images stored and its exhibit numbers filled in.
+    const { data: scans, error: scanError } = await supabaseAdmin.from("ir_release_scan").select("accn, status").eq("ticker", c.ticker).limit(5000);
+    if (scanError) throw new Error(scanError.message);
+    const doneAccn = new Set([
+      ...have.filter((d) => d.accn && d.source === "sec-exhibit").map((d) => d.accn!),
+      ...(scans ?? []).filter((r) => r.status === "done" || r.status === "empty").map((r) => r.accn as string),
+    ]);
     const filings = (await secExhibitCandidates(c, opts.since)).filter((f) => !doneAccn.has(f.accn!));
     for (const f of filings) {
       if (todo.length >= max) break;
       try {
-        const files = (await exhibitsOf(c, f)).filter((k) => !known.has(k.url));
+        const listed = await exhibitsOf(c, f);
+        await completeHeld(c, listed, held);
+        const files = listed.filter((k) => !known.has(k.url));
+        byFiling.set(f.accn!, listed);
         todo.push(...files);
         opts.onFiling?.(f.accn!, files.length);
       } catch {
@@ -219,7 +274,7 @@ export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 
   } else todo = (await irSiteCandidates(c)).filter((k) => !known.has(k.url)).slice(0, max);
   // A file the reviewed list shows to be another company's is never stored (source-guard.ts).
   todo = todo.filter((k) => isIrFileAllowed(c.ticker, k.url));
-  const results: { url: string; stored: boolean; reason?: string }[] = [];
+  const results: ({ url: string } & StoreResult)[] = [];
   for (const k of todo) {
     try {
       results.push({ url: k.url, ...(await store(c, k)) });
@@ -227,7 +282,14 @@ export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 
       results.push({ url: k.url, stored: false, reason: (e as Error).message });
     }
   }
-  return { ticker: c.ticker, mode, stored: results.filter((r) => r.stored).length, results };
+  // A filing whose listed files are all held now (stored, or the same bytes already held) is done.
+  const handled = new Set([...known, ...results.filter((r) => r.stored || r.duplicate).map((r) => r.url)]);
+  for (const [accn, listed] of byFiling) {
+    if (!listed.every((k) => handled.has(k.url) || !isIrFileAllowed(c.ticker, k.url))) continue;
+    const { error } = await supabaseAdmin.from("ir_release_scan").upsert({ accn, ticker: c.ticker, files: listed.length, stored: listed.filter((k) => handled.has(k.url)).length, status: listed.length ? "done" : "empty", scanned_at: new Date().toISOString() });
+    if (error) throw new Error(error.message);
+  }
+  return { ticker: c.ticker, mode, stored: results.filter((r) => r.stored).length, duplicates: results.filter((r) => r.duplicate).length, results };
 }
 
 /**
@@ -294,9 +356,6 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
   if (!next) return null;
   const c = companies.find((x) => x.ticker === next.ticker);
   if (!c) return null;
-  const { data: known, error: knownError } = await supabaseAdmin.from("ir_documents").select("source_url").eq("accn", next.accn);
-  if (knownError) throw new Error(knownError.message);
-  const done = new Set((known ?? []).map((d) => d.source_url));
   const retryKey = `ir-release-retry:${next.accn}`;
   /** Counts the failed attempt in `job_state`; the scan table is left as it was (see `releaseDue`). */
   async function recordFailure(message: string) {
@@ -315,8 +374,17 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
     const status = await recordFailure(`index: ${reason}`);
     return { ticker: c.ticker, accn: next.accn, mode: "recent", status, stored: 0, left: 0, results: [{ url: next.accn, stored: false, reason }] };
   }
+  // Held by address, whatever their accession: partner copies of a filing may carry none.
+  const held = new Map<string, HeldFile>();
+  for (let i = 0; i < all.length; i += HELD_CHUNK) {
+    const { data: known, error: knownError } = await supabaseAdmin.from("ir_documents").select("source_url, accn, exhibit").eq("ticker", c.ticker).in("source_url", all.slice(i, i + HELD_CHUNK).map((k) => k.url));
+    if (knownError) throw new Error(knownError.message);
+    for (const d of (known ?? []) as HeldFile[]) held.set(d.source_url, d);
+  }
+  const done = new Set(held.keys());
+  await completeHeld(c, all, held);
   const files = all.filter((k) => !done.has(k.url));
-  const results: { url: string; stored: boolean; reason?: string }[] = [];
+  const results: ({ url: string } & StoreResult)[] = [];
   let i = 0;
   // Three at a time: each store is an SEC download, a storage upload and a row insert.
   await Promise.all(
@@ -331,9 +399,10 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
       }
     }),
   );
-  const successes = results.filter(r => r.stored).length;
+  // A file whose bytes the ticker already holds counts as collected.
+  const successes = results.filter(r => r.stored || r.duplicate).length;
   const left = files.length - successes;
-  const failures = results.filter(r => !r.stored);
+  const failures = results.filter(r => !r.stored && !r.duplicate);
   const status = failures.length
     ? await recordFailure(failures.map(r => `${r.url}: ${r.reason}`).join("; "))
     : all.length === 0 ? "empty" : left > 0 ? "partial" : "done";
