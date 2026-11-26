@@ -4,6 +4,8 @@ import { measureOf, profileFor } from "../../profiles/index";
 import type { Profile } from "../../profiles/types";
 import { FDIC_FAILURES_DATASET, H8_MONTHLY_DATASET, NCUA_CORE_DATASET, OFR_MMF_DATASET, Z1_SECTORS_DATASET, Z1_TABLES } from "../../profiles/units/finance";
 import { computeSeriesTile, isSeriesSpec, type CellInput, type TileContext } from "../compute";
+import { readerFigure, scaleUnitOf } from "../scale";
+import { parseDecimal } from "../decimal";
 import { boardSpec, tileSpec } from "../specs";
 import type { SeriesTileSpec, TileSeriesSpec, TileSpec } from "../types";
 import { FINANCE_BOARD_TILES, SPECS } from "./finance";
@@ -90,6 +92,14 @@ describe("finance tiles", () => {
         expect(unitsOf(profile, read.measure), `${spec.id} ${read.measure}`).toContain(read.unit);
       }
     }
+  });
+
+  it("writes every money unit of its tiles in a reader scale, the stored figure as filed beneath it", () => {
+    for (const unit of ["Millions of dollars", "USD", "USD thousands"]) expect(scaleUnitOf(unit), unit).not.toBeNull();
+    const assets = readerFigure("Millions of dollars", parseDecimal("26009483.7")!, "26,009,483.7");
+    expect(assets).toMatchObject({ figure: "$26.01 trillion", filed: "26,009,483.7 Millions of dollars as filed" });
+    expect(readerFigure("USD", parseDecimal("8473378242355.38")!, "8,473,378,242,355.38")?.figure).toBe("$8.473 trillion");
+    expect(readerFigure("USD thousands", parseDecimal("18744254.463")!, "18,744,254")?.figure).toBe("$18.74 billion");
   });
 
   it("counts records only of tables of the collection, and says records, not a measure", () => {

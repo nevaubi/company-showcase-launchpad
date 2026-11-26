@@ -427,6 +427,16 @@ export const SPECS: UnitSpecs = {
   unit: "finance",
   tiles: TILES,
   boards: [],
+  scaleUnits: [
+    {
+      // H.8 monthly balances (the Board's package: UNIT_MULT="1000000", CURRENCY="USD" on every series) and the Z.1
+      // financial accounts (data dictionary: "Millions of dollars; amounts outstanding end of period, ...").
+      unit: H8_UNIT,
+      exponent: 6,
+      base: { currency: "$" },
+      axis: { one: "Dollars", million: "Millions of dollars", billion: "Billions of dollars", trillion: "Trillions of dollars" },
+    },
+  ],
   boardTiles: {
     [FIN]: FINANCE_BOARD_TILES,
     "00_universal": ["household-net-worth", "debt-growth-by-sector"],
