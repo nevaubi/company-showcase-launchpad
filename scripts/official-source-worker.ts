@@ -3,6 +3,7 @@
  * source imports, refreshes and larger ABS files. Reads wait on the shared database back-pressure gate.
  * No browser credentials, temporary upload tickets, or local scratch paths are needed here.
  * Disable lanes with OFFICIAL_SOURCES_ENABLED=0, OFFICIAL_REFRESH_ENABLED=0 or ABS_BULK_ENABLED=0.
+ * FIELD_COUNTS_ENABLED=1 turns on the field counts step of the import lane (migration 0070; unset is off).
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -31,6 +32,7 @@ import { absWatchList } from "./lib/abs-watch-list";
 import { sweepRunReceipts, takeRunReceipt } from "./lib/run-receipt";
 import { sweepRefreshFolders, trimSourceCache } from "./lib/source-cache";
 import { snapshotStatsStep, statsOnlyRow, type StatsList, type StatsOutcome } from "./lib/snapshot-stats";
+import { FIELD_COUNTS_CHILD_MS, FIELD_COUNTS_SCRIPT, fieldCountsEnabled, fieldCountsStep } from "./lib/field-counts-step";
 
 const owner = `official:${process.env.RENDER_INSTANCE_ID ?? "worker"}:${randomUUID()}`;
 const WORK = process.env.OFFICIAL_SOURCE_WORK_DIR ?? "/var/data/official-sources";
@@ -229,6 +231,26 @@ async function sourceLoop() {
     if (!(await lease.renew().catch(() => false))) return { status: "skipped", reason: "the lane's lease could not be renewed" };
     return await stats();
   };
+  // Field counts of published snapshots (scripts/lib/field-counts-step.ts, migration 0070): off unless
+  // FIELD_COUNTS_ENABLED=1; only when no snapshot waits to be imported; a quiet no-op until the table exists; one
+  // bounded child under this lane's lease, recorded in job_runs by childRun; never a reason to back off this lane.
+  const fieldCounts = fieldCountsEnabled(process.env.FIELD_COUNTS_ENABLED)
+    ? fieldCountsStep({
+        probe: async () => {
+          await dbGate("official-field-counts");
+          return await sb.from("source_field_counts" as never).select("snapshot_id").limit(1);
+        },
+        log: (line) => log(SOURCE_WORKER_JOB, line),
+      })
+    : null;
+  const fieldCountsPass = async (lease: Lease) => {
+    if (!fieldCounts) return;
+    const outcome = await fieldCounts.pass(async (args) => {
+      if (!(await lease.renew().catch(() => false))) return { code: RESOURCE_WAIT_EXIT, told: null };
+      return await childRun(lease, FIELD_COUNTS_SCRIPT, args, FIELD_COUNTS_CHILD_MS);
+    });
+    if (outcome.status === "probe_failed") log(SOURCE_WORKER_JOB, `field counts: ${outcome.error}`);
+  };
   while (!stopped) {
     let lease: Lease | null = null;
     try {
@@ -245,7 +267,7 @@ async function sourceLoop() {
         .limit(1);
       if (pending.error) throw new Error(pending.error.message);
       if (pending.data?.length) {
-        const { code } = await childRun(
+        const { code, told } = await childRun(
           held,
           "scripts/source-import.ts",
           ["--all", "--max-snapshots=25", "--max-runtime-seconds=480"],
@@ -253,6 +275,8 @@ async function sourceLoop() {
           async () => ({ stats: await statsPass(held) }),
         );
         failures = code === 0 || code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
+        // new published snapshots get their field counts at the next idle pass
+        if (typeof told?.published === "number" && told.published > 0) fieldCounts?.wake();
       } else {
         failures = 0;
         const started = new Date().toISOString();
@@ -262,6 +286,7 @@ async function sourceLoop() {
             finished_at: new Date().toISOString(), ...row });
           if (written.error) log(SOURCE_WORKER_JOB, "statistics receipt failed", safeError(written.error));
         }
+        await fieldCountsPass(held).catch((e: unknown) => log(SOURCE_WORKER_JOB, "field counts", safeError(e)));
       }
     } catch (e) {
       failures++;
