@@ -1,0 +1,6 @@
+{
+ "about": "Production rows the industry tiles read, as the three source tables a fake member client serves (see ./fixtures.ts). Empty until the unit adds its tiles.",
+ "source_datasets": [],
+ "source_snapshots": [],
+ "source_records": []
+}
