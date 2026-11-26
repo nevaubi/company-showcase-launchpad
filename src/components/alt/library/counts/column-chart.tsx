@@ -67,7 +67,7 @@ export function ColumnChart({
   const height = TOP_ROOM + plotH + AXIS_BAND;
 
   return (
-    <div ref={boxRef} className={cn("relative min-w-0", className)} role="group" aria-label={label} onPointerLeave={() => setHover(null)}>
+    <div ref={boxRef} className={cn("relative min-w-0", className)} onPointerLeave={() => setHover(null)}>
       <svg width={width} height={height} className="block overflow-visible" aria-hidden>
         {yTicks.map((t, i) => (
           <g key={t}>
@@ -106,12 +106,12 @@ export function ColumnChart({
           );
         })}
       </svg>
-      <div className="absolute inset-y-0 right-0" style={{ left: gutter, top: TOP_ROOM, height: plotH }}>
+      <ul aria-label={label} className="absolute right-0" style={{ left: gutter, top: TOP_ROOM, height: plotH }}>
         {columns.map((c, i) => {
           const props = roving.bind(i);
           return (
+            <li key={c.key} className="absolute inset-y-0" style={{ left: i * slot, width: Math.max(1, slot) }}>
             <button
-              key={c.key}
               type="button"
               {...props}
               aria-label={c.title}
@@ -124,14 +124,14 @@ export function ColumnChart({
               onBlur={() => setHover(null)}
               onClick={() => c.actionable && onSelect?.(i)}
               className={cn(
-                "absolute inset-y-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "absolute inset-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 c.actionable && onSelect ? "cursor-pointer" : "cursor-default",
               )}
-              style={{ left: i * slot, width: Math.max(1, slot) }}
             />
+            </li>
           );
         })}
-      </div>
+      </ul>
       {shown !== null && columns[shown] && (
         <ChartTooltip
           x={gutter + shown * slot + slot / 2}

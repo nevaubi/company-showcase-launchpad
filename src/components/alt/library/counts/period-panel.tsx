@@ -73,7 +73,7 @@ export function PeriodPanel({
           columns={marks}
           ticks={(room) => periodTicks(chart, room)}
           roomFor={longest * 6.6 + 14}
-          label={`${NAME}, ${windowLabel(chart.window).toLowerCase()}`}
+          label={NAME}
           onSelect={(i) => {
             const action = chart.columns[i]?.action;
             if (!action) return;

@@ -1,28 +1,38 @@
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fieldTitle } from "@/lib/sources/fields";
+import { fieldRoles } from "@/lib/sources/fields";
 import type { PeriodFormat } from "@/lib/sources/periods";
 import { sourceQueries } from "@/lib/sources/queries";
-import type { SourceEntities, SourceFieldFill } from "@/lib/sources/read-types";
+import type { SourceEntities, SourceFacetDimension, SourceFieldFill } from "@/lib/sources/read-types";
 import type { SourceSnapshot } from "@/lib/sources/schema";
 import { cn } from "@/lib/utils";
-import { entityBars, fillBands, fillBars, periodBars, yearBars } from "./coverage-model";
-import { count } from "./dataset-model";
+import { CATEGORY_READ_ROWS, categoryCandidates, categoryCharts } from "./counts/category-model";
+import { EntityListPanel, EntityPanel, PlacePanel } from "./counts/dimension-panels";
+import { PanelNote, PanelSkeleton } from "./counts/panel";
+import { PeriodPanel, PeriodPanelSkeleton } from "./counts/period-panel";
+import { countQueries } from "./counts/queries";
+import { CategoryPanel, FillPanel } from "./counts/value-panels";
 import { readData } from "./dataset-queries";
-import { BarList } from "./ui/bar-list";
-import { PANEL, QuietLine } from "./ui/primitives";
+import { QuietLine } from "./ui/primitives";
 
 /** Shown wherever counts need the next database update (migration 0069). */
 export const AWAITS_UPDATE = "Counts by period and by entity arrive with the next database update.";
 
+const n = (v: number) => v.toLocaleString("en-US");
+/** Height of a ranked list of ten bars and a remainder (29 px a bar with its gap), for the skeleton. */
+const BARS_HEIGHT = 11 * 32;
+
 /**
- * The first look of a table no profile can chart: how many records each period holds, which entities hold the most,
- * and how complete each field is. Nothing here reads a cell as a number.
+ * "What this table holds": the first look of a table no profile can chart, in charts that count records and need no
+ * unit. Records per period (columns), records by place (the state grid where the place field holds states), records
+ * per entity, records by category for the fields whose values repeat (counted on tables of up to 5,000 records), and
+ * how complete each field is (a heat strip from the counts stored with the version). Nothing here reads a cell as a
+ * number; every mark opens the records behind it.
  */
 export function CoverageView({
   datasetId,
   snapshot,
   fills,
-  columns,
   format,
   entities,
   entityNoun,
@@ -30,10 +40,13 @@ export function CoverageView({
   view,
   onPeriod,
   onEntity,
+  onGeography,
+  onOpen,
 }: {
   datasetId: string;
   snapshot: SourceSnapshot;
   fills: SourceFieldFill[] | null;
+  /** The fields shown in the records table (kept for the caller; every field is in the strip). */
   columns: number[];
   format: PeriodFormat;
   entities: SourceEntities | null | undefined;
@@ -42,33 +55,33 @@ export function CoverageView({
   view: "chart" | "table";
   onPeriod: (period: string) => void;
   onEntity: (entity: string) => void;
+  /** Filters the records table to a place; without it the place marks open nothing. */
+  onGeography?: (geography: string) => void;
+  /** Opens one record; without it the category bars open nothing. */
+  onOpen?: (row: number) => void;
 }) {
-  const periodFacets = useQuery({
-    ...sourceQueries.facets({ datasetId, snapshotId: snapshot.id, dimension: "period", limit: 1000 }),
-    enabled: varies.period,
-  });
-  const entityDimension = varies.entity ? "entity_id" : varies.geo ? "geo_code" : null;
-  const entityFacets = useQuery({
-    ...sourceQueries.facets({ datasetId, snapshotId: snapshot.id, dimension: entityDimension ?? "entity_id", limit: 1000 }),
-    enabled: entityDimension !== null,
-  });
-  const periods = readData(periodFacets.data);
-  const ents = readData(entityFacets.data);
-  const many = entityNoun?.many ?? (entityDimension === "geo_code" ? "places" : "entities");
+  const dims = snapshot.ingest.dimensions ?? {};
+  const entityDim: SourceFacetDimension | null = dims.entity_id !== undefined ? "entity_id" : dims.entity_name !== undefined ? "entity_name" : null;
+  const placeDim: SourceFacetDimension | null = dims.geo_code !== undefined ? "geo_code" : dims.geo_name !== undefined ? "geo_name" : null;
 
-  const years = periods.data && periods.data.values.length > 60 ? yearBars(periods.data.values, format) : null;
-  const perPeriod = periods.data ? (years ?? periodBars(periods.data.values, format).slice(-60)) : null;
-  const clipped = !!periods.data && !years && periods.data.values.length > 60;
-  const top = ents.data ? entityBars(ents.data.values, 10) : null;
-  const small = snapshot.columns.length <= 16;
-  const bands = fills ? fillBands(fills) : null;
+  const periodQuery = useQuery({ ...countQueries.facets(datasetId, snapshot.id, "period"), enabled: varies.period });
+  const entityQuery = useQuery({ ...countQueries.facets(datasetId, snapshot.id, entityDim ?? "entity_id"), enabled: entityDim !== null });
+  const placeQuery = useQuery({ ...countQueries.facets(datasetId, snapshot.id, placeDim ?? "geo_code"), enabled: placeDim !== null });
+  const statsQuery = useQuery({ ...sourceQueries.stats(datasetId, snapshot.id), enabled: entityDim !== null });
 
-  // what can be drawn: period counts and entity counts need 0069; the entity list of the last period does not
-  const periodsPending = varies.period && periodFacets.isPending;
-  const showPeriods = !!perPeriod;
-  const showEntities = !!top || !!entities;
+  const roles = useMemo(() => fieldRoles(snapshot.columns, snapshot.ingest), [snapshot.columns, snapshot.ingest]);
+  const candidates = useMemo(() => categoryCandidates(snapshot.columns, snapshot.ingest, roles, fills), [snapshot.columns, snapshot.ingest, roles, fills]);
+  const small = snapshot.loaded_rows <= CATEGORY_READ_ROWS;
+  const categoryQuery = useQuery({ ...countQueries.categories(datasetId, snapshot.id, candidates), enabled: small && candidates.length > 0 });
+
+  const periods = readData(periodQuery.data);
+  const ents = readData(entityQuery.data);
+  const places = readData(placeQuery.data);
+  const stats = readData(statsQuery.data);
+  const counted = readData(categoryQuery.data);
+  const charts = useMemo(() => (counted.data ? categoryCharts(counted.data.fields, snapshot.columns) : []), [counted.data, snapshot.columns]);
+
   const notes: string[] = [];
-  if (varies.period && !perPeriod && !periodsPending) notes.push(periods.reason === "unavailable" ? AWAITS_UPDATE : "Records per period could not be counted.");
   const constant = snapshot.ingest.constants?.period;
   if (!varies.period)
     notes.push(
@@ -76,137 +89,45 @@ export function CoverageView({
         ? `Every record is of one period, ${constant} as the source writes it, so the records are not counted by period.`
         : "No period field: the records are not counted by period.",
     );
+  if (!small && candidates.length > 0)
+    notes.push(`Values inside the fields are counted on tables of up to ${n(CATEGORY_READ_ROWS)} records; this one holds ${n(snapshot.loaded_rows)}.`);
+  else if (small && candidates.length > 0 && (counted.reason || categoryQuery.isError)) notes.push("The values of this table's fields could not be counted.");
+  else if (small && counted.data && !charts.length && candidates.length > 0)
+    notes.push(`None of the ${n(candidates.length)} ${candidates.length === 1 ? "field" : "fields"} counted holds a few values that repeat, so no field is drawn by category.`);
+
+  const failed = (reason: string | null, what: string) => (reason === "unavailable" ? AWAITS_UPDATE : `${what} could not be counted.`);
+  const gridCells: ReactNode[] = [];
+
+  if (placeDim) {
+    if (placeQuery.isPending) gridCells.push(<PanelSkeleton key="place" name="Records by place" title="Records by place" height={BARS_HEIGHT} />);
+    else if (places.data) gridCells.push(<PlacePanel key="place" facets={places.data} view={view} onGeography={onGeography} />);
+    else gridCells.push(<PanelNote key="place" name="Records by place" title="Records by place">{failed(places.reason, "Records by place")}</PanelNote>);
+  }
+  if (entityDim) {
+    const title = `Records per ${entityNoun?.one ?? "entity"}`;
+    if (entityQuery.isPending) gridCells.push(<PanelSkeleton key="entity" name="Records per entity" title={title} height={BARS_HEIGHT} />);
+    else if (ents.data)
+      gridCells.push(<EntityPanel key="entity" facets={ents.data} noun={entityNoun} total={stats.data?.entities ?? null} view={view} onEntity={onEntity} />);
+    else if (entities) gridCells.push(<EntityListPanel key="entity" entities={entities} noun={entityNoun} onEntity={onEntity} />);
+    else gridCells.push(<PanelNote key="entity" name="Records per entity" title={title}>{failed(ents.reason, title)}</PanelNote>);
+  }
+  if (small && candidates.length > 0 && categoryQuery.isPending)
+    gridCells.push(<PanelSkeleton key="cat-loading" name="Records by category" title="Records by category" height={BARS_HEIGHT} />);
+  for (const chart of charts) gridCells.push(<CategoryPanel key={`cat-${chart.position}`} chart={chart} view={view} onOpen={onOpen} />);
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-3">
-      {(notes.length > 0 || periodsPending) && (
-        <QuietLine>{periodsPending ? "Counting records by period" : notes.join(" ")}</QuietLine>
-      )}
-      {showPeriods && (
-        <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Records per period">
-          <h3 className="text-[13px] font-semibold">Records per period</h3>
-          <p className="mb-2 text-[11px] text-muted-foreground">
-            {years ? `${perPeriod!.length} years, oldest first` : clipped ? `The last 60 of ${count(periods.data!.values.length)} periods` : `${perPeriod!.length} periods, oldest first`}
-            {periods.data && !periods.data.complete ? "; more periods exist than are counted" : ""}
-            {years ? "." : ". Choose one to see its records."}
-          </p>
-          {view === "chart" ? (
-            <BarList bars={perPeriod!} label="Records per period" onSelect={years ? undefined : (b) => onPeriod(b.key)} />
-          ) : (
-            <CountTable rows={perPeriod!.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Period", "Records"]} />
-          )}
-        </div>
-      )}
-      <div className={cn("grid min-w-0 grid-cols-1 gap-3", showEntities && "@5xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]")}>
-        <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Filled share">
-          <h3 className="text-[13px] font-semibold">How complete the fields are</h3>
-          {!fills || !bands ? (
-            <QuietLine className="mt-1">This version stores no counts of empty cells.</QuietLine>
-          ) : small ? (
-            <>
-              <p className="mb-2 text-[11px] text-muted-foreground">Share of records with a value in each field, from the counts stored with this version.</p>
-              {view === "chart" ? (
-                <BarList bars={fillBars(fills, snapshot.columns, snapshot.columns.map((_, i) => i))} max={1} label="Filled share per field" />
-              ) : (
-                <CountTable rows={fillBars(fills, snapshot.columns, snapshot.columns.map((_, i) => i)).map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Field", "Filled"]} />
-              )}
-            </>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 @7xl:grid-cols-2">
-              <div className="min-w-0">
-                <p className="mb-2 text-[11px] text-muted-foreground">{count(snapshot.columns.length)} fields by the share of records that have a value.</p>
-                {view === "chart" ? (
-                  <BarList
-                    bars={bands.map((b) => ({ key: b.band.id, label: b.band.label, value: b.fields, text: `${count(b.fields)} fields`, title: `${b.band.label}: ${count(b.fields)} fields` }))}
-                    label="Fields by filled share"
-                    labelWidth="minmax(0,13rem)"
-                  />
-                ) : (
-                  <CountTable rows={bands.map((b) => ({ key: b.band.id, label: b.band.label, text: count(b.fields) }))} head={["Filled share", "Fields"]} />
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="mb-2 text-[11px] text-muted-foreground">The fields shown in the records table.</p>
-                {view === "chart" ? (
-                  <BarList bars={fillBars(fills, snapshot.columns, columns)} max={1} label="Filled share of the fields in the table" labelWidth="minmax(0,14rem)" />
-                ) : (
-                  <CountTable
-                    rows={columns.map((p) => ({ key: String(p), label: fieldTitle(snapshot.columns[p]), text: fills[p] ? `${(fills[p].share * 100).toFixed(1)}%` : "–" }))}
-                    head={["Field", "Filled"]}
-                  />
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        {showEntities && (
-          <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Entities">
-            <h3 className="text-[13px] font-semibold first-letter:uppercase">{many}</h3>
-            {top ? (
-              <>
-                <p className="mb-2 text-[11px] text-muted-foreground">
-                  The {Math.min(10, top.length)} with the most records{ents.data && !ents.data.complete ? " among those counted" : ""}. Choose one to see its records.
-                </p>
-                {view === "chart" ? (
-                  <BarList bars={top} label={`${many} by records`} onSelect={(b) => onEntity(b.key)} />
-                ) : (
-                  <CountTable rows={top.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Name", "Records"]} />
-                )}
-              </>
-            ) : (
-              <>
-                <p className="mb-2 text-[13px] leading-5">
-                  <span className="num font-semibold">{entities!.complete ? count(entities!.entities.length) : `${count(entities!.entities.length)} or more`}</span>{" "}
-                  {many} in {entities!.period ?? "the first rows"}
-                  {entities!.periodRule === "greatest" ? ", the last period" : ""}. The first in file order:
-                </p>
-                <ul className="grid grid-cols-1 gap-0.5 text-[13px] leading-5">
-                  {entities!.entities.slice(0, 10).map((e) => (
-                    <li key={`${e.id}|${e.name}|${e.row}`} className="flex min-w-0 items-baseline gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onEntity(e.id || e.name || "")}
-                        className="min-w-0 truncate text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {e.name || e.id || "(blank)"}
-                      </button>
-                      {e.name && e.id && <span className="num shrink-0 text-[11px] text-muted-foreground">{e.id}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CountTable({ rows, head }: { rows: { key: string; label: string; sub?: string; text: string }[]; head: [string, string] }) {
-  return (
-    <table className="w-full border-separate border-spacing-0 text-[13px]">
-      <thead>
-        <tr className="text-[11px] text-muted-foreground">
-          <th scope="col" className="h-7 border-b px-1 text-left font-normal">
-            {head[0]}
-          </th>
-          <th scope="col" className="h-7 border-b px-1 text-right font-normal">
-            {head[1]}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.key} style={{ height: 29 }}>
-            <td className="truncate border-b px-1">
-              {r.label}
-              {r.sub && <span className="num ml-1.5 text-[11px] text-muted-foreground">{r.sub}</span>}
-            </td>
-            <td className="num border-b px-1 text-right">{r.text}</td>
-          </tr>
+    <div className="grid min-w-0 grid-cols-1 gap-3" data-section="What this table holds">
+      {notes.length > 0 && <QuietLine>{notes.join(" ")}</QuietLine>}
+      {varies.period &&
+        (periodQuery.isPending ? (
+          <PeriodPanelSkeleton />
+        ) : periods.data ? (
+          <PeriodPanel facets={periods.data} format={format} total={snapshot.loaded_rows} view={view} onPeriod={onPeriod} />
+        ) : (
+          <PanelNote name="Records per period" title="Records per period">{failed(periods.reason, "Records per period")}</PanelNote>
         ))}
-      </tbody>
-    </table>
+      {gridCells.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-3", gridCells.length > 1 && "@3xl:grid-cols-2", gridCells.length > 2 && "@6xl:grid-cols-3")}>{gridCells}</div>}
+      <FillPanel fills={fills} columns={snapshot.columns} view={view} />
+    </div>
   );
 }
