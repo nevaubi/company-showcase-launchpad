@@ -66,7 +66,7 @@ export function PlacePanel({
   return (
     <CountPanel name="Records by place" title="Records by place" caption={caption}>
       {view === "chart" ? (
-        <BarList bars={bars} label="Places by records" labelWidth="minmax(0,8rem)" valueWidth="4.75rem" onSelect={onGeography ? (b) => onGeography(b.key) : undefined} />
+        <BarList bars={bars} label="Places by records" labelWidth="minmax(0,8rem)" valueWidth="3.75rem" onSelect={onGeography ? (b) => onGeography(b.key) : undefined} />
       ) : (
         <CountTable head={["Place", "Records"]} rows={bars.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} />
       )}
@@ -108,7 +108,7 @@ export function EntityPanel({
   return (
     <CountPanel name={name} title={title} caption={caption}>
       {view === "chart" ? (
-        <BarList bars={bars} label={`${many} by records`} labelWidth="minmax(0,8rem)" valueWidth="4.75rem" onSelect={(b) => onEntity(b.key)} />
+        <BarList bars={bars} label={`${many} by records`} labelWidth="minmax(0,8rem)" valueWidth="3.75rem" onSelect={(b) => onEntity(b.key)} />
       ) : (
         <CountTable head={["Name", "Records"]} rows={bars.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} />
       )}
