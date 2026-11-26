@@ -5,7 +5,7 @@ import { composeProblems } from "../compose";
 import { BOARDS, CORE_BOARDS, CORE_TILES, TILES } from "../specs";
 import type { TileSpec } from "../types";
 import { UNIT_SPECS } from "./index";
-import { FACET_TILES, LIVE_TILES, PENDING_BOARD_TILES, SECTOR_BOARD_ORDER, SECTOR_TILES, SPECS } from "./sectors";
+import { SECTOR_BOARD_ORDER, SECTOR_TILES, SPECS } from "./sectors";
 
 /** The registered source id of every dataset a measure tile of this unit reads. */
 const SOURCE_ID: Readonly<Record<string, string | null>> = {
@@ -18,6 +18,7 @@ const SOURCE_ID: Readonly<Record<string, string | null>> = {
   official_02_technology_csv_wb_tech_annual_22be3f4568: null,
   official_03_healthcare_csv_partd_overall_annual_654675dedc: "CMS_PARTD_2024",
   official_03_healthcare_csv_fda_original_by_year_b0807c7bff: null,
+  official_10_communications_csv_caf_disbursements_929fb6680e: "USAC_CAF_DISBURSE",
 };
 
 function profileOf(datasetId: string): Profile {
@@ -56,39 +57,18 @@ describe("sectors tiles and boards", () => {
     expect(composeProblems(CORE_TILES, CORE_BOARDS, UNIT_SPECS).filter((p) => p.unit === "sectors")).toEqual([]);
   });
 
-  it("put only tiles the engine of this branch computes on a board, and hold the rest as pending", () => {
-    const ids = new Set(MINE.map((t) => t.id));
-    for (const id of LIVE_TILES) {
-      expect(ids.has(id)).toBe(true);
-      expect(FACET_TILES.has(id), id).toBe(false);
-    }
-    for (const id of FACET_TILES) {
-      const spec = MINE.find((t) => t.id === id);
-      expect(spec?.transform === "records" && "dimension" in spec.per, id).toBe(true);
-    }
-    for (const [board, pending] of Object.entries(PENDING_BOARD_TILES)) {
-      for (const id of pending) {
-        expect(ids.has(id), `${board}: ${id}`).toBe(true);
-        expect(LIVE_TILES.has(id)).toBe(false);
-      }
-    }
-    const listed = new Set(BOARDS.flatMap((b) => b.tiles));
-    for (const t of MINE) {
-      if (listed.has(t.id)) expect(LIVE_TILES.has(t.id), t.id).toBe(true);
-    }
-    // every tile defined is placed on one of the unit's boards, live or pending
+  it("put every tile it defines on a board: Housing within 14 to 18 tiles, each new board within 8 to 14", () => {
     const placed = new Set(Object.entries(SECTOR_BOARD_ORDER).flatMap(([board, list]) => (board === "library" ? [] : list)));
-    expect([...ids].filter((id) => !placed.has(id))).toEqual([]);
-  });
-
-  it("keep every collection board within 18 tiles once the pending tiles land, and Housing at 12 or more of them", () => {
-    for (const board of BOARDS) {
-      const pending = PENDING_BOARD_TILES[board.id] ?? [];
-      expect(board.tiles.length + pending.length, board.id).toBeLessThanOrEqual(18);
+    expect(MINE.map((t) => t.id).filter((id) => !placed.has(id))).toEqual([]);
+    const listed = new Set(BOARDS.flatMap((b) => b.tiles));
+    for (const t of MINE) expect(listed.has(t.id), t.id).toBe(true);
+    const size = (id: string) => BOARDS.find((b) => b.id === id)?.tiles.length ?? 0;
+    expect(size("11_real_estate")).toBeGreaterThanOrEqual(14);
+    expect(size("11_real_estate")).toBeLessThanOrEqual(18);
+    for (const id of ["10_communications", "02_technology", "03_healthcare"]) {
+      expect(size(id), id).toBeGreaterThanOrEqual(8);
+      expect(size(id), id).toBeLessThanOrEqual(14);
     }
-    const housing = BOARDS.find((b) => b.id === "11_real_estate");
-    expect(housing).toBeDefined();
-    expect((housing?.tiles.length ?? 0) + PENDING_BOARD_TILES["11_real_estate"].length).toBeGreaterThanOrEqual(12);
   });
 
   it("give every tile a section and plain text: no em dash, sentence case titles", () => {
@@ -110,10 +90,10 @@ describe("sectors tiles and boards", () => {
     }
   });
 
-  it("are all defined once among every tile of every unit, and give the boards only live tiles", () => {
+  it("are all defined once among every tile of every unit", () => {
     const others = TILES.filter((t) => !SPECS.tiles.includes(t)).map((t) => t.id);
     for (const t of MINE) expect(others.includes(t.id), t.id).toBe(false);
     expect(new Set(MINE.map((t) => t.id)).size).toBe(MINE.length);
-    expect(SPECS.tiles.every((t) => LIVE_TILES.has(t.id))).toBe(true);
+    expect(SPECS.tiles).toEqual(MINE);
   });
 });

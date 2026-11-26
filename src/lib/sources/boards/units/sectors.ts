@@ -6,13 +6,20 @@
  * Every tile names its dataset by id and was computed once from production rows on 26 Nov 2026 (the unit's report
  * lists each headline with its period and snapshot). Measures come only from the profiles of
  * `../../profiles/units/sectors.ts`; tables without a provable unit get count tiles (`records`), which need none.
- *
- * Live and pending. A tile is on a board only when the engine on this branch computes its form; the forms of round 6
- * (compare, map, distribution, records) and the paged and lowest-first rankings are defined here and held in
- * `PENDING_BOARD_TILES` until their compute lands (unit `forms`), so no board shows a refusal that only means
- * "not built yet". The tests check both lists against the specs.
+ * Every tile computes on the rows of `./sectors.fixtures.json` (production rows and facet counts, each transfer checked
+ * by an MD5 computed on production), which the board tests read.
  */
-import { FDA_ORIGINAL_COUNTS, FHFA_QUARTERLY_DATASET, WB_HIGH_TECH, WB_ICT_GOODS } from "../../profiles/units/sectors";
+import {
+  CAF_DISBURSEMENTS,
+  CAF_II_LARGEST,
+  cafStudyArea,
+  type CafStudyArea,
+  FDA_ORIGINAL_COUNTS,
+  FHFA_QUARTERLY_DATASET,
+  RDOF_LARGEST,
+  WB_HIGH_TECH,
+  WB_ICT_GOODS,
+} from "../../profiles/units/sectors";
 import type { FieldMatch } from "../../profiles/types";
 import type { UnitSpecs } from "../compose";
 import type {
@@ -42,7 +49,6 @@ const PARTD = "official_03_healthcare_csv_partd_overall_annual_654675dedc";
 const FDA_APPLICATIONS = "official_03_healthcare_csv_fda_applications_8ae8368413";
 const OB_EXCLUSIVITY = "official_03_healthcare_csv_ob_exclusivity_b108a0e8e8";
 const FCC_PROVIDERS = "official_10_communications_csv_fcc_provider_extents_b54be90909";
-const CAF_DISBURSE = "official_10_communications_csv_caf_disbursements_929fb6680e";
 const CAF_SPEED = "official_10_communications_csv_caf_speed_obligations_4a63551abb";
 const WB_TELECOM = "official_10_communications_csv_wb_telecom_annual_full_c578033483";
 const WB_TELECOM_MISSING = "official_10_communications_csv_wb_telecom_missing_observations_afef7dfa81";
@@ -104,7 +110,7 @@ const fhfaStat = (id: string, placeId: string, name: string): StatTileSpec => ({
   note: FHFA_Q_NOTE,
 });
 
-const COUNTY_NOTE = "FHFA's developmental annual county index: all transactions, not seasonally adjusted. Counties as FHFA names them; the FIPS code tells counties of one name apart.";
+const COUNTY_NOTE = "FHFA's developmental annual county index: all transactions, not seasonally adjusted. Counties as FHFA names them, with FHFA's state.";
 
 const countyRank = (id: string, order: "highest" | "lowest"): RankTileSpec => ({
   id,
@@ -119,7 +125,7 @@ const countyRank = (id: string, order: "highest" | "lowest"): RankTileSpec => ({
   form: "ranked-bars",
   transform: "rank",
   headline: "rank",
-  across: { by: "geo_code", period: "latest", top: 10, order },
+  across: { by: "geo_code", period: "latest", top: 10, order, labelWith: "State" },
   section: "Counties",
   note: COUNTY_NOTE,
 });
@@ -533,14 +539,14 @@ const HEALTH: TileSpec[] = [
     id: "fda-sponsors",
     collection: "03_healthcare",
     datasetId: FDA_APPLICATIONS,
-    title: "Sponsors with the most applications in Drugs@FDA",
-    subject: "Drugs@FDA applications",
+    title: "Drugs@FDA applications by sponsor name",
+    subject: "The Drugs@FDA applications file",
     transform: "records",
     headline: "records",
     form: "ranked-bars",
     per: { dimension: "entity_name", top: 10 },
     section: "Drug approvals",
-    note: "One record per application (NDA, ANDA or BLA); sponsor names as FDA writes them.",
+    note: "One record per application (NDA, ANDA or BLA), counted by SponsorName exactly as FDA writes it: one company can file under several names (TEVA and TEVA PHARMS USA are counted apart).",
   } satisfies RecordsTileSpec,
   {
     id: "ob-exclusivity-codes",
@@ -559,25 +565,76 @@ const HEALTH: TileSpec[] = [
 
 // ---------------------------------------------------------------- Communications
 
+const CAF_NOTE =
+  "USAC's High Cost program data: one record per study area, fund and filing year (the year carriers reported in USAC's HUBB portal). A study area is one carrier's service area in one state.";
+
+const cafLine = (area: CafStudyArea, fund: string): TileSeriesSpec => ({ series: cafStudyArea(area.studyArea, fund), label: area.label });
+
+const studyAreas = (areas: readonly CafStudyArea[]) => areas.map((a) => `${a.carrier} (${a.studyArea})`).join("; ");
+
 const COMMUNICATIONS: TileSpec[] = [
   {
-    id: "fcc-provider-records",
+    id: "rdof-locations",
     collection: "10_communications",
-    datasetId: FCC_PROVIDERS,
-    title: "Fixed broadband providers in FCC's provider lookup table, by Form 477 date",
-    subject: "FCC's fixed broadband provider lookup table",
-    transform: "records",
-    headline: "records",
-    form: "bars",
-    per: { dimension: "period", format: "mmmyyyy", by: "period" },
-    section: "Broadband providers",
+    datasetId: CAF_DISBURSEMENTS,
+    measure: "locations_deployed_cumulative",
+    title: "Rural Digital Opportunity Fund: locations deployed, cumulative, five study areas with the most",
+    subject: "RDOF locations deployed by Time Warner Cable in Texas (study area 449097)",
+    verb: "were",
+    unit: "locations",
+    decimals: 0,
+    form: "compare",
+    transform: "level",
+    changeAs: "percent",
+    headline: "level",
+    lines: RDOF_LARGEST.map((a) => cafLine(a, "RDOF")),
+    window: 5,
+    section: "Connect America Fund",
     size: "wide",
-    note: "One record per holding company and Form 477 date (June and December), as FCC publishes them; the table's latest date is June 2021.",
-  } satisfies RecordsTileSpec,
+    note: `${CAF_NOTE} The five RDOF study areas with the most locations deployed by filing year 2025: ${studyAreas(RDOF_LARGEST)}.`,
+  } satisfies CompareTileSpec,
+  {
+    id: "rdof-texas-locations-by-year",
+    collection: "10_communications",
+    datasetId: CAF_DISBURSEMENTS,
+    measure: "locations_deployed_in_filing",
+    title: "Locations deployed each filing year with RDOF support, Time Warner Cable in Texas",
+    subject: "RDOF locations deployed by Time Warner Cable in Texas (study area 449097) in the filing year",
+    verb: "were",
+    unit: "locations",
+    decimals: 0,
+    form: "bars",
+    transform: "level",
+    changeAs: "percent",
+    headline: "level",
+    series: cafStudyArea(RDOF_LARGEST[0].studyArea, "RDOF"),
+    window: 5,
+    section: "Connect America Fund",
+    note: `${CAF_NOTE} ${RDOF_LARGEST[0].carrier}, study area ${RDOF_LARGEST[0].studyArea}.`,
+  } satisfies SeriesTileSpec,
+  {
+    id: "caf-ii-locations",
+    collection: "10_communications",
+    datasetId: CAF_DISBURSEMENTS,
+    measure: "locations_deployed_cumulative",
+    title: "Connect America Fund Phase II: locations deployed, cumulative, five study areas with the most",
+    subject: "CAF II locations deployed by Brightspeed in Missouri (study area 421151)",
+    verb: "were",
+    unit: "locations",
+    decimals: 0,
+    form: "compare",
+    transform: "level",
+    changeAs: "percent",
+    headline: "level",
+    lines: CAF_II_LARGEST.map((a) => cafLine(a, "CAF II")),
+    window: 10,
+    section: "Connect America Fund",
+    note: `${CAF_NOTE} CAF II model-based support; deployment counted to filing year 2021, none reported after. The five study areas: ${studyAreas(CAF_II_LARGEST)}.`,
+  } satisfies CompareTileSpec,
   {
     id: "caf-disbursement-records",
     collection: "10_communications",
-    datasetId: CAF_DISBURSE,
+    datasetId: CAF_DISBURSEMENTS,
     title: "Connect America Fund disbursement records by state",
     subject: "USAC's CAF disbursements and locations table",
     transform: "records",
@@ -600,6 +657,20 @@ const COMMUNICATIONS: TileSpec[] = [
     per: { dimension: "geo_code", top: 60 },
     section: "Connect America Fund",
     note: "One record per study area, fund, filing year and obligated speed tier, as USAC publishes them.",
+  } satisfies RecordsTileSpec,
+  {
+    id: "fcc-provider-records",
+    collection: "10_communications",
+    datasetId: FCC_PROVIDERS,
+    title: "Fixed broadband providers in FCC's provider lookup table, by Form 477 date",
+    subject: "FCC's fixed broadband provider lookup table",
+    transform: "records",
+    headline: "records",
+    form: "bars",
+    per: { dimension: "period", format: "mmmyyyy", by: "period" },
+    section: "Broadband providers",
+    size: "wide",
+    note: "One record per holding company and Form 477 date (June and December), as FCC publishes them; the table's latest date is June 2021.",
   } satisfies RecordsTileSpec,
   {
     id: "wb-telecom-records",
@@ -633,28 +704,7 @@ const COMMUNICATIONS: TileSpec[] = [
 
 const ALL: readonly TileSpec[] = [...HOUSING, ...TECHNOLOGY, ...HEALTH, ...COMMUNICATIONS];
 
-/**
- * Count tiles that read the store's facet counts (`source_facets`): the board tests' fake client answers no facet
- * call yet, so these wait off the boards (asked of the lead on 26 Nov 2026). Their exact production counts are in
- * `sectors.fixtures.json` under `facets`.
- */
-export const FACET_TILES: ReadonlySet<string> = new Set([
-  "fhfa-county-records",
-  "kev-by-vendor",
-  "fda-sponsors",
-  "fcc-provider-records",
-  "caf-disbursement-records",
-  "caf-speed-records",
-  "wb-telecom-records",
-  "wb-telecom-missing",
-]);
-
-/** Tiles on the live board lists: every tile the engine computes on the fixture rows of `sectors.fixtures.json`. */
-export const LIVE_TILES: ReadonlySet<string> = new Set(
-  [...HOUSING, ...TECHNOLOGY, ...HEALTH, ...COMMUNICATIONS].map((t) => t.id).filter((id) => !FACET_TILES.has(id)),
-);
-
-/** Each board's tiles in board order, live and pending alike. */
+/** Each board's tiles in board order. */
 const ORDER: Readonly<Record<string, readonly string[]>> = {
   "11_real_estate": HOUSING.map((t) => t.id),
   "02_technology": TECHNOLOGY.map((t) => t.id),
@@ -663,38 +713,23 @@ const ORDER: Readonly<Record<string, readonly string[]>> = {
   library: ["fhfa-states-change-map", "twse-tech-revenue-top"],
 };
 
-const live = (ids: readonly string[]) => ids.filter((id) => LIVE_TILES.has(id));
-
-/** Tiles defined here that wait for the engine of unit `forms`, by board, in board order. */
-export const PENDING_BOARD_TILES: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
-  Object.entries(ORDER).map(([board, ids]) => [board, ids.filter((id) => !LIVE_TILES.has(id))]),
-);
-
-const NEW_BOARDS: readonly { id: string; title: string }[] = [
-  { id: "10_communications", title: "Communications" },
-  { id: "02_technology", title: "Technology" },
-  { id: "03_healthcare", title: "Health care" },
+/** The boards of the three collections that had none. */
+const BOARDS: BoardSpec[] = [
+  { id: "10_communications", title: "Communications", tiles: ORDER["10_communications"] },
+  { id: "02_technology", title: "Technology", tiles: ORDER["02_technology"] },
+  { id: "03_healthcare", title: "Health care", tiles: ORDER["03_healthcare"] },
 ];
 
-/** A new board is listed once it holds a live tile, so no collection shows an empty board. */
-const BOARDS: BoardSpec[] = NEW_BOARDS.flatMap((b) => {
-  const tiles = live(ORDER[b.id]);
-  return tiles.length ? [{ id: b.id, title: b.title, tiles }] : [];
-});
-
-/**
- * Tiles and boards added by round 6 unit `sectors`. Pure data: no network; no shared list is edited. Only live tiles are
- * given to the boards: the board tests require every defined tile to be on a board and to compute on fixture rows.
- */
+/** Tiles and boards added by round 6 unit `sectors`. Pure data: no network; no shared list is edited. */
 export const SPECS: UnitSpecs = {
   unit: "sectors",
-  tiles: ALL.filter((t) => LIVE_TILES.has(t.id)),
+  tiles: ALL,
   boards: BOARDS,
-  boardTiles: { "11_real_estate": live(ORDER["11_real_estate"]), library: live(ORDER.library) },
+  boardTiles: { "11_real_estate": ORDER["11_real_estate"], library: ORDER.library },
 };
 
-/** Every tile this unit defines, live and pending, for the tests and the report. */
+/** Every tile this unit defines, for the tests and the report. */
 export const SECTOR_TILES: readonly TileSpec[] = ALL;
 
-/** Every board this unit fills, live and pending, in board order. */
+/** Every board this unit fills, in board order. */
 export const SECTOR_BOARD_ORDER = ORDER;

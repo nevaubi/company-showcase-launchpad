@@ -360,3 +360,51 @@ describe("Drugs@FDA original submissions by year", () => {
     expect(counts.addressing).toMatchObject({ by: null, where: ["application_type", "submission_status"], rowsScanned: 369 });
   });
 });
+
+/** USAC's CAF disbursements dictionary as stored (snapshot 665994aa...): units on the four measures only. */
+const CAF_FIELDS: SourceColumn[] = [
+  ["state", ""],
+  ["fund", ""],
+  ["study_area_code", ""],
+  ["holding_company", ""],
+  ["carrier", ""],
+  ["filing_year", ""],
+  ["locations_deployed_in_filing", "locations"],
+  ["locations_deployed_cumulative", "locations"],
+  ["support_disbursed_in_filing", "USD nominal"],
+  ["support_disbursed_cumulative", "USD nominal"],
+].map(([label, unit], i) => ({ key: `col${String(i + 1).padStart(4, "0")}`, label, type: "string", ...(unit ? { unit } : {}) }));
+const CAF = { id: "official_10_communications_csv_caf_disbursements_929fb6680e", source_id: "USAC_CAF_DISBURSE" };
+
+describe("USAC Connect America Fund disbursements", () => {
+  it("reads locations and dollars from the dictionary, the filing year from its field, a study area and fund by cell filter", () => {
+    const caf = on(CAF, CAF_FIELDS);
+    expect(caf.family).toBe("usac-caf-disbursements");
+    expect(caf.period).toEqual({ from: "field", field: "filing_year", format: "year" });
+    expect(caf.measures.map((m) => [m.field, m.unit.from === "dictionary" ? m.unit.text : ""])).toEqual([
+      ["locations_deployed_cumulative", "locations"],
+      ["locations_deployed_in_filing", "locations"],
+      ["support_disbursed_cumulative", "USD nominal"],
+      ["support_disbursed_in_filing", "USD nominal"],
+    ]);
+    expect(caf.addressing).toMatchObject({ by: null, where: ["study_area_code", "fund"], scan: "table", rowsScanned: 14593 });
+    expect(addressRefusal(caf, { where: [{ field: "study_area_code", value: "449097" }, { field: "fund", value: "RDOF" }] })).toBeNull();
+  });
+
+  it("opens on the five RDOF study areas with the most locations deployed, together", () => {
+    const caf = on(CAF, CAF_FIELDS);
+    expect(caf.firstLook).toBe("compare");
+    const lines = caf.compareSeries?.(CAF) ?? [];
+    expect(lines.map((l) => l.label)).toEqual(["Time Warner Cable (TX)", "Charter Fiberlink (WI)", "Time Warner Cable (NC)", "Time Warner Cable (SC)", "Time Warner Cable (OH)"]);
+    expect(lines[0].series).toEqual({ where: [{ field: "study_area_code", value: "449097" }, { field: "fund", value: "RDOF" }] });
+  });
+
+  it("draws nothing when the dictionary states another unit, and claims neither the speed tier table nor E-Rate", () => {
+    const changed = CAF_FIELDS.map((f) => (f.label === "support_disbursed_cumulative" ? { ...f, unit: "USD thousands" } : f));
+    const measure = measureOf(on(CAF, changed), "support_disbursed_cumulative");
+    expect(measure && unitOf(measure, changed)).toMatchObject({ ok: false });
+    expect(measure && unitOf(measure, CAF_FIELDS)).toEqual({ ok: true, text: "USD nominal" });
+    expect(profileStatus({ id: "official_10_communications_csv_caf_speed_obligations_4a63551abb", source_id: "USAC_CAF_SPEED" }, CAF_FIELDS)).toEqual({ state: "none" });
+    expect(profileStatus({ id: "official_10_communications_csv_e_rate_providers_60a7bc1641", source_id: "USAC_ERATE_PROVIDERS" }, CAF_FIELDS)).toEqual({ state: "none" });
+  });
+});

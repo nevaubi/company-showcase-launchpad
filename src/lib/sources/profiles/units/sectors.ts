@@ -1,5 +1,5 @@
 import { defineProfile } from "../define";
-import type { Profile, ProfileDataset, ProfileEntry } from "../types";
+import type { Profile, ProfileDataset, ProfileEntry, SeriesAddress } from "../types";
 
 /**
  * Profile families of round 6 unit `sectors` (Housing, Communications, Technology, Health care), each with its
@@ -471,6 +471,87 @@ function fdaCountsProfile(): Profile {
 
 export const FDA_COUNTS_ENTRY: ProfileEntry = { family: "fda-original-counts", claims: fdaCountsClaims, profile: fdaCountsProfile };
 
+// ---------------------------------------------------------------- Communications: USAC Connect America Fund
+
+/**
+ * USAC's CAF Disbursements and Locations Data (opendata.usac.org, dataset hghw-69cg): one record per study area, fund
+ * and filing year, 14,593 records (the three are unique together in every record, checked on production). USAC
+ * describes the dataset as "dollar amounts paid to carriers that participate in Connect America Fund (CAF) programs,
+ * the number of locations that carriers have deployed with CAF support"; the dictionary states "USD nominal" for the two
+ * support fields and "locations" for the two location fields, and the profile reads them from it (another unit turns it
+ * off). The filing year ("Year when data was reported in High Cost Universal Broadband (HUBB) portal") is a field: the
+ * table's only dimension is the state. A series is one study area and fund, a cell filter inside one select. USAC notes
+ * that a disbursed amount may be negative ("prior period adjustments, audit recoveries, or other factors").
+ * Checked on 26 Nov 2026: 300 of 300 values (the four measures of the five RDOF study areas below, filing years 2021 to
+ * 2025, and of the five CAF II study areas, 2016 to 2025) equal USAC's API as text. The table page opens on the RDOF five.
+ */
+export const CAF_DISBURSEMENTS = "official_10_communications_csv_caf_disbursements_929fb6680e";
+const cafClaims = (d: ProfileDataset) => d.source_id === "USAC_CAF_DISBURSE" && d.id === CAF_DISBURSEMENTS;
+
+/** A study area as USAC names its carrier (shortened to the name and the state), with its six-digit code. */
+export type CafStudyArea = { studyArea: string; label: string; carrier: string };
+
+/**
+ * The five Rural Digital Opportunity Fund (RDOF) study areas with the most locations deployed by filing year 2025, and
+ * the five of CAF Phase II model-based support (CAF II), as the stored table ranks them (SQL on production, 26 Nov
+ * 2026). `carrier` is USAC's carrier name as filed.
+ */
+export const RDOF_LARGEST: readonly CafStudyArea[] = [
+  { studyArea: "449097", label: "Time Warner Cable (TX)", carrier: "TIME WARNER CABLE INFORMATION SERVICES (TEXAS), LLC" },
+  { studyArea: "339064", label: "Charter Fiberlink (WI)", carrier: "CHARTER FIBERLINK CCO, LLC" },
+  { studyArea: "239039", label: "Time Warner Cable (NC)", carrier: "TIME WARNER CABLE INFORMATION SERVICES (NORTH CAROLINA), LLC" },
+  { studyArea: "249037", label: "Time Warner Cable (SC)", carrier: "TIME WARNER CABLE INFORMATION SERVICES (SOUTH CAROLINA), LLC" },
+  { studyArea: "309026", label: "Time Warner Cable (OH)", carrier: "TIME WARNER CABLE INFORMATION SERVICES (OHIO), LLC" },
+];
+export const CAF_II_LARGEST: readonly CafStudyArea[] = [
+  { studyArea: "421151", label: "Brightspeed (MO)", carrier: "BRIGHTSPEED OF EAST MISSOURI, LLC" },
+  { studyArea: "285184", label: "South Central Bell (MS)", carrier: "SO CENTRAL BELL-MS" },
+  { studyArea: "545170", label: "Pacific Bell (CA)", carrier: "PACIFIC BELL" },
+  { studyArea: "330924", label: "Brightspeed (WI)", carrier: "BRIGHTSPEED OF NORTH CENTRAL WISCONSIN, LLC" },
+  { studyArea: "445216", label: "Southwestern Bell (TX)", carrier: "SOUTHWESTERN BELL-TX" },
+];
+
+export const cafStudyArea = (studyArea: string, fund: string): SeriesAddress => ({
+  where: [
+    { field: "study_area_code", value: studyArea },
+    { field: "fund", value: fund },
+  ],
+});
+
+function cafProfile(): Profile {
+  return defineProfile(cafClaims, {
+    family: "usac-caf-disbursements",
+    entityNoun: { one: "study area", many: "study areas" },
+    period: { from: "field", field: "filing_year", format: "year" },
+    cadence: "year",
+    measures: [
+      { field: "locations_deployed_cumulative", label: "Locations deployed, cumulative", unit: { from: "dictionary", text: "locations" }, grouping: "none" },
+      { field: "locations_deployed_in_filing", label: "Locations deployed in filing year", unit: { from: "dictionary", text: "locations" }, grouping: "none" },
+      { field: "support_disbursed_cumulative", label: "Support disbursed, cumulative", unit: { from: "dictionary", text: "USD nominal" }, grouping: "none" },
+      { field: "support_disbursed_in_filing", label: "Support disbursed in filing year", unit: { from: "dictionary", text: "USD nominal" }, grouping: "none" },
+    ],
+    extraFields: ["state", "fund", "study_area_code", "holding_company", "carrier"],
+    addressing: {
+      by: null,
+      where: ["study_area_code", "fund"],
+      scan: "table",
+      rowsScanned: 14593,
+      note: "A series is one study area and fund, a cell filter on study_area_code and fund over a 14,593-record table: one record a filing year.",
+    },
+    defaultSeries: () => cafStudyArea(RDOF_LARGEST[0].studyArea, "RDOF"),
+    compareSeries: () => RDOF_LARGEST.map((s) => ({ label: s.label, series: cafStudyArea(s.studyArea, "RDOF") })),
+    firstLook: "compare",
+    proof: {
+      snapshotId: "665994aac8734d32ede10c5405c371a628a195ee921237853e9bc3333873294e",
+      datasetId: CAF_DISBURSEMENTS,
+      checked: "2026-11-26",
+      documentation: ["https://opendata.usac.org/api/views/hghw-69cg.json", "https://opendata.usac.org/resource/hghw-69cg.json"],
+    },
+  });
+}
+
+export const CAF_ENTRY: ProfileEntry = { family: "usac-caf-disbursements", claims: cafClaims, profile: cafProfile };
+
 /** Profile families of round 6 unit `sectors`, each with its proof (see ../registry.ts for the rule). */
 export const ENTRIES: readonly ProfileEntry[] = [
   FHFA_QUARTERLY_ENTRY,
@@ -482,4 +563,5 @@ export const ENTRIES: readonly ProfileEntry[] = [
   WB_TECH_ENTRY,
   CMS_PARTD_ENTRY,
   FDA_COUNTS_ENTRY,
+  CAF_ENTRY,
 ];
