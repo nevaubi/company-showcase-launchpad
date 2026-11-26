@@ -64,9 +64,26 @@ describe("whitelist entries on the figures the tiles print", () => {
     });
   });
 
+  it("writes CMS Part D drug spending in dollars, the stored figure as filed beneath", () => {
+    expect(readerFigure("USD nominal gross drug spending", d("4123456789.12"), "4,123,456,789.12")).toMatchObject({
+      figure: "$4.123 billion",
+      unit: "",
+      filed: "4,123,456,789.12 USD nominal gross drug spending as filed",
+      axis: { title: "USD billions", shift: 9 },
+    });
+  });
+
+  it("writes FR Y-9C and SOD thousands of dollars in a reader's scale", () => {
+    expect(readerFigure("USD thousands", d("4561447000"), "4,561,447,000")).toMatchObject({
+      figure: "$4.561 trillion",
+      filed: "4,561,447,000 USD thousands as filed",
+      axis: { title: "USD trillions", shift: 9 },
+    });
+  });
+
   it("holds only units that a level or a ranking tile uses", () => {
     const used = new Set(TILES.flatMap((t) => (isClassicSpec(t) && (t.transform === "level" || t.transform === "rank") ? [t.unit] : [])));
-    for (const entry of SCALE_UNITS) expect(used.has(entry.unit), entry.unit).toBe(true);
+    for (const entry of SCALE_UNITS) if (!entry.requested) expect(used.has(entry.unit), entry.unit).toBe(true);
   });
 });
 
@@ -107,7 +124,7 @@ describe("rounding at the edges", () => {
 
 describe("units off the whitelist stay as filed", () => {
   it("matches the stored unit exactly", () => {
-    for (const unit of ["Millions of Units", "Billion Kilowatthours", "Quadrillion Btu", "Percent", "Number", "Dollars", "USD thousands", "usd thousands (monetary measures)"])
+    for (const unit of ["Millions of Units", "Billion Kilowatthours", "Quadrillion Btu", "Percent", "Number", "Dollars", "USD Thousands", "USD thousands ", "usd thousands (monetary measures)"])
       expect(readerFigure(unit, d("13761"), "13,761")).toBeNull();
     expect(scaleUnitOf(FDIC)?.exponent).toBe(3);
   });

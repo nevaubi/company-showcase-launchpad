@@ -2,7 +2,7 @@ import { boardSpec, collectionBoardId } from "@/lib/sources/boards/specs";
 import { collectionIdFromSlug, isCollectionId } from "@/lib/sources/collections";
 import { BoardView } from "./board";
 
-export { BoardView, boardQuery } from "./board";
+export { BoardBody, BoardSection, BoardView, boardQuery } from "./board";
 export { Tile } from "./tile";
 
 /**
@@ -12,7 +12,7 @@ export { Tile } from "./tile";
 export function LibraryBoard() {
   const spec = boardSpec("library");
   if (!spec) return null;
-  return <BoardView id="library" tiles={spec.tiles.length} section="What the data says" />;
+  return <BoardView id="library" section="What the data says" />;
 }
 
 /**
@@ -24,5 +24,5 @@ export function CollectionBoard({ collection }: { collection: string }) {
   const id = sector ? collectionBoardId(sector) : null;
   const spec = id ? boardSpec(id) : null;
   if (!id || !spec) return null;
-  return <BoardView id={id} tiles={spec.tiles.length} section={`${spec.title} board`} />;
+  return <BoardView id={id} section={`${spec.title} board`} />;
 }

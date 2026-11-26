@@ -29,6 +29,7 @@ import {
   type Decimal,
 } from "./decimal";
 import { axisLabel, readerFigure, type ReaderFigure } from "./scale";
+import { namedFromCodes, placeName, stateRule } from "./places";
 import type {
   Cadence,
   RankTileSpec,
@@ -98,7 +99,7 @@ type Placed = {
   value: Decimal | null;
 };
 
-const refuse = (reason: string): TileResult => ({ ok: false, reason });
+export const refuse = (reason: string): TileResult => ({ ok: false, reason });
 
 const year = (iso: string) => Number(iso.slice(0, 4));
 const month = (iso: string) => Number(iso.slice(5, 7));
@@ -134,12 +135,12 @@ export function periodLabel(parsed: ParsedPeriod, cadence: Cadence): string {
   return parsed.label;
 }
 
-const at = (cadence: Cadence, label: string) =>
+export const at = (cadence: Cadence, label: string) =>
   cadence === "week" ? `in the week ending ${label}` : cadence === "day" ? `on ${label}` : `in ${label}`;
 /** A period named as the object of a comparison ("above Oct 2025", "above the week ending Nov 20, 2025"). */
-const named = (cadence: Cadence, label: string) => (cadence === "week" ? `the week ending ${label}` : label);
+export const named = (cadence: Cadence, label: string) => (cadence === "week" ? `the week ending ${label}` : label);
 
-const SPAN: Record<Cadence, string> = {
+export const SPAN: Record<Cadence, string> = {
   day: "day",
   week: "52 weeks",
   month: "12 months",
@@ -147,7 +148,7 @@ const SPAN: Record<Cadence, string> = {
   year: "year",
 };
 
-function describeReading(reading: NativeReading): string {
+export function describeReading(reading: NativeReading): string {
   if (reading.kind === "null") return "missing in the source";
   if (reading.kind === "empty") return "empty in the source";
   if (reading.kind === "marker") return `marked "${reading.text}"`;
@@ -155,7 +156,7 @@ function describeReading(reading: NativeReading): string {
   return reading.text;
 }
 
-function emptyGaps(): TileGaps {
+export function emptyGaps(): TileGaps {
   return { count: 0, nulls: 0, empties: 0, markers: 0, texts: 0, noBase: 0, otherPeriods: 0, examples: [] };
 }
 
@@ -163,7 +164,7 @@ function noteGap(gaps: TileGaps, example: string) {
   if (gaps.examples.length < 3) gaps.examples.push(example);
 }
 
-function countReading(gaps: TileGaps, reading: NativeReading, label: string) {
+export function countReading(gaps: TileGaps, reading: NativeReading, label: string) {
   if (reading.kind === "number") return;
   gaps.count += 1;
   if (reading.kind === "null") gaps.nulls += 1;
@@ -174,7 +175,7 @@ function countReading(gaps: TileGaps, reading: NativeReading, label: string) {
 }
 
 /** The unit and subject checks every record of a selection must pass. Null when they pass. */
-function checkRecords(
+export function checkRecords(
   cells: readonly CellInput[],
   context: TileContext,
   unit: string,
@@ -235,14 +236,14 @@ export function unitWords(unit: string): string {
   return ` ${unit}`;
 }
 
-function changeText(change: Decimal, as: "percent" | "difference", unit: string, decimals: number): string {
+export function changeText(change: Decimal, as: "percent" | "difference", unit: string, decimals: number): string {
   const size = formatDecimal(absDecimal(change), { decimals });
   if (as === "percent") return `${size}%`;
   if (unit === "Percent") return `${size} percentage ${size === "1" ? "point" : "points"}`;
   return `${size}${unitWords(unit)}`.trim();
 }
 
-function computeChange(latest: Decimal, base: Decimal, as: "percent" | "difference", decimals: number): Decimal | null {
+export function computeChange(latest: Decimal, base: Decimal, as: "percent" | "difference", decimals: number): Decimal | null {
   return as === "percent" ? percentChange(latest, base, 1) : roundDecimal(subtractDecimal(latest, base), decimals);
 }
 
@@ -481,46 +482,96 @@ export function computeShareTile(
   };
 }
 
-/** A tile ranking the entities or places of one period by the measure. */
-export function computeRankTile(
-  spec: RankTileSpec,
-  context: TileContext,
-  cells: readonly RankCellInput[],
-): TileResult {
-  const failed = checkRecords(cells, context, spec.unit, spec.subjectCheck);
-  if (failed) return refuse(failed);
-  if (cells.length === 0) return refuse("The cross-section has no records.");
-  const periods = new Set(cells.map((c) => c.period));
-  if (periods.size !== 1) return refuse(`The cross-section spans ${periods.size} periods; a ranking needs one.`);
-  const periodText = cells[0].period;
-  const parsed = periodText == null ? null : parsePeriod(periodText, context.format);
-  if (!parsed) return refuse(`The period "${periodText ?? ""}" is not of the declared format (${context.format}).`);
-  const label = periodLabel(parsed, context.cadence);
+/**
+ * A whole small table without a period dimension, read in place of one period: its records are dated by the day the
+ * store's copy was retrieved ("24 Nov 2026").
+ */
+export type WholeTable = { retrieved: string };
 
+/** The figures of one period's cross-section (or of a whole small table), checked: one period, each key once. */
+export type CrossValues = {
+  /** How a reader says the period ("Q3 2026"), or "the copy retrieved 24 Nov 2026" for a whole table. */
+  label: string;
+  /** The period in a sentence: "in Q3 2026", "on Sep 30, 2026", "in the copy retrieved 24 Nov 2026". */
+  when: string;
+  /** The period as stored, or null for a whole table. */
+  period: string | null;
+  /** Records with a figure, in row order. */
+  valued: { cell: RankCellInput; value: Decimal }[];
+  /** Records read, with or without a figure. */
+  records: number;
+  gaps: TileGaps;
+};
+
+/** Reads the figures of a cross-section: one period of the declared format (or a whole table), each key once. */
+export function crossValues(
+  cells: readonly RankCellInput[],
+  context: TileContext,
+  unit: string,
+  check: { field: string; value: string } | undefined,
+  table?: WholeTable,
+): { ok: true; values: CrossValues } | { ok: false; reason: string } {
+  const failed = checkRecords(cells, context, unit, check);
+  if (failed) return { ok: false, reason: failed };
+  if (cells.length === 0) return { ok: false, reason: table ? "The table has no records." : "The cross-section has no records." };
+  let label: string;
+  let when: string;
+  let period: string | null = null;
+  if (table) {
+    if (cells.some((c) => c.period != null)) return { ok: false, reason: "The table has periods; a whole table is read only when it has none." };
+    label = `the copy retrieved ${table.retrieved}`;
+    when = `in ${label}`;
+  } else {
+    const periods = new Set(cells.map((c) => c.period));
+    if (periods.size !== 1) return { ok: false, reason: `The cross-section spans ${periods.size} periods; a ranking needs one.` };
+    period = cells[0].period;
+    const parsed = period == null ? null : parsePeriod(period, context.format);
+    if (!parsed) return { ok: false, reason: `The period "${period ?? ""}" is not of the declared format (${context.format}).` };
+    label = periodLabel(parsed, context.cadence);
+    when = at(context.cadence, label);
+  }
   const gaps = emptyGaps();
   const keys = new Set<string>();
-  const ranked: { cell: RankCellInput; value: Decimal }[] = [];
+  const valued: { cell: RankCellInput; value: Decimal }[] = [];
   for (const cell of cells) {
-    if (keys.has(cell.key)) return refuse(`${cell.key} appears twice in the cross-section (row ${cell.row}).`);
+    if (keys.has(cell.key)) return { ok: false, reason: `${cell.key} appears twice in the ${table ? "table" : "cross-section"} (row ${cell.row}).` };
     keys.add(cell.key);
     const reading = readNative(cell.text, { markers: context.markers, grouping: context.grouping });
     countReading(gaps, reading, cell.name ?? cell.key);
     if (reading.kind !== "number") continue;
     const value = parseDecimal(reading.text.replace(/,/g, ""));
-    if (value) ranked.push({ cell, value });
+    if (value) valued.push({ cell, value });
   }
-  if (ranked.length === 0) return refuse(`No record of ${label} has a figure for ${context.field}.`);
+  if (valued.length === 0) return { ok: false, reason: `No record of ${label} has a figure for ${context.field}.` };
+  return { ok: true, values: { label, when, period, valued, records: cells.length, gaps } };
+}
+
+/** A tile ranking the entities or places of one period (or of a whole small table) by the measure. */
+export function computeRankTile(
+  spec: RankTileSpec,
+  context: TileContext,
+  cells: readonly RankCellInput[],
+  table?: WholeTable,
+): TileResult {
+  const read = crossValues(cells, context, spec.unit, spec.subjectCheck, table);
+  if (!read.ok) return refuse(read.reason);
+  const { label, when, valued: ranked, gaps } = read.values;
+  const lowest = spec.across.order === "lowest";
   ranked.sort((a, b) => {
-    const order = -compareValues(a.value, b.value);
+    const order = (lowest ? 1 : -1) * compareValues(a.value, b.value);
     return order !== 0 ? order : a.cell.row - b.cell.row;
   });
   const top = ranked.slice(0, Math.max(1, spec.across.top));
+  // A place stored by its state code alone is named from the code (the source line says so).
+  const states = cells.some((c) => !c.name) ? stateRule(cells.map((c) => c.key)) : null;
+  const nameOf = (cell: RankCellInput) => placeName(cell, states).name;
+  const namedFrom = states && top.some(({ cell }) => placeName(cell, states).fromCode) ? namedFromCodes(states.kind) : null;
   const leader = top[0];
   const figure = formatDecimal(leader.value, { decimals: spec.decimals });
   const reader = readerFigure(spec.unit, leader.value, figure);
   const points: TilePoint[] = top.map(({ cell, value }) => ({
     key: cell.key,
-    label: cell.name ?? cell.key,
+    label: nameOf(cell),
     value: toNumber(value),
     display: formatDecimal(value, { decimals: spec.decimals }),
     text: cell.text,
@@ -529,10 +580,10 @@ export function computeRankTile(
   }));
   return {
     ok: true,
-    headline: `${leader.cell.name ?? leader.cell.key} ${spec.verb ?? "had"} the largest ${spec.subject} of ${ranked.length} ${spec.entities} ${at(context.cadence, label)}.`,
+    headline: `${nameOf(leader.cell)} ${spec.verb ?? "had"} the ${lowest ? "smallest" : "largest"} ${spec.subject} of ${ranked.length} ${spec.entities} ${when}.`,
     figure,
     figureUnit: figureUnitOf(spec.unit),
-    asOf: label,
+    asOf: table ? `Retrieved ${table.retrieved}` : label,
     unit: spec.unit,
     plotUnit: spec.unit,
     ...(reader ? { reader } : {}),
@@ -540,14 +591,15 @@ export function computeRankTile(
     points,
     gaps,
     derivation: {
-      formula: `${ranked.length} records of ${label} with a figure, ordered by ${context.field}, largest first`,
-      inputs: top.slice(0, 1).map(({ cell }) => ({ label: cell.name ?? cell.key, text: cell.text ?? "", period: cell.period ?? "", row: cell.row, field: context.field })),
+      formula: `${ranked.length} records of ${label} with a figure, ordered by ${context.field}, ${lowest ? "smallest" : "largest"} first`,
+      inputs: top.slice(0, 1).map(({ cell }) => ({ label: nameOf(cell), text: cell.text ?? "", period: cell.period ?? "", row: cell.row, field: context.field })),
     },
     refs: { datasetId: context.datasetId, snapshotId: context.snapshotId, rows: top.map((t) => t.cell.row), field: context.field },
+    ...(namedFrom ? { sourceNote: namedFrom } : {}),
   };
 }
 
-function compareValues(a: Decimal, b: Decimal): number {
+export function compareValues(a: Decimal, b: Decimal): number {
   const d = subtractDecimal(a, b);
   return signOf(d);
 }

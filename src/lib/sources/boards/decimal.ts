@@ -41,6 +41,22 @@ export function subtractDecimal(a: Decimal, b: Decimal): Decimal {
   return { int: x - y, scale };
 }
 
+export function addDecimal(a: Decimal, b: Decimal): Decimal {
+  const [x, y, scale] = align(a, b);
+  return { int: x + y, scale };
+}
+
+/** The sum of several values, exact (zero for none). */
+export function sumDecimals(values: readonly Decimal[]): Decimal {
+  return values.reduce<Decimal>((sum, v) => addDecimal(sum, v), { int: 0n, scale: 0 });
+}
+
+/** Half of a value, exact: one more decimal place where the last digit is odd. */
+export function halfDecimal(a: Decimal): Decimal {
+  if (a.int % 2n === 0n) return { int: a.int / 2n, scale: a.scale };
+  return { int: a.int * 5n, scale: a.scale + 1 };
+}
+
 /** numerator / denominator rounded half away from zero to an integer. The denominator is not zero. */
 function divideRound(numerator: bigint, denominator: bigint): bigint {
   const negative = numerator < 0n !== denominator < 0n;
