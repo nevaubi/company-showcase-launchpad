@@ -71,6 +71,15 @@ const EXPECTED: Record<string, { figure: string; unit: string; asOf: string; sna
   "cattle-and-beef-ppi": { figure: "20.9", unit: "%", asOf: "2025", snapshot: "7cfee944" },
   "all-food-forecast-2026": { figure: "2.8", unit: "%", asOf: "Oct 2026", snapshot: "a78b0673" },
   "food-at-home-forecast-2026": { figure: "2.3", unit: "%", asOf: "Oct 2026", snapshot: "a78b0673" },
+  "copper-aluminum-real-value": { figure: "3,980", unit: "98$/t", asOf: "2020", snapshot: "09591238" },
+  "pit-hours-change-map": { figure: "+768,353", unit: "employee-hours", asOf: "2025", snapshot: "4509b721" },
+  "recall-campaigns-other-makers": { figure: "30", unit: "recall campaigns", asOf: "2026", snapshot: "2f9f33ec" },
+  "recall-campaigns-rv-makers": { figure: "31", unit: "recall campaigns", asOf: "2026", snapshot: "2f9f33ec" },
+  "recall-campaigns-truck-makers": { figure: "22", unit: "recall campaigns", asOf: "2026", snapshot: "2f9f33ec" },
+  "sugar-cpi-annual": { figure: "5.1", unit: "%", asOf: "2025", snapshot: "c4a37688" },
+  "beverages-cpi-annual": { figure: "3.8", unit: "%", asOf: "2025", snapshot: "c4a37688" },
+  "eggs-farm-and-retail": { figure: "31.6", unit: "%", asOf: "2025", snapshot: "7cfee944" },
+  "wheat-farm-to-retail": { figure: "\u221210.9", unit: "%", asOf: "2025", snapshot: "7cfee944" },
 };
 
 describe("industry tiles on production rows", () => {
@@ -101,5 +110,8 @@ describe("industry tiles on production rows", () => {
     expect(said("mines-ever-registered")).toContain("92,129 records as retrieved on 24 Nov 2026; Kentucky has the most, 14,084");
     expect(said("eggs-cpi-annual")).toBe("The annual change in the CPI for eggs was 21.9% in 2025, 13.4 percentage points above 2024.");
     expect(said("all-food-forecast-2026")).toBe("The midpoint of ERS's forecast for all food in 2026 was 2.8% in Oct 2026.");
+    expect(said("copper-aluminum-real-value")).toBe("The unit value of copper in constant 1998 dollars was 3,980 98$/t in 2020, 1.3% above 2019.");
+    expect(said("pit-hours-change-map")).toContain("Alaska had the largest change in employee hours at strip, quarry and open-pit operations of 54 states and territories over the year to 2025, +768,353 employee-hours; Nevada");
+    expect(said("eggs-farm-and-retail")).toBe("The annual change in the PPI for farm-level eggs was 31.6% in 2025, 11.5 percentage points below 2024.");
   });
 });

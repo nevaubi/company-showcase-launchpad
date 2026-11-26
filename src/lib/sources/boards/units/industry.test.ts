@@ -66,11 +66,12 @@ describe("industry tiles", () => {
     expect(composeProblems(CORE_TILES, CORE_BOARDS, UNIT_SPECS).filter((p) => p.unit === "industry")).toEqual([]);
   });
 
-  it("give Materials and mining a board of 12 to 16 tiles, each in a section", () => {
+  // COMMON6: a collection board holds at most 18 tiles, in sections
+  it("give Materials and mining a board of 12 to 18 tiles, each in a section", () => {
     const board = BOARDS.find((b) => b.id === "07_materials");
     expect(board?.title).toBe("Materials and mining");
     expect(board!.tiles.length).toBeGreaterThanOrEqual(12);
-    expect(board!.tiles.length).toBeLessThanOrEqual(16);
+    expect(board!.tiles.length).toBeLessThanOrEqual(18);
     for (const id of board!.tiles) expect(SPECS.tiles.find((t) => t.id === id)?.section, id).toBeTruthy();
   });
 
