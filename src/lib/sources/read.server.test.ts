@@ -137,6 +137,60 @@ describe("readSourceSeries", () => {
     expect(rest.ok && rest.data.next).toBeNull();
     expect(recordCalls().every(c => c.limit !== null && c.limit <= 1000)).toBe(true);
   });
+  it("reads the last rows of a whole snapshot as a row range from its end, in the same bounded selects", async () => {
+    // a FRED daily file of 7,015 rows: the latest 4,999 are rows 2,017 to 7,015
+    const n = 7015;
+    const daily = new FakeSourceDb({
+      source_datasets: [{ id: "dex", latest_snapshot_id: S2 }],
+      source_snapshots: [snapshot(S2, "dex", n, [col("observation_date"), col("DEXUSEU")], { period: 0 })],
+      source_records: Array.from({ length: n }, (_, i) => rec(S2, i + 1, [`d${i + 1}`, i % 50 === 0 ? "" : String(i)], { period: `d${i + 1}` })),
+    });
+    const r = await readSourceSeries(daily, { datasetId: "dex", field: 1, address: { whole: true }, last: SERIES_SURE_LIMIT, limit: SERIES_SURE_LIMIT });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.points).toHaveLength(SERIES_SURE_LIMIT);
+    expect(r.data.points[0]).toEqual({ row: n - SERIES_SURE_LIMIT + 1, period: `d${n - SERIES_SURE_LIMIT + 1}`, text: String(n - SERIES_SURE_LIMIT) });
+    expect(r.data.points[r.data.points.length - 1].row).toBe(n);
+    expect(r.data.points.map(p => p.row)).toEqual(Array.from({ length: SERIES_SURE_LIMIT }, (_, i) => n - SERIES_SURE_LIMIT + 1 + i));
+    // the read reached the end of the snapshot and says so for certain
+    expect(r.data.next).toBeNull();
+    // a blank cell stays blank
+    expect(r.data.points.find(p => p.row === 2501)?.text).toBe("");
+    const calls = daily.calls.filter(c => c.table === "source_records");
+    expect(calls).toHaveLength(5);
+    for (const c of calls) {
+      expect(c.filters).toEqual(["snapshot_id=eq", "row_number=gt"]);
+      expect(c.orders).toEqual(["row_number.asc"]);
+      expect(c.limit).not.toBeNull();
+      expect(c.limit).toBeLessThanOrEqual(1000);
+      expect(c.columns).toBe("row_number,period,cell:values->>1");
+    }
+  });
+  it("reads from the first row when the snapshot is shorter than the rows asked for, and keeps a later cursor", async () => {
+    const all = await readSourceSeries(db, { datasetId: "long", field: 1, address: { whole: true }, last: 4000, limit: 4000 });
+    expect(all.ok && [all.data.points.length, all.data.points[0].row, all.data.next]).toEqual([2500, 1, null]);
+    const tail = await readSourceSeries(db, { datasetId: "long", field: 1, address: { whole: true }, last: 300 });
+    expect(tail.ok && tail.data.points.map(p => p.row)).toEqual(Array.from({ length: 300 }, (_, i) => 2201 + i));
+    expect(tail.ok && tail.data.next).toBeNull();
+    // a cursor past the start of the last rows wins: paging on through a read from the end never steps back
+    const on = await readSourceSeries(db, { datasetId: "long", field: 1, address: { whole: true }, last: 300, after: 2400 });
+    expect(on.ok && on.data.points.map(p => p.row)).toEqual(Array.from({ length: 100 }, (_, i) => 2401 + i));
+  });
+  it("reads from the end only a whole snapshot, and only within the bounds", async () => {
+    const byKey = await readSourceSeries(db, { datasetId: "fdic", field: "asset", address: { by: "entity_id", key: "628" }, last: 2 });
+    expect(byKey).toMatchObject({ ok: false, reason: "invalid", message: "Only a whole-snapshot series is read from its end" });
+    const byCell = await readSourceSeries(db, { datasetId: "fdic", field: "asset", address: { where: [{ field: "cert", value: "628" }] }, last: 2 });
+    expect(byCell).toMatchObject({ ok: false, reason: "invalid" });
+    expect(await readSourceSeries(db, { datasetId: "long", field: 1, address: { whole: true }, last: 5001 })).toMatchObject({ ok: false, reason: "invalid" });
+    expect(await readSourceSeries(db, { datasetId: "long", field: 1, address: { whole: true }, last: 0 })).toMatchObject({ ok: false, reason: "invalid" });
+    expect(recordCalls()).toHaveLength(0);
+    const base = { datasetId: "long", field: 1, address: { whole: true } };
+    expect(seriesReadInput.safeParse({ ...base, last: SERIES_SURE_LIMIT }).success).toBe(true);
+    expect(seriesReadInput.safeParse({ ...base, last: 5000 }).success).toBe(true);
+    expect(seriesReadInput.safeParse({ ...base, last: 5001 }).success).toBe(false);
+    expect(seriesReadInput.safeParse({ ...base, last: 0 }).success).toBe(false);
+    expect(seriesReadInput.safeParse({ ...base, last: 1.5 }).success).toBe(false);
+  });
   it("says where to continue when a whole page ends the answer", async () => {
     const r = await readSourceSeries(db, { datasetId: "long", field: 1, address: { whole: true } });
     expect(r.ok && r.data.points).toHaveLength(1000);

@@ -253,9 +253,18 @@ async function seriesRead(db: SourceDirectClient, meta: SnapshotMeta, input: Sou
   }
   const select = single ? `row_number,period,cell:${cellPath(fields[0].position)}` : `row_number,period,${fields.map((f, i) => `c${i}:${cellPath(f.position)}`).join(",")}`;
   const cellsOf = (r: Record<string, unknown>) => (single ? [str(r.cell)] : fields.map((_, i) => str(r[`c${i}`])));
-  const limit = Math.min(Math.max(1, input.limit ?? SERIES_DEFAULT_LIMIT), SERIES_MAX_LIMIT);
+  let start = input.after ?? 0;
+  if (input.last !== undefined) {
+    // The last rows of the snapshot as a row range: the snapshot's own row count (exact) less the rows wanted.
+    // Rows of one key or of a cell filter are not a range of row numbers, so only a whole snapshot is read this way.
+    if (!address || !("whole" in address)) stop("invalid", "Only a whole-snapshot series is read from its end");
+    if (!Number.isSafeInteger(input.last) || input.last < 1 || input.last > SERIES_MAX_LIMIT)
+      stop("invalid", `A read from the end takes 1 to ${SERIES_MAX_LIMIT.toLocaleString("en-US")} rows`);
+    start = Math.max(start, meta.ref.rows - input.last);
+  }
+  const limit = Math.min(Math.max(1, input.limit ?? input.last ?? SERIES_DEFAULT_LIMIT), SERIES_MAX_LIMIT);
   const points: SourceSeriesRow[] = [];
-  let after = input.after ?? 0;
+  let after = start;
   let next: number | null = null;
   for (let page = 0; page < READ_LIMITS.pages; page++) {
     const remaining = limit - points.length;
@@ -277,7 +286,8 @@ async function seriesRead(db: SourceDirectClient, meta: SnapshotMeta, input: Sou
  * One measure over one series, in file order. Each select reads at most 1,000 rows after `after` through the
  * dimension's index (or the primary key), at most five selects a call. `next` is null when the series ended in this
  * answer; otherwise it is the row to continue after (the following answer can be empty when the series ends exactly
- * at a page boundary).
+ * at a page boundary). With `last`, a whole-snapshot series is read from row `rows - last + 1` to its end: the same
+ * selects, starting further on (a FRED daily file longer than one read holds draws its latest observations).
  */
 export function readSourceSeries(db: SourceDirectClient, input: SourceSeriesQueryInput): Promise<SourceRead<SourceSeries>> {
   return guarded(async () => {

@@ -111,7 +111,7 @@ export function normalizeRecordQuery(query: SourceRecordQuery): SourceRecordQuer
   };
 }
 
-/** The series arguments as sent: cursor and point count stated. */
+/** The series arguments as sent: cursor and point count stated; a read from the end only when asked for. */
 export function normalizeSeriesQuery(query: SourceSeriesQueryInput): SourceSeriesQueryInput {
   return {
     datasetId: query.datasetId,
@@ -120,6 +120,7 @@ export function normalizeSeriesQuery(query: SourceSeriesQueryInput): SourceSerie
     address: query.address,
     after: query.after ?? 0,
     limit: query.limit ?? SERIES_PAGE_SIZE,
+    ...(query.last !== undefined ? { last: query.last } : {}),
   };
 }
 

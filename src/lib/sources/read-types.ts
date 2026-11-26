@@ -100,6 +100,12 @@ export type SourceSeriesQueryInput = {
   after?: number;
   /** Points wanted, 1 to 5,000 (default 1,000). */
   limit?: number;
+  /**
+   * Only the last N rows of the snapshot, 1 to 5,000, for a whole-snapshot series (`{ whole: true }`): the read
+   * starts after row `rows - N` (or after `after` when that is later), still in file order and in the same
+   * selects of at most 1,000 rows. A FRED file is in date order, so its last rows are its latest observations.
+   */
+  last?: number;
 };
 /** One observation: the cell of the measured field on one row, with that row's period dimension. */
 export type SourcePoint = { row: number; period: string | null; text: string | null };
@@ -481,6 +487,7 @@ export const seriesReadInput = z.object({
   ]),
   after: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   limit: z.number().int().min(1).max(READ_LIMITS.page * READ_LIMITS.pages).optional(),
+  last: z.number().int().min(1).max(READ_LIMITS.page * READ_LIMITS.pages).optional(),
 }).strict();
 export const crossSectionReadInput = z.object({ ...pinned, field: fieldRef, period: nativeText.optional(), where: cellMatches.optional() }).strict();
 export const periodRangeReadInput = z.object(pinned).strict();
