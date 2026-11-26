@@ -309,6 +309,8 @@ export type RecordsTileSpec = TileLayout & {
   /** bars: records per period; ranked-bars: the entities or places with the most records; map: records per state. */
   form: "bars" | "ranked-bars" | "map";
   per: RecordsPer;
+  /** What the counted values are, plural, in the publisher's sense ("operators", "states"), for a ranked count. */
+  noun?: string;
 };
 
 export type TileSpec =
@@ -477,6 +479,8 @@ export type TileShape =
       /** One point per category, in category order; `label` is the category's. */
       latest: TilePoint[];
       earlier: TilePoint[] | null;
+      /** The table and snapshot of each category, in category order (each may be its own table). */
+      sources: { datasetId: string; snapshotId: string }[];
     }
   | {
       kind: "stat";
@@ -532,6 +536,8 @@ export type TileResult =
       refs: TileRefs;
       /** The marks of a round 6 form (compare, mix, map, distribution, curve, stat, records); absent for the others. */
       shape?: TileShape;
+      /** A sentence for the source line about how the tile reads its records ("State names from the FIPS codes ..."). */
+      sourceNote?: string;
     }
   | { ok: false; reason: string };
 
@@ -555,6 +561,8 @@ export type TileSource = {
   /** When the stored copy was retrieved from the publisher (ISO time), and when it was published in the store. */
   retrievedAt: string | null;
   publishedAt: string | null;
+  /** The other tables a multi-series tile reads (compare, mix, curve), after its own. */
+  also?: { datasetId: string; table: string; code?: string }[];
 };
 
 /** A computed tile as a board serves it. */

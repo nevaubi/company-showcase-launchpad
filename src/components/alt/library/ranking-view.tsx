@@ -1,30 +1,35 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TileChart } from "@/components/alt/library/boards/tile-chart";
+import { StateGrid } from "@/components/alt/library/charts/state-grid";
 import { Segmented } from "@/components/app/segmented";
-import { computeRankTile } from "@/lib/sources/boards/compute";
+import { getLookCross, type LookCrossRead } from "@/lib/sources/boards/board.functions";
+import { computeRankTile, type TileContext } from "@/lib/sources/boards/compute";
+import { computeMapTile } from "@/lib/sources/boards/compute-forms";
 import type { TileResult } from "@/lib/sources/boards/types";
 import { recordHref } from "@/lib/sources/links";
-import { locateField, type MeasureSpec, type Profile } from "@/lib/sources/profiles";
-import { sourceQueries } from "@/lib/sources/queries";
+import { cadenceOf, type MeasureSpec, type Profile } from "@/lib/sources/profiles";
 import type { SourceSnapshot } from "@/lib/sources/schema";
 import { cn } from "@/lib/utils";
-import { AWAITS_UPDATE } from "./coverage-view";
 import { count } from "./dataset-model";
-import { readData } from "./dataset-queries";
-import { rankCells, rankSpec, tileContext } from "./first-look-model";
+import { mapSpec, rankSpec, snapshotHasPeriod, tileContext } from "./first-look-model";
 import { PointTable, rowOf } from "./series-view";
 import { PANEL, QuietLine } from "./ui/primitives";
-import { UsTileMap } from "@/components/alt/us-tile-map";
 
-/** Codes the tile map draws: the states, DC and Puerto Rico. */
-const STATE_CODES = new Set(
-  "AK AL AR AZ CA CO CT DC DE FL GA HI IA ID IL IN KS KY LA MA MD ME MI MN MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA PR RI SC SD TN TX UT VA VT WA WI WV WY".split(" "),
-);
+/** The table page's read of one period, cached per snapshot like the boards' reads. */
+export const lookCrossQuery = (input: { datasetId: string; snapshotId: string; field: string; by: "entity_id" | "entity_name" | "geo_code" | "geo_name"; period: string }) => ({
+  queryKey: ["source-look-cross", input.datasetId, input.snapshotId, input.field, input.by, input.period] as const,
+  queryFn: () => getLookCross({ data: input }) as Promise<LookCrossRead>,
+  staleTime: Infinity,
+  retry: false,
+});
 
 /**
- * The latest period across entities or places, ranked by the measure, bars from zero. Only a whole period is
- * ranked: a period with more records than one read returns is refused, never ranked as a part.
+ * The latest period across entities or places, ranked by the measure, bars from zero: the greatest period of the
+ * profile's declared format (a publisher's footer stored as a record is passed over and counted), read in up to five
+ * pages and ranked only when whole; a table without periods is read whole (up to 5,000 records) and dated by its
+ * retrieval. A place stored by its state code alone is named from the code. With `map`, places that are US states are
+ * also drawn on the state grid beside the bars.
  */
 export function RankingView({
   datasetId,
@@ -38,7 +43,7 @@ export function RankingView({
   onOpen,
   map = false,
 }: {
-  /** Places: a state tile map beside the bars when every key is a US state or territory code. */
+  /** Places: the state grid beside the bars when the places are US states by one rule. */
   map?: boolean;
   datasetId: string;
   collection: string;
@@ -50,37 +55,44 @@ export function RankingView({
   view: "chart" | "table";
   onOpen: (row: number) => void;
 }) {
-  const field = locateField(snapshot.columns, measure.field);
   const by = profile.addressing.by ?? "entity_id";
-  const query = useQuery({
-    ...sourceQueries.crossSection({ datasetId, snapshotId: snapshot.id, field: field.ok ? field.index : 0 }),
-    enabled: field.ok,
-  });
-  const read = readData(query.data);
-  const result: TileResult | null = useMemo(() => {
-    if (!field.ok) return { ok: false, reason: `The field ${measure.field} is not in this version as the profile expects.` };
-    if (!read.data) return null;
-    if (!read.data.complete) return { ok: false, reason: "The last period has more than 1,000 records; a part is never ranked as the whole." };
+  const periodic = snapshotHasPeriod(snapshot.ingest);
+  const query = useQuery(lookCrossQuery({ datasetId, snapshotId: snapshot.id, field: measure.field, by, period: periodic ? "latest" : "table" }));
+  const read = query.data;
+  const plural = profile.entityNoun?.many ?? (by.startsWith("geo") ? "places" : "entities");
+  const computed: { rank: TileResult; map: TileResult | null; context: TileContext } | { failed: string } | null = useMemo(() => {
+    if (!read) return null;
+    if (!read.ok) return { failed: read.reason };
     const ctx = tileContext(profile, measure, datasetId, snapshot.id, snapshot.columns);
-    if (!ctx.ok) return { ok: false, reason: ctx.reason };
-    const unit = ctx.unit ?? "";
-    const plural = profile.entityNoun?.many ?? (by.startsWith("geo") ? "places" : "entities");
-    return computeRankTile(rankSpec(datasetId, collection, measure, by, unit, top, plural), ctx.context, rankCells(read.data, by));
-  }, [field, read.data, profile, measure, datasetId, snapshot.id, snapshot.columns, collection, by, top]);
+    if (!ctx.ok) return { failed: ctx.reason };
+    const format = read.data.format ?? ctx.context.format;
+    const composedCadence = format === "quarter" ? "quarter" : format === "year" ? "year" : cadenceOf(profile);
+    const context: TileContext = { ...ctx.context, format, cadence: read.data.format && read.data.format !== ctx.context.format ? composedCadence : ctx.context.cadence };
+    const unit = ctx.unit ?? read.data.cells.find((c) => c.unit)?.unit ?? "";
+    const table = read.data.table ? { retrieved: read.data.retrieved ?? "an unknown day" } : undefined;
+    const rank = computeRankTile(rankSpec(datasetId, collection, measure, by, unit, top, plural), context, read.data.cells, table);
+    const mapResult = map ? computeMapTile(mapSpec(datasetId, collection, measure, by, unit, plural), context, read.data.cells, null, table) : null;
+    return { rank, map: mapResult && mapResult.ok ? mapResult : null, context };
+  }, [read, profile, measure, datasetId, snapshot.id, snapshot.columns, collection, by, top, plural, map]);
 
-  if (query.isError || read.reason) return <QuietLine>{read.reason === "unavailable" ? AWAITS_UPDATE : "The last period could not be read."}</QuietLine>;
-  if (!result) return <span className="block h-[22rem] animate-pulse rounded-md bg-muted/60" aria-label="Reading the last period" />;
+  if (query.isError) return <QuietLine>The last period could not be read.</QuietLine>;
+  if (!computed) return <span className="block h-[22rem] animate-pulse rounded-md bg-muted/60 motion-reduce:animate-none" aria-label="Reading the last period" />;
+  if ("failed" in computed) return <QuietLine>{computed.failed}</QuietLine>;
+  const result = computed.rank;
   if (!result.ok) return <QuietLine>{result.reason}</QuietLine>;
-  const noun = profile.entityNoun?.many ?? (by.startsWith("geo") ? "places" : "entities");
-  const states = result.points.length > 0 && result.points.every((p) => STATE_CODES.has(p.key));
+  const grid = computed.map && computed.map.ok && computed.map.shape?.kind === "map" ? computed.map : null;
+  const skipped = read && read.ok ? read.data.skipped : [];
+  const records = read && read.ok ? read.data.cells.length : 0;
   return (
-    <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Ranking">
+    <div className={cn(PANEL, "@container min-w-0 px-4 py-3")} data-section="Ranking">
       <div className="flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium leading-5">{result.headline}</p>
           <p className="text-[11px] leading-4 text-muted-foreground">
-            {measure.label}, {result.unit}, {result.asOf}. The {Math.min(top, result.points.length)} largest of {count(read.data?.rows.length ?? 0)} {noun} in the period
+            {measure.label}, {result.unit}, {result.asOf}. The {Math.min(top, result.points.length)} {result.headline.includes("smallest") ? "smallest" : "largest"} of {count(records)} {plural} in the period
             {result.gaps.count ? `; ${count(result.gaps.count)} without a figure are left out` : ""}.
+            {skipped.length ? ` ${skipped.map((s) => `${s.atLeast ? "At least " : ""}${count(s.records)} ${s.records === 1 ? "record" : "records"} whose period reads "${s.period.slice(0, 60)}" ${s.records === 1 ? "is" : "are"} not a period of the declared format and left out.`).join(" ")}` : ""}
+            {result.sourceNote ? ` ${result.sourceNote}` : ""}
           </p>
         </div>
         <Segmented
@@ -94,20 +106,27 @@ export function RankingView({
           ]}
         />
       </div>
-      <div className={cn("mt-2 grid min-w-0 grid-cols-1 gap-4", map && states && "@5xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]")}>
-        {map && states && view === "chart" && (
-          <UsTileMap
-            values={Object.fromEntries(result.points.flatMap((p) => (p.value === null ? [] : [[p.key, p.value] as const])))}
-            scale="linear"
-            title={(st) => {
-              const p = result.points.find((x) => x.key === st);
-              return p ? `${p.label}: ${p.text} ${result.plotUnit}, ${result.asOf}` : `${st}: not among the ${top} shown`;
-            }}
-            onSelect={(st) => {
-              const p = result.points.find((x) => x.key === st);
-              if (p) onOpen(p.row);
-            }}
-          />
+      <div className={cn("mt-2 grid min-w-0 grid-cols-1 gap-4", grid && view === "chart" && "@4xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]")}>
+        {grid && view === "chart" && grid.shape?.kind === "map" && (
+          <div className="min-w-0" data-section="State grid">
+            <StateGrid
+              places={grid.shape.places}
+              territories={grid.shape.territories}
+              scale="sequential"
+              domain={grid.shape.domain}
+              rangeLabels={[
+                grid.points[grid.points.length - 1]?.display ?? "–",
+                grid.points[0]?.display ?? "–",
+              ]}
+              unit={grid.plotUnit}
+              period={grid.asOf}
+              label={`${measure.label} by state, ${grid.asOf}`}
+              onOpen={(p) => (p.row !== null ? onOpen(p.row) : undefined)}
+            />
+            {grid.shape.missing.length > 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">No figure: {grid.shape.missing.map((m) => m.name).join(", ")}.</p>
+            )}
+          </div>
         )}
         {view === "chart" ? (
           <TileChart

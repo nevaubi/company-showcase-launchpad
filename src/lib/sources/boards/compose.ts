@@ -1,3 +1,4 @@
+import type { ScaleUnit } from "./scale";
 import type { BoardSpec, TileSpec } from "./types";
 
 /**
@@ -10,6 +11,13 @@ export type UnitSpecs = {
   tiles: readonly TileSpec[];
   boards: readonly BoardSpec[];
   boardTiles: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Units the unit's tiles print in a reader's scale, added to the whitelist of `scale.ts`. Each entry matches a unit
+   * exactly as a dictionary or a reviewed profile states it, checked on production, with its evidence in a comment
+   * beside it (the snapshot and fields that state it, the publisher's instructions). A unit string may appear in more
+   * than one unit's list only with the same exponent and base (a test holds them to it).
+   */
+  scaleUnits?: readonly ScaleUnit[];
 };
 
 /** A problem of the composed boards, for the tests: an id defined twice, or a board or tile that does not exist. */

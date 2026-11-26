@@ -5,6 +5,8 @@
 import { readFileSync } from "node:fs";
 import type { SourceColumn } from "../schema";
 import type { CellInput, RankCellInput } from "./compute";
+import { withUnitFixtures, type FixtureFacets } from "./units/fixtures";
+export { facetsAnswer } from "./units/fixtures";
 
 const DIR = "src/test/fixtures/sources/boards";
 
@@ -218,4 +220,9 @@ export function fixtureTables(): { source_datasets: Row[]; source_snapshots: Row
   );
 
   return { source_datasets: datasets, source_snapshots: snapshots, source_records: records };
+}
+
+/** The core rows and every unit's fixture rows (`./units/fixtures.ts`): what every tile of every board reads. */
+export function boardFixtureTables(): { source_datasets: Row[]; source_snapshots: Row[]; source_records: Row[]; facets: FixtureFacets } {
+  return withUnitFixtures(fixtureTables());
 }

@@ -17,6 +17,7 @@
  * Btu" (8.29). "Billions of Chained 2017 Dollars" is used only by a change tile, which prints a percent.
  */
 import { absDecimal, formatDecimal, integerDigits, MINUS, roundDecimal, shiftDecimal, signOf, type Decimal } from "./decimal";
+import { UNIT_SPECS } from "./units/index";
 
 export type ReaderScaleName = "one" | "million" | "billion" | "trillion";
 
@@ -35,9 +36,12 @@ export type ScaleUnit = {
   base: { currency: "$" } | { words: string };
   /** The value axis title at each reader scale, in the publisher's own style. */
   axis: Record<ReaderScaleName, string>;
+  /** A round 6 unit that asked for the entry; its tile lands with that unit's branch. */
+  requested?: string;
 };
 
-export const SCALE_UNITS: readonly ScaleUnit[] = [
+/** The units of the boards of round 4 and those the lead added on a unit's request. */
+export const CORE_SCALE_UNITS: readonly ScaleUnit[] = [
   {
     // FDIC financial reports and industry summary: dollar amounts in thousands.
     unit: "USD thousands (monetary measures)",
@@ -72,6 +76,34 @@ export const SCALE_UNITS: readonly ScaleUnit[] = [
     },
   },
   {
+    // FR Y-9C (snapshot eaa74358: BHCK2170, BHCK3210, BHCK4340) and the FDIC SOD bank totals (snapshot 5f256d95):
+    // dollar amounts in thousands, as each dictionary states (checked on production 26 Nov 2026) and as the FR Y-9C
+    // instructions (GEN-5) and the SOD instructions ("Report all amounts in thousands") say.
+    unit: "USD thousands",
+    exponent: 3,
+    base: { currency: "$" },
+    axis: { one: "USD", million: "USD millions", billion: "USD billions", trillion: "USD trillions" },
+    requested: "company",
+  },
+  {
+    // NCUA call reports (NCUA_CALL): amounts in dollars, as the dictionary of the latest snapshot states for nine fields
+    // (checked on production 26 Nov 2026); asked by unit finance for NCUA amounts and OFR fund volumes.
+    unit: "USD",
+    exponent: 0,
+    base: { currency: "$" },
+    axis: { one: "USD", million: "USD millions", billion: "USD billions", trillion: "USD trillions" },
+    requested: "finance",
+  },
+  {
+    // CMS Medicare Part D spending by drug (CMS_PARTD_2024): whole dollars, as the dictionary of snapshot ad25a8c7 states
+    // the unit of Tot_Spndng (checked on production 26 Nov 2026).
+    unit: "USD nominal gross drug spending",
+    exponent: 0,
+    base: { currency: "$" },
+    axis: { one: "USD", million: "USD millions", billion: "USD billions", trillion: "USD trillions" },
+    requested: "sectors",
+  },
+  {
     // FRED copy of BLS manufacturing employment.
     unit: "Thousands of Persons",
     exponent: 3,
@@ -79,6 +111,24 @@ export const SCALE_UNITS: readonly ScaleUnit[] = [
     axis: { one: "Persons", million: "Millions of Persons", billion: "Billions of Persons", trillion: "Trillions of Persons" },
   },
 ];
+
+/**
+ * The whitelist: the core entries, then each unit's own (`UnitSpecs.scaleUnits`), the first entry of a unit string
+ * winning. A unit string listed twice must carry one exponent and one base (`scaleConflicts`).
+ */
+export const SCALE_UNITS: readonly ScaleUnit[] = [...CORE_SCALE_UNITS, ...UNIT_SPECS.flatMap((u) => u.scaleUnits ?? [])];
+
+/** Unit strings listed more than once with another exponent or base: none may exist (a test holds it). */
+export function scaleConflicts(entries: readonly ScaleUnit[] = SCALE_UNITS): string[] {
+  const first = new Map<string, ScaleUnit>();
+  const out: string[] = [];
+  for (const e of entries) {
+    const prior = first.get(e.unit);
+    if (!prior) first.set(e.unit, e);
+    else if (prior.exponent !== e.exponent || JSON.stringify(prior.base) !== JSON.stringify(e.base)) out.push(e.unit);
+  }
+  return out;
+}
 
 /** The whitelist entry of a unit, matched exactly; null keeps the unit as filed. */
 export function scaleUnitOf(unit: string): ScaleUnit | null {
