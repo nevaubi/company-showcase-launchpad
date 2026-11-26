@@ -18,6 +18,7 @@ import {
   stackable,
   statOf,
   tieAt,
+  valueDomain,
   waterfallBars,
 } from "./model";
 import type { VizPoint, VizSeries } from "./types";
@@ -182,5 +183,15 @@ describe("layout helpers", () => {
     expect(m.get("b")! - m.get("a")!).toBeGreaterThanOrEqual(11.99);
     expect(m.get("a")!).toBeGreaterThanOrEqual(0);
     expect(m.get("c")).toBe(100);
+  });
+});
+
+describe("value domain", () => {
+  it("columns include zero; padded lines of positive figures stay at or above zero", () => {
+    expect(valueDomain([5, 10], true)).toEqual([0, 10]);
+    const [lo, hi] = valueDomain([1, 100], false);
+    expect(lo).toBe(0);
+    expect(hi).toBeGreaterThan(100);
+    expect(valueDomain([2.4, 2.8], false)[0]).toBeGreaterThan(2);
   });
 });

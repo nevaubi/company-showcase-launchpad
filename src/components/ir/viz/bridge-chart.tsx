@@ -12,7 +12,7 @@ import type { BridgeChartProps } from "./types";
 
 const UP = "var(--chart-1)";
 const DOWN = "var(--chart-4)";
-const ROW = 26;
+const BAR = 26;
 
 export function BridgeChart({ bridge, reason, scale, onOpen, className }: BridgeChartProps) {
   const [ref, width] = useWidth(260, 640);
@@ -22,7 +22,10 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
 
   const bars = waterfallBars(bridge);
   const closes = bridgeCloses(bridge);
-  const labelW = Math.min(240, Math.max(104, Math.round(width * 0.3)));
+  // Under 480px the name goes on its own line above the bar, so it is not cut to a few letters.
+  const narrow = width < 480;
+  const ROW = narrow ? BAR + 16 : BAR;
+  const labelW = narrow ? 0 : Math.min(240, Math.max(104, Math.round(width * 0.3)));
   const valueW = 76;
   const w = Math.max(60, width - labelW - valueW - 8);
   // The axis spans the running totals, not zero: steps are small beside the totals, so the totals are marked by a
@@ -65,7 +68,7 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
               <li key={b.key} className="absolute inset-x-0" style={{ top: i * ROW, height: ROW }}>
                 <button
                   type="button"
-                  className={cn("flex h-full w-full items-center text-left outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm", active === i && "bg-muted/50")}
+                  className={cn("flex h-full w-full flex-wrap items-center text-left outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm", active === i && "bg-muted/50")}
                   aria-label={describe(b)}
                   onMouseEnter={() => setActive(i)}
                   onMouseLeave={() => setActive(null)}
@@ -74,16 +77,16 @@ export function BridgeChart({ bridge, reason, scale, onOpen, className }: Bridge
                   data-i={i}
                   onClick={() => open(b.point)}
                 >
-                  <span className={cn("shrink-0 truncate pr-2 text-[12px] leading-4", b.kind === "total" ? "font-medium text-foreground" : "text-muted-foreground")} style={{ width: labelW }}>
-                    {b.kind === "total" ? `${bridge.label.length > 24 ? "Total" : bridge.label}, ${b.label}` : b.label}
+                  <span className={cn("shrink-0 truncate pr-2 text-[12px] leading-4", b.kind === "total" ? "font-medium text-foreground" : "text-muted-foreground")} style={{ width: narrow ? "100%" : labelW }}>
+                    {b.kind === "total" ? `${bridge.label.length > 24 && !narrow ? "Total" : bridge.label}, ${b.label}` : b.label}
                   </span>
-                  <svg width={w} height={ROW} className="shrink-0 overflow-visible" aria-hidden>
-                    {i === 0 && !cut && <line x1={x(0)} x2={x(0)} y1={0} y2={h} stroke="var(--border)" />}
-                    {i > 0 && <line x1={x(bars[i - 1].end)} x2={x(bars[i - 1].end)} y1={-ROW / 2 + 7} y2={7} stroke="var(--muted-foreground)" strokeDasharray="2 2" opacity={0.5} />}
+                  <svg width={w} height={BAR} className="shrink-0 overflow-visible" aria-hidden>
+                    {!cut && <line x1={x(0)} x2={x(0)} y1={-ROW + BAR} y2={BAR} stroke="var(--border)" />}
+                    {i > 0 && !narrow && <line x1={x(bars[i - 1].end)} x2={x(bars[i - 1].end)} y1={-ROW + BAR - 7} y2={7} stroke="var(--muted-foreground)" strokeDasharray="2 2" opacity={0.5} />}
                     {b.kind === "total" && cut ? (
-                      <rect x={x(b.end) - 1.5} y={5} width={3} height={ROW - 10} rx={1.5} fill={fill} />
+                      <rect x={x(b.end) - 1.5} y={5} width={3} height={BAR - 10} rx={1.5} fill={fill} />
                     ) : (
-                      <rect x={x0} y={7} width={bw} height={ROW - 14} rx={2} fill={fill} />
+                      <rect x={x0} y={7} width={bw} height={BAR - 14} rx={2} fill={fill} />
                     )}
                   </svg>
                   <span className={cn("num shrink-0 pl-2 text-right text-[12px] leading-4", b.kind === "total" ? "font-medium text-foreground" : "text-foreground")} style={{ width: valueW }}>

@@ -26,7 +26,7 @@ function Readout({ x, width, title, rows, foot }: { x: number; width: number; ti
       {rows.map((r) => (
         <p key={r.key} className={cn("flex items-center gap-1.5", r.active ? "text-foreground" : "text-muted-foreground")}>
           <span aria-hidden className="inline-block h-0.5 w-3 shrink-0 rounded-full" style={{ background: r.color }} />
-          <span className={cn("num", r.active ? "font-medium text-foreground" : "")}>{r.value}</span>
+          <span className={cn("num whitespace-nowrap", r.active ? "font-medium text-foreground" : "")}>{r.value}</span>
           <span className="min-w-0 truncate">{r.label}</span>
         </p>
       ))}
@@ -82,7 +82,14 @@ export function SectionChart({ series, parts: given, title, view: initial = "lin
   const tickFmt = (t: number) => (v === "share" ? `${t}` : fmtTick(t, unitSeries.unit, scale));
 
   // About one period label per 64px: every n-th from the first, the last in place of a neighbour too close to it.
-  const every = Math.max(1, Math.ceil(periods.length / Math.max(2, Math.floor(w / 64))));
+  const base = Math.max(1, Math.ceil(periods.length / Math.max(2, Math.floor(w / 64))));
+  // A step that lands on the last period keeps the labels evenly spaced.
+  let every = base;
+  for (let e = base; e <= base + 2; e++)
+    if ((periods.length - 1) % e === 0) {
+      every = e;
+      break;
+    }
   const labelled = new Set<number>();
   for (let k = 0; k < periods.length; k += every) labelled.add(k);
   const lastK = periods.length - 1;
@@ -178,7 +185,9 @@ export function SectionChart({ series, parts: given, title, view: initial = "lin
         return q ? [{ key: x.key, color: colorOf(x), label: x.label, value: valueText(x, q, scale), active: k === active.j }] : [];
       });
       const lead = p ?? shown.map((x) => pointAt(x, e)).find(Boolean)!;
-      readout = { x: M.left + xc(e), title: lead.periodLabel, rows, foot: p ? pointLines(s, p).slice(1) : [] };
+      const foot = p ? pointLines(s, p).slice(1) : [];
+      if (p && shown.length > 1) foot[0] = `${s.label}, as filed: ${p.printed ?? "not printed as a cell"}`;
+      readout = { x: M.left + xc(e), title: lead.periodLabel, rows, foot };
     } else {
       const c = columns[active.i];
       const g = c.segments[active.j];

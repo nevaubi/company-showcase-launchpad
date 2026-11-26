@@ -296,8 +296,9 @@ export function valueDomain(values: number[], includeZero: boolean): [number, nu
     hi = Math.max(0, hi);
   } else {
     const pad = (hi - lo || Math.abs(hi) || 1) * 0.12;
-    lo -= pad;
-    hi += pad;
+    // Padding never carries an axis of positive figures below zero (or of negative ones above it).
+    lo = lo >= 0 ? Math.max(0, lo - pad) : lo - pad;
+    hi = hi <= 0 ? Math.min(0, hi + pad) : hi + pad;
   }
   if (lo === hi) hi = lo + 1;
   return [lo, hi];
