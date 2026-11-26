@@ -66,7 +66,7 @@ function Loader({ board, ids, enabled, report }: { board: string; ids: readonly 
 function SkeletonTile({ tile }: { tile: BoardLayoutTile }) {
   if (tile.form === "stat")
     return (
-      <div aria-hidden className="flex h-[6.25rem] flex-col gap-2 rounded-md border bg-card px-3 py-2.5 shadow-paper">
+      <div aria-hidden className="flex h-[6.5625rem] flex-col gap-2 rounded-md border bg-card px-3 py-2.5 shadow-paper">
         <div className="h-3 w-2/3 animate-pulse rounded-sm bg-muted motion-reduce:animate-none" />
         <div className="h-6 w-1/2 animate-pulse rounded-sm bg-muted motion-reduce:animate-none" />
         <div className="h-3 w-3/4 animate-pulse rounded-sm bg-muted/70 motion-reduce:animate-none" />
