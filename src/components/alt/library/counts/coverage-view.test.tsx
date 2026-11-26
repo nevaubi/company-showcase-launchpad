@@ -123,6 +123,13 @@ describe("What this table holds", () => {
     expect(mocks.categories).toHaveBeenCalledWith({ datasetId: "d", snapshotId: H(3), fields: [1, 2] });
   });
 
+  it("does not rank entities that each hold one record", async () => {
+    mocks.facets.mockImplementation(async (d: { dimension: string }) => ok(Array.from({ length: 40 }, (_, i) => v(`NCT${String(i).padStart(8, "0")}`, 1)), d.dimension));
+    mount(snap(H(5), 40, [col("nct_id"), col("sponsor")], { entity_id: 0 }, [0, 0]), { entity: true, geo: false, period: false });
+    expect(await screen.findByText("Each of the 40 entities holds 1 record, so there is no ranking to draw.")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "entities by records" })).not.toBeInTheDocument();
+  });
+
   it("does not count the fields of a large table, and says so in one line", async () => {
     mocks.facets.mockResolvedValue({ ok: false, reason: "unavailable", message: "x" });
     mount(snap(H(4), 60000, [col("id"), col("type")], { entity_id: 0 }, [0, 0]), { entity: true, geo: false, period: false });

@@ -100,8 +100,21 @@ export function EntityPanel({
         Every record is of one {one}, {single.label && single.label !== single.value ? `${single.label} (${single.value})` : single.value}.
       </PanelNote>
     );
-  const bars = entityBars(facets.values, TOP);
   const count = facets.complete ? facets.values.length : total;
+  // A ranking of ties says nothing: when every entity counted holds the same number of records (a register of one
+  // record per entity), say so in one line instead of drawing equal bars.
+  const first = facets.values[0];
+  if (facets.values.length > 1 && facets.values.every((v) => v.exact && v.rows === first.rows)) {
+    const each = `${n(first.rows)} ${first.rows === 1 ? "record" : "records"}`;
+    return (
+      <PanelNote name={name} title={title}>
+        {facets.complete
+          ? `Each of the ${n(facets.values.length)} ${many} holds ${each}, so there is no ranking to draw.`
+          : `Each of the first ${n(facets.values.length)} ${many} counted${count ? `, of ${n(count)},` : ""} holds ${each}, so no ranking is drawn.`}
+      </PanelNote>
+    );
+  }
+  const bars = entityBars(facets.values, TOP);
   const caption = facets.complete
     ? `${n(facets.values.length)} ${facets.values.length === 1 ? one : many}; the ${Math.min(TOP, bars.length)} with the most records.`
     : `${count ? `${n(count)} ${many}. ` : ""}The ${Math.min(TOP, bars.length)} with the most records among the first ${n(facets.values.length)} counted, in id order.`;
