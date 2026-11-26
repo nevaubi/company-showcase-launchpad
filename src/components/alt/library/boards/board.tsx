@@ -151,9 +151,21 @@ function SectionNotes({ tiles, slots, retry }: { tiles: readonly BoardLayoutTile
 
 /**
  * One section of a board: its heading, its tiles loaded as the section comes near the viewport (one request of at most
- * six tiles at a time, deferred tiles asked for again), skeletons of each tile's real size until then.
+ * six tiles at a time, deferred tiles asked for again), skeletons of each tile's real size until then. With `only`,
+ * just those tiles are shown (the gallery's search), while the requests stay those of the whole section, so a
+ * narrower search asks the server for nothing new.
  */
-export function BoardSection({ board, section, heading = true }: { board: string; section: BoardLayoutSection; heading?: boolean }) {
+export function BoardSection({
+  board,
+  section,
+  heading = true,
+  only,
+}: {
+  board: string;
+  section: BoardLayoutSection;
+  heading?: boolean;
+  only?: readonly string[];
+}) {
   const [ref, near] = useNear();
   const [slots, setSlots] = useState<Map<string, Slot>>(() => new Map());
   const [attempt, setAttempt] = useState(0);
@@ -174,14 +186,15 @@ export function BoardSection({ board, section, heading = true }: { board: string
     setSlots(new Map());
     setAttempt((a) => a + 1);
   };
+  const shown = only ? section.tiles.filter((t) => only.includes(t.id)) : section.tiles;
   return (
     <section ref={ref} data-section={section.title ?? undefined} className="min-w-0">
       {heading && section.title && <h3 className="mb-2 text-[14px] font-semibold tracking-tight">{section.title}</h3>}
       {requests.map((ids) => (
         <Loader key={`${attempt}:${ids.join(",")}`} board={board} ids={ids} enabled={near} report={report} />
       ))}
-      <SectionGrid tiles={section.tiles} slots={slots} />
-      <SectionNotes tiles={section.tiles} slots={slots} retry={retry} />
+      <SectionGrid tiles={shown} slots={slots} />
+      <SectionNotes tiles={shown} slots={slots} retry={retry} />
     </section>
   );
 }

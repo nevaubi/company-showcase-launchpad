@@ -1,0 +1,424 @@
+{
+ "checked": "2026-11-26",
+ "about": "Production reads of 26 Nov 2026 03:35 to 04:10 UTC, one snapshot per query, compared with the publisher's files downloaded the same hour (one request at a time, User-Agent FiledUnder Research).",
+ "ds140": {
+  "method": "Each stored table's dictionary labels equal its workbook sheet's header row in order (whitespace aside) and its records equal the sheet's year rows in number, for 121 of 123 tables. For the tables under 'compared', the md5 of every record's cells joined by '|' (a plain decimal written without trailing fractional zeros, a blank cell as empty text, any other text as stored), records joined by newlines in row order, equals the same digest of the sheet's year rows.",
+  "listed": 121,
+  "refused": {
+   "ds140_titanium_minerals_2020_ilmenite_and_slag_607e18a81f": "two-row header; the store joined the rows ('Imports | Ilmenite'), so no label is the sheet's own header",
+   "ds140_titanium_minerals_2020_natural_synthetic_rutile_258ef21a44": "two-row header; the store joined the rows ('Imports | Natural')"
+  },
+  "compared": {
+   "ds140_bismuth_2022_bismuth_584c4d9096": {
+    "snapshotId": "48d54a9d18502d442ae7f92ddf8fa2f82884d87bd8395cc5399fa789ab5fe49e",
+    "rows": 123,
+    "md5": "3f18e2e9dba1c93add20caf667294fad"
+   },
+   "ds140_copper_2020_copper_fe7a2ceced": {
+    "snapshotId": "09591238b683548c957665c80be7708e47d8e4ffda04baf00a17864cb31b995c",
+    "rows": 121,
+    "md5": "30869eca0577c00290f06de364dbccba"
+   },
+   "ds140_lithium_2021_lithium_statistics_5b2b81ee38": {
+    "snapshotId": "7c63bbbe2aad787548e5586bcf2e9c882bf4d328e6c073eda747f3ee50e99f1c",
+    "rows": 122,
+    "md5": "fb397458366203fc1e16b02a882dc04e"
+   },
+   "ds140_rare_earths_2020_rare_earths_b3eaf5640c": {
+    "snapshotId": "0d3d8b451e9abe1f742a049b5dc5501bab967c2b3e6a7a4b4144d80b3e7ededf",
+    "rows": 121,
+    "md5": "f6bc50fa543119d325678e63ba196da2"
+   },
+   "ds140_gold_2022_gold_d2ef17c836": {
+    "snapshotId": "f68a5bd93a371de5adfa50b8bc45f9ff136db92d3984c132837b751c84499141",
+    "rows": 123,
+    "md5": "d9c2f8679044b00bb842388841bae5f2"
+   },
+   "ds140_aluminum_2021_aluminum_ce6abb6cb0": {
+    "snapshotId": "481e276b9ab67a334a172ac0a98faf2748bb32ce7a2ac6f5ee63135b1a0d09a8",
+    "rows": 122,
+    "md5": "ed19433a3dfef963c90fc67fa5a93025"
+   },
+   "ds140_iron_ore_2021_iron_ore_7857d02400": {
+    "snapshotId": "4734116ce8edbc3121ba24c611f8fa023b9c1659f3924cfc6c0f903060fa52d1",
+    "rows": 122,
+    "md5": "709ca5af218d3c67e3e6b35da9a5df56"
+   },
+   "ds140_cement_2021_cement_cae9732a17": {
+    "snapshotId": "c0328de9346a86db64c84b79a72ffbdfbd07f89f67dff292312c093080d342f5",
+    "rows": 122,
+    "md5": "f7bd85f0ec7bbd0c0f05e576d4f35a18"
+   },
+   "ds140_nickel_2019_nickel_9dd954e33b": {
+    "snapshotId": "6b95acfc5f93af4c41d8a6a1a7b5de6bf4224fed36fd7193d148907567f7fc7c",
+    "rows": 121,
+    "md5": "aa28c11329777bd018a2541fd46cd8cc"
+   },
+   "ds140_zinc_2022_zinc_6b8888aaa3": {
+    "snapshotId": "11cf530bb9fe39a67adf3eee19d4c0cafd9995c6cfe48208a7cd5b168edbfd3d",
+    "rows": 123,
+    "md5": "7ef3a979fad3a3dc28d877704f270690"
+   },
+   "ds140_lead_2021_lead_f85850f7fe": {
+    "snapshotId": "ae536de0a26fe6da6ac9b257ebf9739e445574d121caa5fddb9ee8a0b3c80932",
+    "rows": 122,
+    "md5": "a9fcc37568472b836a36e7a2525cd3d2"
+   },
+   "ds140_silver_2021_silver_0f332b2f6e": {
+    "snapshotId": "1b0446500091319e803b96d4a6b98d9e5a60efdd9d4315ea839f634efd03cff5",
+    "rows": 122,
+    "md5": "567b4d6b693e45a3454a476dff442539"
+   },
+   "ds140_platinum_2022_platinum_group_metals_e3db800e45": {
+    "snapshotId": "55d99cf1da16c04c9c78249ba8ecdfbc43b3a40e753d5cb727cd51bbbab28b4f",
+    "rows": 123,
+    "md5": "c109aed82b567438c5f5c4108d8c4b21"
+   },
+   "ds140_cobalt_2021_cobalt_ce8cebadbc": {
+    "snapshotId": "b477cd23a9cc6f156ffaef8f6ee91b3400868d7641f23e17ec7ece4c073d68b0",
+    "rows": 122,
+    "md5": "eefcb0eb02f3cdd6b077849c190248e3"
+   },
+   "ds140_crushed_stone_2022_crushed_stone_4a6b577f2c": {
+    "snapshotId": "e3bbcd677b0f292a14166aef6d069fb78f9fc572c4588d90b0ed77c436afecf6",
+    "rows": 123,
+    "md5": "117a4770e33efdcd1a50bdfbc4e45b58"
+   },
+   "ds140_construction_sand_and_20gravel_2022_construction_sand_and_gravel_4dcc870751": {
+    "snapshotId": "a62e531deb83ed526af1e432cdb661df4b5ca3e89ddbaf14160b582c1526aefa",
+    "rows": 121,
+    "md5": "8e87da3ea4a3f83cba71f2f77a198b1b"
+   },
+   "ds140_salt_2021_salt_8fd41e9e5e": {
+    "snapshotId": "00cec50cd4721f7957020d8fbadc4636c05a92ce3c37fd0762a1bbf474f95969",
+    "rows": 122,
+    "md5": "3d5078643f0f70554be338c65c78efea"
+   },
+   "ds140_potash_2022_potash_59b30c03db": {
+    "snapshotId": "66facc79505b3ca369fc2d42af24f382def72cd0bcf4a6c58faaa41f3098b8d4",
+    "rows": 123,
+    "md5": "ab1f62eaa362aebd84134bacf16c4330"
+   },
+   "ds140_phosphate_2022_phosphate_rock_3b3dd8b9ff": {
+    "snapshotId": "cb80554cd63b3c6667ee0b0981bfcfaf2d69237b70142d6d9441d9dd60a36588",
+    "rows": 123,
+    "md5": "0fe0c25cddbf626fca6d68ab9319e2b3"
+   },
+   "ds140_iron_steel_2021_steel_c85682b436": {
+    "snapshotId": "32a36e1d09434d2a6e51a4f31247f9510a35f5d6863aad3224a5584cfbceabb8",
+    "rows": 122,
+    "md5": "19de42cc0a721ad617726e2598807655"
+   },
+   "ds140_helium_2022_helium_a71a6a99f6": {
+    "snapshotId": "9122dcfa4f74ccb2a5542b666bf0523b6e130cfda673ca8120515b273e4afc74",
+    "rows": 88,
+    "md5": "c0e306b5a4386ee05a614a9df58f7158"
+   },
+   "ds140_gemstones_2021_gemstones_c05074a8ed": {
+    "snapshotId": "ccaa3ea916913d20aa4e7fef5a861eafb28aa26905e37ff19fe00369f0d01613",
+    "rows": 122,
+    "md5": "35f47a94f011d7e5eae79afcf3cae811"
+   },
+   "ds140_wood_lumber_d905a31d24": {
+    "snapshotId": "c82f81752b891830f529937467cd460610fbc5f597574cd09a21754bca8a66e0",
+    "rows": 115,
+    "md5": "87a14edeedf2a811ff385e3e731fbec5"
+   },
+   "ds140_agric_agriculture_and_fishery_cdaff01dbc": {
+    "snapshotId": "16744911ad92a2a122c6247f3a92a5bd280897bec2effebdcf12d54758fd62d4",
+    "rows": 115,
+    "md5": "ffb08051c90948872526c6e36135b93c"
+   },
+   "ds140_coal_coal_combustion_products_67967c6d81": {
+    "snapshotId": "ab4b5edc4643abf0b56e181f82161924af8a5cca7a2d325acf24fa8836a8fb07",
+    "rows": 50,
+    "md5": "2e5b4316db9f8d66dea592480f2b306a"
+   },
+   "ds140_organ_nonrenewable_organics_2b73812236": {
+    "snapshotId": "53f5e222948f6b7001e0450517dbb213ba96261ee9efad051007f1aaf4d3936a",
+    "rows": 114,
+    "md5": "d85e4a80c65744c5388714d07bcac28a"
+   },
+   "ds140_abran_corundum_and_emery_fdc9574694": {
+    "snapshotId": "b15431259ea9969e910b3b9b0fecd4cf9c99749b833f3f3b4229cc3963c784c2",
+    "rows": 115,
+    "md5": "442f602a7fc654ec981cc64b80c19c8e"
+   },
+   "ds140_boron_2022_boron_1f8bf53ffc": {
+    "snapshotId": "12ca4c10a0535b9d2dd11bb980ffa5e871813f8784f8ab7b7727be7934b8b23e",
+    "rows": 123,
+    "md5": "3fde3a6e91617391f5e32f9e9a39020f"
+   },
+   "ds140_vermiculite_2022_vermiculite_df152e33b8": {
+    "snapshotId": "a6e0a8a59c8301e23d3b3ae60d108d3b13908a3e245139a356a5ac240b0ff6c4",
+    "rows": 99,
+    "md5": "26938cc3fa2cf156f59e561cdc665995"
+   },
+   "ds140_2017_cesiu_cesium_a13c4e083b": {
+    "snapshotId": "ba7aff8440e649a8df35c1a9b5f468acb7e7d357a601f34a92a32bc44d6f33f6",
+    "rows": 59,
+    "md5": "0089ec8a1ccc9595c46d667d293b2e36"
+   },
+   "ds140_manganese_2022_manganese_64d3a572ee": {
+    "snapshotId": "c88d99008dc8f9f6bcb6b2cd17575eefe8fc4d6b063a7710a261f76dc49d5c35",
+    "rows": 123,
+    "md5": "d83a61feae126a294603406544dbd101"
+   },
+   "ds140_tin_2021_tin_5a2c59d762": {
+    "snapshotId": "6ed214acab8130a047256a45b427b116df55f72357695037fd3c2fef0b8d99d8",
+    "rows": 122,
+    "md5": "fe42a91adda7c4665068e0fa643237ef"
+   }
+  }
+ },
+ "ers": {
+  "method": "md5 of every record's cells joined by '|' in row order equals the md5 of the CSV's data rows; the history files without the 132 and 78 rows of the November 2026 outlook, published after the snapshots were retrieved.",
+  "tables": {
+   "c4a3768851d6047783e7fb38268a14a5d8cda3c38f0d5921954aa5559dbbeffd": {
+    "table": "CPI annual changes (CSV copy)",
+    "rows": 1144,
+    "md5": "2c148516a561a18b90a449dcb575f3a1"
+   },
+   "9ceb5d0a67723ea8c60f307e11a2824dac90493e48479946c6390506350c2709": {
+    "table": "CPI annual changes (normalized copy)",
+    "rows": 1144,
+    "md5": "2c148516a561a18b90a449dcb575f3a1"
+   },
+   "7cfee9440c21c71655cf61fe9176aa129ac6030df9e9491134f5f4b53fd7197b": {
+    "table": "PPI annual changes (CSV copy)",
+    "rows": 832,
+    "md5": "2bec165f0accbebe3c4e1c6b7dd707f5"
+   },
+   "0d9e6cfc3f54762bf4db6ba66d83341e73da65efcee4741e8090c65d13d183a0": {
+    "table": "PPI annual changes (normalized copy)",
+    "rows": 832,
+    "md5": "2bec165f0accbebe3c4e1c6b7dd707f5"
+   },
+   "a78b067396e2cef1c388bc98330e4f8ddcba3a3aff331140cc3efc41ecb7a87f": {
+    "table": "CPI forecast history (CSV copy)",
+    "rows": 28622,
+    "md5": "67d51bbb3dfbbf5bb6c4e6b69a5d27bd"
+   },
+   "e74b133870e3d9facddf937a076cad33287a6afad46310f98e5869e4d6b1ae06": {
+    "table": "CPI forecast history (normalized copy)",
+    "rows": 28622,
+    "md5": "67d51bbb3dfbbf5bb6c4e6b69a5d27bd"
+   },
+   "148a9dfde7eab06a891f752ca63f1c5cbfe2446864116aa371583ea385611bb6": {
+    "table": "PPI forecast history (CSV copy)",
+    "rows": 16952,
+    "md5": "8da3f764e1c110b330a22631bef0316f"
+   },
+   "96bbee258fd8e4d39da97a27314ee02cf222f8718e47147636882a8802569961": {
+    "table": "PPI forecast history (normalized copy)",
+    "rows": 16952,
+    "md5": "8da3f764e1c110b330a22631bef0316f"
+   },
+   "5d4a2c66341e54d2943a5ede0677b0ef252a0ab39b0e98a1b87ec298f5b9ee5b": {
+    "table": "CPI archived forecasts (CSV copy)",
+    "rows": 16676,
+    "md5": "fc5ae2fe5332026696ae6470c0f1a490"
+   },
+   "fb407311f9b72e7ae1db629b24a081f2f6ea0b0307ec30ab531761965819bb52": {
+    "table": "CPI archived forecasts (normalized copy)",
+    "rows": 16676,
+    "md5": "fc5ae2fe5332026696ae6470c0f1a490"
+   },
+   "1726c11e12872115f3600af72fee10238a86068f50a99c2b4bdf482b794d33e3": {
+    "table": "PPI archived forecasts (CSV copy)",
+    "rows": 4862,
+    "md5": "5087bda90f5dc3697240e11f29f0c920"
+   },
+   "3796d25ee53e4247e046aa634ed1fc5f0be8b5996ade1ec98d59610b19ce5457": {
+    "table": "PPI archived forecasts (normalized copy)",
+    "rows": 4862,
+    "md5": "5087bda90f5dc3697240e11f29f0c920"
+   }
+  },
+  "outlook": "The stored CPI outlook (snapshot f082a9ad, the October 2026 release) is not profiled: its Attribute field mixes the relative importance, monthly and yearly changes and forecast bounds, so no field holds a period. Its 18 forecast figures for All food, Food at home and Food away from home equal the October 2026 rows of the forecast history file; its annual 2024 and 2025 changes equal the annual file."
+ },
+ "msha": {
+  "method": "Sums of MinesProdYearly.txt (metal and nonmetal records, C_M_IND M) of ANNUAL_HRS and AVG_ANNUAL_EMPL by CALENDAR_YR, STATE_ABBR, SUBUNIT_CD and SUBUNIT_DESC; per year, the md5 (first 10 hex) of the lines 'year|state|subunit|description|hours|employees' ordered by state, subunit and description (C collation) equals the same digest of the stored records.",
+  "snapshotId": "4509b7211106640b154fa0a453aaeaeecf70efd74274179dfc1176acaaeb08dc",
+  "rows": 7531,
+  "years": {
+   "2000": {
+    "records": 281,
+    "md5": "833f760940"
+   },
+   "2001": {
+    "records": 281,
+    "md5": "43a815085f"
+   },
+   "2002": {
+    "records": 280,
+    "md5": "64ef41c70b"
+   },
+   "2003": {
+    "records": 279,
+    "md5": "b8c588383e"
+   },
+   "2004": {
+    "records": 279,
+    "md5": "a22f47e6fa"
+   },
+   "2005": {
+    "records": 285,
+    "md5": "0d8b853b08"
+   },
+   "2006": {
+    "records": 285,
+    "md5": "de0d7a9789"
+   },
+   "2007": {
+    "records": 283,
+    "md5": "5e996f4651"
+   },
+   "2008": {
+    "records": 280,
+    "md5": "79806da5c1"
+   },
+   "2009": {
+    "records": 280,
+    "md5": "3794769e25"
+   },
+   "2010": {
+    "records": 278,
+    "md5": "230770fa61"
+   },
+   "2011": {
+    "records": 274,
+    "md5": "3dc13ef38e"
+   },
+   "2012": {
+    "records": 274,
+    "md5": "6522afeba4"
+   },
+   "2013": {
+    "records": 273,
+    "md5": "2575136bf2"
+   },
+   "2014": {
+    "records": 276,
+    "md5": "475b5cb3c2"
+   },
+   "2015": {
+    "records": 280,
+    "md5": "5d45f60dba"
+   },
+   "2016": {
+    "records": 285,
+    "md5": "cd75b13155"
+   },
+   "2017": {
+    "records": 285,
+    "md5": "47077c3020"
+   },
+   "2018": {
+    "records": 279,
+    "md5": "f37646d895"
+   },
+   "2019": {
+    "records": 279,
+    "md5": "8f8605e341"
+   },
+   "2020": {
+    "records": 279,
+    "md5": "efad9de642"
+   },
+   "2021": {
+    "records": 275,
+    "md5": "99a0fd7148"
+   },
+   "2022": {
+    "records": 277,
+    "md5": "7922a36010"
+   },
+   "2023": {
+    "records": 276,
+    "md5": "dbeb254577"
+   },
+   "2024": {
+    "records": 274,
+    "md5": "47292de57e"
+   },
+   "2025": {
+    "records": 276,
+    "md5": "7b83b9db2a"
+   },
+   "2026": {
+    "records": 278,
+    "md5": "f83dd17b3a"
+   }
+  },
+  "mineCounts": {
+   "snapshotId": "fd028ec45671101763e4ae5eea978434fb37b27090502de10ea2ed9dac81f26c",
+   "rows": 507,
+   "mines": 56392,
+   "method": "Mines.txt records with COAL_METAL_IND M counted by STATE, CURRENT_MINE_TYPE and CURRENT_MINE_STATUS; md5 of the lines 'state|type|status|count' in C order equals the same digest of the stored records.",
+   "md5": "05ffa5c4ad0749c19ba94698f0bca24a",
+   "activeSurfaceTop": {
+    "TX": 585,
+    "CA": 283,
+    "TN": 241,
+    "PA": 204,
+    "MO": 203,
+    "NC": 194
+   }
+  }
+ },
+ "nhtsa": {
+  "method": "Distinct CAMPNO per year of RCDATE (and per MFGNAME and year) in FLAT_RCL_PRE_2010.zip and FLAT_RCL_POST_2010.zip (330,395 records on 26 Nov 2026; the store's product table holds 330,296, retrieved 24 Nov 2026).",
+  "byYear": {
+   "snapshotId": "0c2d9cb491883088f0bf5ea87b2d666d1930ee1cdcdbc33c41c34896e0f8d55e",
+   "rows": 61,
+   "equal": 60,
+   "differ": {
+    "2026": {
+     "stored": 821,
+     "file": 829,
+     "why": "reports received after the store's retrieval of 24 Nov 2026"
+    }
+   },
+   "stored": {
+    "2021": 1094,
+    "2022": 1051,
+    "2023": 1000,
+    "2024": 1073,
+    "2025": 994
+   }
+  },
+  "byMaker": {
+   "snapshotId": "2f9f33ec5df8978937ad49407a6a3c21cd0075c4cac2323d0048da60e507437f",
+   "rows": 10196,
+   "compared": {
+    "Ford Motor Company": {
+     "2023": 58,
+     "2024": 67,
+     "2025": 153
+    },
+    "Chrysler (FCA US, LLC)": {
+     "2023": 45,
+     "2024": 61,
+     "2025": 52
+    },
+    "General Motors, LLC": {
+     "2023": 25,
+     "2024": 34,
+     "2025": 28
+    },
+    "Honda (American Honda Motor Co.)": {
+     "2023": 19,
+     "2024": 19,
+     "2025": 24
+    },
+    "Forest River, Inc.": {
+     "2023": 37,
+     "2024": 59,
+     "2025": 36
+    }
+   },
+   "field": "Manufacturer equals MFGNAME (the manufacturer that filed the Part 573 report), not MFGTXT: 15 of 15 values equal by MFGNAME, 4 of 15 by MFGTXT."
+  }
+ }
+}

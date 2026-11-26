@@ -9,6 +9,7 @@ import { DistributionChart } from "../charts/distribution-chart";
 import { Sparkline } from "../charts/sparkline";
 import { StackedChart } from "../charts/stacked-chart";
 import { StateGrid } from "../charts/state-grid";
+import { caveatLines } from "./caveats";
 import { TileChart } from "./tile-chart";
 
 /**
@@ -141,6 +142,7 @@ function Figure({ tile, result, open }: { tile: BoardTile; result: Extract<TileR
         points={result.points}
         median={shape.median}
         unit={result.plotUnit}
+        axisTitle={shape.bins?.some((b) => b.axisFrom != null) ? (result.reader?.axis.title ?? result.plotUnit) : result.plotUnit}
         label={name(`${result.asOf}, ${shape.count} figures`)}
         recordHref={rowHref}
         periodHref={datasetHref(tile.source.datasetId, recordsSearch(tile))}
@@ -203,7 +205,8 @@ export function Tile({ tile, className, focusable }: { tile: BoardTile; classNam
   const result = tile.result;
   if (!result.ok) return null;
   const open = (href: string) => navigate({ href });
-  if (result.shape?.kind === "stat") return <StatTile tile={tile} result={result} change={result.shape.change} open={open} className={className} />;
+  if (result.shape?.kind === "stat")
+    return <StatTile tile={tile} result={result} change={result.shape.change} missing={result.shape.missing} open={open} className={className} />;
   const recordsAt = datasetHref(tile.source.datasetId, recordsSearch(tile));
   const collected = collectedOn(tile.source.retrievedAt);
   const percent = result.figureUnit === "%";
@@ -292,18 +295,7 @@ export function Tile({ tile, className, focusable }: { tile: BoardTile; classNam
 
 /** Gaps, missing states, places that are not states and counts without a period, each in one plain sentence. */
 function Caveats({ result }: { result: Extract<TileResult, { ok: true }> }) {
-  const lines: string[] = [];
-  const g = result.gaps;
-  if (g.count > 0) lines.push(`${g.count} ${g.count === 1 ? "period has" : "periods have"} no figure in the source and ${g.count === 1 ? "is" : "are"} left out.`);
-  if (g.noBase > 0) lines.push(`${g.noBase} ${g.noBase === 1 ? "figure has" : "figures have"} no figure a year earlier.`);
-  const shape = result.shape;
-  if (shape?.kind === "map") {
-    if (shape.missing.length) lines.push(`No figure: ${shape.missing.map((m) => m.name).join(", ")}.`);
-    if (shape.others.length) lines.push(`${shape.others.length} ${shape.others.length === 1 ? "record is" : "records are"} not a state and not drawn (${shape.others.slice(0, 3).join(", ")}${shape.others.length > 3 ? ", …" : ""}).`);
-    if (shape.territories.length) lines.push(`Territories: ${shape.territories.map((t) => `${t.name} ${t.display}`).join(", ")}.`);
-  }
-  if (shape?.kind === "mix") lines.push(`Parts and the publisher's total agree within ${shape.largestGap} in every period drawn.`);
-  if (shape?.kind === "records" && shape.rest > 0) lines.push(`${shape.rest.toLocaleString("en-US")} records of other values are not drawn.`);
+  const lines = caveatLines(result);
   if (!lines.length) return null;
   return (
     <>
@@ -319,12 +311,15 @@ function StatTile({
   tile,
   result,
   change,
+  missing,
   open,
   className,
 }: {
   tile: BoardTile;
   result: Extract<TileResult, { ok: true }>;
   change: Extract<TileShape, { kind: "stat" }>["change"];
+  /** Why a change asked for is not shown. */
+  missing?: string;
   open: (href: string) => void;
   className?: string;
 }) {
@@ -365,9 +360,9 @@ function StatTile({
             </span>{" "}
             on {change.against}
           </span>
-        ) : (
-          <span>No change over a year</span>
-        )}
+        ) : missing ? (
+          <span>{missing}</span>
+        ) : null}
         <span className="ml-auto">{result.asOf}</span>
       </p>
     </article>

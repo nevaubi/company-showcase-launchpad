@@ -38,14 +38,24 @@ export function boardLayout(id: string): BoardLayout | null {
   return { id: board.id, title: board.title, sections };
 }
 
-/** Every board but the landing one, in collection order, then the landing board: what the gallery shows. */
+/**
+ * What the gallery shows, every chart: each collection board whole, in collection order (a board of no collection
+ * after them, by id; a tile on two boards is on both, as on their collection pages), then the landing board holding
+ * only the tiles that are on no collection board, when it has any (its other tiles are on their collections' boards).
+ */
 export function galleryBoards(): BoardLayout[] {
   const order = new Map(COLLECTIONS.map((c, i) => [c.id, i] as const));
-  return BOARDS.filter((b) => b.id !== "library")
+  const rank = (id: string) => order.get(id) ?? COLLECTIONS.length;
+  const boards = BOARDS.filter((b) => b.id !== "library")
     .slice()
-    .sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99))
+    .sort((a, b) => rank(a.id) - rank(b.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     .map((b) => boardLayout(b.id))
     .filter((b): b is BoardLayout => b !== null);
+  const onBoards = new Set(boards.flatMap((b) => b.sections.flatMap((s) => s.tiles.map((t) => t.id))));
+  const landing = boardLayout("library");
+  if (!landing) return boards;
+  const sections = landing.sections.map((s) => ({ ...s, tiles: s.tiles.filter((t) => !onBoards.has(t.id)) })).filter((s) => s.tiles.length > 0);
+  return sections.length ? [...boards, { ...landing, sections }] : boards;
 }
 
 /** The tiles of one section, split into requests of at most `size` tiles (one server request each). */

@@ -3,6 +3,7 @@ import type { ScaleUnit } from "../scale";
 import type {
   CompareTileSpec,
   CurveTileSpec,
+  DistributionTileSpec,
   MixTileSpec,
   SeriesTileSpec,
   StatTileSpec,
@@ -674,6 +675,32 @@ const HOUSING: TileSpec[] = [
 ];
 
 /**
+ * Landing-board tiles of no FRED table. The FDIC cohort's total assets at the latest report date across its
+ * institutions, through the core FDIC financials profile (`families.ts`: ASSET, "USD thousands (monetary measures)"
+ * from the FDIC's dictionary). Checked on production snapshot 5161b586 (period 20260930, 496 institutions): median
+ * 6,115,842.5, quartiles 3,564,855 and 15,901,271; bins of 57, 278, 90, 38, 19 and 14 institutions.
+ */
+const LANDING: TileSpec[] = [
+  {
+    id: "fdic-cohort-assets",
+    collection: "01_financials",
+    datasetId: "official_fdic_2026q2_cohort500_native_current_quarter",
+    measure: "ASSET",
+    title: "Total assets across the institutions of the FDIC cohort",
+    subject: "total assets",
+    entities: "institutions in the FDIC cohort",
+    unit: "USD thousands (monetary measures)",
+    decimals: 0,
+    form: "distribution",
+    transform: "level",
+    headline: "median",
+    across: { by: "entity_id", period: "latest" },
+    draw: { as: "histogram", edges: ["1000000", "3000000", "10000000", "30000000", "100000000", "300000000"] },
+    note: "A fixed cohort of 500 insured institutions chosen by assets on 30 June 2026. Each is a bank charter, not its holding company.",
+  } satisfies DistributionTileSpec,
+];
+
+/**
  * Reader scale for the Federal Reserve's balance sheet: FRED states "Millions of U.S. Dollars" as the unit of WALCL on
  * its series page (https://fred.stlouisfed.org/series/WALCL), the unit the profile carries (`fred.ts`, checked 26 Nov 2026).
  */
@@ -688,9 +715,25 @@ const SCALE_UNITS: ScaleUnit[] = [
 
 const ids = (tiles: TileSpec[]) => tiles.map((t) => t.id);
 
+/**
+ * The landing board, "What the data says": the nine core tiles, then these seven, so the board reads 16 tiles across
+ * six collections (other units add theirs after): lines and bars, a ranking, comparisons, a curve, a mix and a
+ * distribution. The 30-year mortgage rate is already a core tile there, so the 30- and 15-year comparison stays on
+ * the Housing board.
+ */
+const LANDING_TILES = [
+  "dollar-major-currencies",
+  "treasury-curve",
+  "fed-total-assets",
+  "pce-by-type",
+  "industrial-production-capacity",
+  "vacancy-rates",
+  "fdic-cohort-assets",
+];
+
 export const SPECS: UnitSpecs = {
   unit: "forms",
-  tiles: [...ECONOMY, ...INDUSTRIALS, ...DISCRETIONARY, ...STAPLES, ...HOUSING],
+  tiles: [...ECONOMY, ...INDUSTRIALS, ...DISCRETIONARY, ...STAPLES, ...HOUSING, ...LANDING],
   boards: [],
   boardTiles: {
     "00_universal": ids(ECONOMY),
@@ -698,7 +741,7 @@ export const SPECS: UnitSpecs = {
     "08_consumer_discretionary": ids(DISCRETIONARY),
     "09_consumer_staples": ids(STAPLES),
     "11_real_estate": ids(HOUSING),
-    library: ["dollar-major-currencies", "treasury-curve", "pce-by-type", "mortgage-30y-15y", "industrial-production-capacity"],
+    library: LANDING_TILES,
   },
   scaleUnits: SCALE_UNITS,
 };

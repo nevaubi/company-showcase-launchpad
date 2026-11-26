@@ -431,6 +431,13 @@ export type DistributionBin = {
   to: string | null;
   /** "10 to 12", "below 6", "20 and above", in the unit. */
   label: string;
+  /**
+   * The edges as the chart's axis writes them: in the reader scale of the tile (`reader.axis`, "1" for 1,000,000 USD
+   * thousands on a USD billions axis) where the unit has one, otherwise digits grouped as filed. Absent on results
+   * computed before round 6's forms2.
+   */
+  axisFrom?: string | null;
+  axisTo?: string | null;
   count: number;
   /** Up to five names of the bin's entities, largest figure first, for the tooltip. */
   members: string[];
@@ -491,6 +498,8 @@ export type TileShape =
       kind: "stat";
       /** The change over a year as printed with its sign ("+0.4"), its unit ("%", "pp" or the unit) and against what. */
       change: { display: string; unit: string; sign: -1 | 0 | 1; against: string } | null;
+      /** Why a change asked for is not shown ("No figure a year earlier"); absent when none was asked for. */
+      missing?: string;
     }
   | {
       kind: "records";
