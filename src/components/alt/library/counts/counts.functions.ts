@@ -4,7 +4,7 @@ import { requireAppAccess } from "@/lib/app-access-middleware";
 import type { SourceDirectClient } from "@/lib/sources/read.server";
 import type { SourceRead } from "@/lib/sources/read-types";
 import { CATEGORY_FIELDS_MAX } from "./category-model";
-import type { CategoryCounts, TablePeriodsWire } from "./counts.server";
+import type { CategoryCounts, TablePeriodsWire } from "./wire";
 
 /**
  * Server functions of unit counts. Each runs behind `requireAppAccess` with the caller's own client (row-level

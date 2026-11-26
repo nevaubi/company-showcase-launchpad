@@ -6,6 +6,7 @@ import { SHAPE_LABEL } from "@/lib/sources/shape";
 import { AltNav } from "./alt-nav";
 import { LibraryBoard } from "./boards";
 import { ChangesFeed } from "./changes-feed";
+import { LibraryHolds } from "./counts/store-sections";
 import { CollectionCard, CollectionCardSkeleton } from "./collection-card";
 import { failureHint, useLibrary } from "./library-data";
 import { LibraryFacts } from "./library-facts";
@@ -139,6 +140,7 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
             <h2 className="mb-2 text-[14px] font-semibold tracking-tight">What the data says</h2>
             <LibraryBoard />
           </div>
+          {lib && <LibraryHolds lib={lib} names={names} onPublisher={(pub) => onSearch({ pub })} />}
           <section data-section="Collections" className="min-w-0">
             <header className="mb-2 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
               <h2 className="text-[14px] font-semibold tracking-tight">Collections</h2>

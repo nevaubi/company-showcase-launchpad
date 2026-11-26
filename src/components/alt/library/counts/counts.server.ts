@@ -14,12 +14,13 @@
  * kept until the process ends (400 at most); the period ranges ten minutes.
  */
 import { readSourceSeriesFields, type SourceDirectClient, type SourceSnapshotKnown, classifyReadError } from "@/lib/sources/read.server";
-import { readFail, readOk, type SourceRead, type SourceSnapshotRef } from "@/lib/sources/read-types";
+import { readFail, readOk, type SourceRead } from "@/lib/sources/read-types";
 import type { SourceColumn, SourceIngest } from "@/lib/sources/schema";
-import { CATEGORY_FIELDS_MAX, CATEGORY_READ_ROWS, countFields, type FieldCounts } from "./category-model";
+import { CATEGORY_FIELDS_MAX, CATEGORY_READ_ROWS, countFields } from "./category-model";
+import { packTablePeriods, type CategoryCounts, type CategoryCountsInput, type TablePeriodsWire } from "./wire";
 
-export type CategoryCountsInput = { datasetId: string; snapshotId: string; fields: number[] };
-export type CategoryCounts = { snapshot: SourceSnapshotRef; fields: FieldCounts[] };
+export type { CategoryCounts, CategoryCountsInput, TablePeriod, TablePeriodsWire } from "./wire";
+
 
 const SNAPSHOT_SELECT = "id,dataset_id,loaded_rows,column_count,published_at,retrieved_at,file_sha256,columns,ingest";
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
@@ -102,61 +103,13 @@ export function readCategoryCounts(db: SourceDirectClient, input: CategoryCounts
 
 // ---------------------------------------------------------------- period ranges of the library
 
-/** One dataset: its id, the least and greatest period strings of its current snapshot, and how many periods. */
-export type TablePeriod = { id: string; first: string | null; last: string | null; periods: number | null };
-/**
- * As sent: `[id, first, last, periods]`, an id of the usual form `official_<rest>` as `<rest>` and any other as
- * `=<id>`. A period end longer than 40 characters is a note, not a period: both ends go as null and `periods` as -1.
- */
-export type TablePeriodsWire = { rows: [string, string | null, string | null, number | null][]; builtAt: string };
-
 export const TABLE_PERIODS_SELECT =
   "id,latest_snapshot_id,latest:source_snapshots!source_datasets_latest_fk(id,stats:source_snapshot_stats(period_min,period_max,periods))";
 const PERIODS_TTL_MS = 10 * 60_000;
 const PERIOD_PAGES = 3;
 const PAGE = 1000;
-const NOTE_LENGTH = 40;
 let periods: { at: number; wire: TablePeriodsWire } | null = null;
 let periodsFlight: Promise<SourceRead<TablePeriodsWire>> | null = null;
-
-const packId = (id: string) => (id.startsWith("official_") && id.length > 9 && id[9] !== "=" ? id.slice(9) : `=${id}`);
-export const unpackId = (id: string) => (id.startsWith("=") ? id.slice(1) : `official_${id}`);
-
-/** The stats row of an embedded snapshot: PostgREST gives a one-to-one embed as an object (older versions as a list). */
-function statsOf(latest: unknown): Record<string, unknown> | null {
-  if (!latest || typeof latest !== "object") return null;
-  const s = (latest as Record<string, unknown>).stats;
-  if (Array.isArray(s)) return (s[0] as Record<string, unknown> | undefined) ?? null;
-  return s && typeof s === "object" ? (s as Record<string, unknown>) : null;
-}
-
-/** Packs the dataset rows of the select (pure, for tests). */
-export function packTablePeriods(rows: readonly Record<string, unknown>[], builtAt: string): TablePeriodsWire {
-  const out: TablePeriodsWire["rows"] = [];
-  for (const r of rows) {
-    const id = str(r.id);
-    if (!id) continue;
-    const latest = r.latest && typeof r.latest === "object" ? (r.latest as Record<string, unknown>) : null;
-    // the embed must be the dataset's current snapshot; anything else is not this dataset's range
-    if (!latest || str(latest.id) !== str(r.latest_snapshot_id)) continue;
-    const stats = statsOf(latest);
-    const first = str(stats?.period_min);
-    const last = str(stats?.period_max);
-    const count = num(stats?.periods);
-    if ((first && first.length > NOTE_LENGTH) || (last && last.length > NOTE_LENGTH)) out.push([packId(id), null, null, -1]);
-    else out.push([packId(id), first, last, Number.isSafeInteger(count) ? count : null]);
-  }
-  return { rows: out, builtAt };
-}
-
-export function unpackTablePeriods(wire: TablePeriodsWire): Map<string, TablePeriod & { note: boolean }> {
-  return new Map(
-    wire.rows.map(([id, first, last, count]) => {
-      const full = unpackId(id);
-      return [full, { id: full, first, last, periods: count === -1 ? null : count, note: count === -1 }];
-    }),
-  );
-}
 
 async function periodsOnce(db: SourceDirectClient, now: number): Promise<SourceRead<TablePeriodsWire>> {
   const all: Record<string, unknown>[] = [];

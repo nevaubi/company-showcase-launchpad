@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeSourceDb, type FakeRow as Row } from "@/lib/sources/read.fake";
 import type { PgResult, SourceDirectClient, SourceSelect } from "@/lib/sources/read.server";
 import type { SourceFacets, SourceRead } from "@/lib/sources/read-types";
-import { packTablePeriods, readCategoryCounts, readTablePeriods, resetCountsCache, TABLE_PERIODS_SELECT, unpackTablePeriods } from "./counts.server";
+import { readCategoryCounts, readTablePeriods, resetCountsCache, TABLE_PERIODS_SELECT } from "./counts.server";
+import { packTablePeriods, unpackTablePeriods } from "./wire";
 import { readAllFacets } from "./queries";
 
 const H = (n: number) => n.toString(16).padStart(64, "0");

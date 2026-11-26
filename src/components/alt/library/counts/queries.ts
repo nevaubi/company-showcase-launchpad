@@ -6,7 +6,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { getSourceFacets } from "@/lib/sources/read.functions";
 import { readFail, readOk, type SourceFacetDimension, type SourceFacetValue, type SourceFacets, type SourceRead, type SourceSnapshotRef } from "@/lib/sources/read-types";
 import { getCategoryCounts, getTablePeriods } from "./counts.functions";
-import type { CategoryCounts, TablePeriodsWire } from "./counts.server";
+import type { CategoryCounts, TablePeriodsWire } from "./wire";
 
 /** Facet pages read at most for one dimension: each reads at most 250,000 index entries and 1,000 values. */
 export const FACET_PAGES = 5;

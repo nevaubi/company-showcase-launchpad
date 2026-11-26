@@ -8,6 +8,7 @@ import { collectionForSegment } from "./addresses";
 import { boardSpec, collectionBoardId } from "@/lib/sources/boards/specs";
 import { CollectionBoard } from "./boards";
 import { CollectionCard, CollectionCardSkeleton } from "./collection-card";
+import { CollectionHolds } from "./counts/store-sections";
 import { CollectionFacts, CollectionHeader } from "./collection-header";
 import { HrefLink } from "./href-link";
 import { failureHint, useLibrary } from "./library-data";
@@ -79,6 +80,7 @@ function KnownCollection({ collection, search, onSearch }: { collection: Collect
               <CollectionBoard collection={collection.id} />
             </div>
           )}
+          {lib && <CollectionHolds rows={mine} lib={lib} names={names} onPublisher={(pub) => onSearch({ pub })} />}
           {related.length > 0 && (
             <section data-section="Related pages" className="min-w-0 rounded-md border bg-card px-3.5 py-2.5 shadow-paper">
               <h2 className="text-[13px] font-semibold tracking-tight">In the app</h2>
