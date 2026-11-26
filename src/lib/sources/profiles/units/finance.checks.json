@@ -1,0 +1,1625 @@
+{
+ "checked": "2026-11-26",
+ "about": "What production and the publishers said when the finance profiles were checked. Stored checksums were computed in SQL on the production snapshot; publisher checksums from the files below, retrieved 26 Nov 2026 about 03:40 UTC with the User-Agent of COMMON6.",
+ "publishers": {
+  "h8": {
+   "url": "https://www.federalreserve.gov/datadownload/Output.aspx?rel=H8&filetype=zip",
+   "member": "H8_data.xml",
+   "sha256": "839aaa7fbbe7317ed5d34e84a29d6757ba0e3a3c5322ed46b32bcbe39d3ff59f",
+   "bytes": 8460628
+  },
+  "z1": {
+   "url": "https://www.federalreserve.gov/releases/z1/current/z1_csv_files.zip",
+   "lastModified": "Fri, 11 Sep 2026 16:00:14 GMT",
+   "sha256": "b63af9755437df0fb88b7cf346f8f9eaeb22bf1aa2b5df1709334135c43de4b6",
+   "bytes": 8336582
+  },
+  "ofr": {
+   "url": "https://data.financialresearch.gov/v1/series/multifull?mnemonics=MMF-MMF_AG_TOT-M,MMF-MMF_BRA_TOT-M,MMF-MMF_OA_TOT-M,MMF-MMF_RP_TOT-M,MMF-MMF_T_TOT-M,MMF-MMF_TOT-M,MMF-MY_MMF_RP_TOT-M",
+   "sha256": "3fc2738a7b8a8e78a10d3a024a072c4d5b93a844362089dfa178ee58abdc8016",
+   "metadata": "https://data.financialresearch.gov/v1/metadata/query?mnemonic=MMF-MMF_TOT-M"
+  }
+ },
+ "h8": {
+  "datasetId": "official_01_financials_data_fed_h8_monthly_headline_balances_2000_latest_ad2cb5f5f5",
+  "snapshotId": "4598d415126fdd93dd72c72a952d0813a478829dddd81d93b0c3efd78bd40b6a",
+  "rows": 1932,
+  "retrievedAt": "2026-11-24T10:14:39Z",
+  "storedUnit": "USD",
+  "storedMultiplier": "1000000",
+  "series": {
+   "B1020NCBDM": {
+    "description": "Loans and leases in bank credit, all commercial banks, not seasonally adjusted",
+    "UNIT": "Currency",
+    "UNIT_MULT": "1000000",
+    "CURRENCY": "USD",
+    "SA": "NSA",
+    "FREQ": "129",
+    "compared": 322,
+    "periods": [
+     "2000-01-31",
+     "2026-10-31"
+    ],
+    "storedMd5": "0907a633a1cd71c7b9b8a3a5b020ab19",
+    "publisherMd5": "0907a633a1cd71c7b9b8a3a5b020ab19",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "14198235.5"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "13161658.0"
+    ]
+   },
+   "B1023NCBDM": {
+    "description": "Commercial and industrial loans, all commercial banks, not seasonally adjusted",
+    "UNIT": "Currency",
+    "UNIT_MULT": "1000000",
+    "CURRENCY": "USD",
+    "SA": "NSA",
+    "FREQ": "129",
+    "compared": 322,
+    "periods": [
+     "2000-01-31",
+     "2026-10-31"
+    ],
+    "storedMd5": "766a1bde6c013c5ca5899371ddce0a61",
+    "publisherMd5": "766a1bde6c013c5ca5899371ddce0a61",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "2980815.3"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "2676780.4"
+    ]
+   },
+   "B1026NCBDM": {
+    "description": "Real estate loans, all commercial banks, not seasonally adjusted",
+    "UNIT": "Currency",
+    "UNIT_MULT": "1000000",
+    "CURRENCY": "USD",
+    "SA": "NSA",
+    "FREQ": "129",
+    "compared": 322,
+    "periods": [
+     "2000-01-31",
+     "2026-10-31"
+    ],
+    "storedMd5": "a524d39ce83e2918ffe2adc129b084f2",
+    "publisherMd5": "a524d39ce83e2918ffe2adc129b084f2",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "5864213.5"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "5708714.8"
+    ]
+   },
+   "B1048NCBDM": {
+    "description": "Cash assets, all commercial banks, not seasonally adjusted",
+    "UNIT": "Currency",
+    "UNIT_MULT": "1000000",
+    "CURRENCY": "USD",
+    "SA": "NSA",
+    "FREQ": "129",
+    "compared": 322,
+    "periods": [
+     "2000-01-31",
+     "2026-10-31"
+    ],
+    "storedMd5": "44108a70e78ad9abc146b4221ddffc43",
+    "publisherMd5": "44108a70e78ad9abc146b4221ddffc43",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "3089018.0"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "2957814.7"
+    ]
+   },
+   "B1058NCBDM": {
+    "description": "Deposits, all commercial banks, not seasonally adjusted",
+    "UNIT": "Currency",
+    "UNIT_MULT": "1000000",
+    "CURRENCY": "USD",
+    "SA": "NSA",
+    "FREQ": "129",
+    "compared": 322,
+    "periods": [
+     "2000-01-31",
+     "2026-10-31"
+    ],
+    "storedMd5": "6ba5598a366d9aebb6e82ecf588d0bfd",
+    "publisherMd5": "6ba5598a366d9aebb6e82ecf588d0bfd",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "19738762.5"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "18419239.0"
+    ]
+   },
+   "B1151NCBDM": {
+    "description": "Total assets, all commercial banks, not seasonally adjusted",
+    "UNIT": "Currency",
+    "UNIT_MULT": "1000000",
+    "CURRENCY": "USD",
+    "SA": "NSA",
+    "FREQ": "129",
+    "compared": 322,
+    "periods": [
+     "2000-01-31",
+     "2026-10-31"
+    ],
+    "storedMd5": "2c9b672fcca1f5dddcc1de433ab94b1e",
+    "publisherMd5": "2c9b672fcca1f5dddcc1de433ab94b1e",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "26009483.7"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "24407047.9"
+    ]
+   }
+  }
+ },
+ "z1Sectors": {
+  "datasetId": "official_01_financials_data_fed_z1_financial_sector_headline_history_273e0e218c",
+  "snapshotId": "c306162046f21ea5677bc7b5355eac1140789c7d212cc10633e6dca9e6e35083",
+  "rows": 11895,
+  "retrievedAt": "2026-11-24T10:14:39Z",
+  "series": {
+   "FL224090005.Q": {
+    "table": "S129.3.s State and local government employee pension funds",
+    "description": "State and local government employee pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "7f135863221903c4b590b13f91a3d50b",
+    "publisherMd5": "7f135863221903c4b590b13f91a3d50b",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "10335279"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "9996302"
+    ]
+   },
+   "FL224090045.Q": {
+    "table": "S129s1.3.s State and local government employee defined benefit pension funds",
+    "description": "State and local government employee defined benefit pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "89c81e844086a7da36bbf9c3a7120674",
+    "publisherMd5": "89c81e844086a7da36bbf9c3a7120674",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "9485871"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "9229694"
+    ]
+   },
+   "FL224090055.Q": {
+    "table": "S129s2.3.s State and local government employee defined contribution pension funds",
+    "description": "State and local government employee defined contribution pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "8136961c3f158ea13abb7168bb59a74d",
+    "publisherMd5": "8136961c3f158ea13abb7168bb59a74d",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "849408"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "766608"
+    ]
+   },
+   "FL344090005.Q": {
+    "table": "S129.2.s Federal government employee pension funds",
+    "description": "Federal government pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "11671c3d313874333aa4f53d339f7ee2",
+    "publisherMd5": "11671c3d313874333aa4f53d339f7ee2",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "5152975"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "4916659"
+    ]
+   },
+   "FL344090045.Q": {
+    "table": "S129s1.2.s Federal government employee defined benefit pension funds",
+    "description": "Federal government defined benefit pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "fb19133d40b004b35db0ff672f8be298",
+    "publisherMd5": "fb19133d40b004b35db0ff672f8be298",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "3993296"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "3912438"
+    ]
+   },
+   "FL344090055.Q": {
+    "table": "S129s2.2.s Federal government employee defined contribution pension funds",
+    "description": "Federal government defined contribution pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "19fa424eee9340bf4e8cfd077c313c80",
+    "publisherMd5": "19fa424eee9340bf4e8cfd077c313c80",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "1159679"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "1004221"
+    ]
+   },
+   "FL404090005.Q": {
+    "table": "S125s1.1.s Government-sponsored enterprises (GSEs)",
+    "description": "Government-sponsored enterprises; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "0fd4916c69c0ec242b6915bbdd647f5c",
+    "publisherMd5": "0fd4916c69c0ec242b6915bbdd647f5c",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "9869356"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "9637757"
+    ]
+   },
+   "FL413065005.Q": {
+    "table": "S125s1.2.s Agency- and GSE-backed mortgage pools",
+    "description": "Agency-and GSE-backed mortgage pools; total mortgages; asset",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "9e8cb343a054e2006f554b872fbfa1fe",
+    "publisherMd5": "9e8cb343a054e2006f554b872fbfa1fe",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "3281934"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "3127052"
+    ]
+   },
+   "FL444090000.Q": {
+    "table": "S124.8.s Private debt funds",
+    "description": "Private debt funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "6d6ace2f90640adabcf767e760f7b329",
+    "publisherMd5": "6d6ace2f90640adabcf767e760f7b329",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "935009"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "863124"
+    ]
+   },
+   "FL454090003.Q": {
+    "table": "S124.5.s Business development companies (BDCs)",
+    "description": "Business development companies; total financial assets (balance sheet)",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "ce343bd48126b5dc39c85a326a02e71b",
+    "publisherMd5": "ce343bd48126b5dc39c85a326a02e71b",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "574822"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "502766"
+    ]
+   },
+   "FL464090005.Q": {
+    "table": "S124.6.s Interval and tender offer funds",
+    "description": "Interval funds and tender offer funds; total financial assets (balance sheet)",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "a836ef49083cc55fa285f326e3b76ac0",
+    "publisherMd5": "a836ef49083cc55fa285f326e3b76ac0",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "320562"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "250638"
+    ]
+   },
+   "FL474090005.Q": {
+    "table": "S122.4.s Credit unions",
+    "description": "Credit unions; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "cf917bbcda1d06aba43545170317e6b6",
+    "publisherMd5": "cf917bbcda1d06aba43545170317e6b6",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "2445321"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "2338469"
+    ]
+   },
+   "FL504090005.Q": {
+    "table": "S127.2.s Other financial business",
+    "description": "Other financial business; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "6c628e17b2435793e034897b123447d6",
+    "publisherMd5": "6c628e17b2435793e034897b123447d6",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "1549249"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "1439827"
+    ]
+   },
+   "FL504090025.Q": {
+    "table": "S125s5.s Central clearing counterparties (CCPs)",
+    "description": "Other financial business; total financial assets of central clearing counterparties",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "de994cca5c8accbf4483fe06c41772bf",
+    "publisherMd5": "de994cca5c8accbf4483fe06c41772bf",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "357865"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "320415"
+    ]
+   },
+   "FL514090005.Q": {
+    "table": "S1282.1.s Property-casualty insurance companies",
+    "description": "Property-casualty insurance companies; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "9fb47d2de469216e8230a04b7cb4f28a",
+    "publisherMd5": "9fb47d2de469216e8230a04b7cb4f28a",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "4360376"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "3992951"
+    ]
+   },
+   "FL544090005.Q": {
+    "table": "S1281.s Life insurance companies",
+    "description": "Life insurance companies; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "73c3e934c0ccecba60770d7ac455e6c9",
+    "publisherMd5": "73c3e934c0ccecba60770d7ac455e6c9",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "11487402"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "10691623"
+    ]
+   },
+   "FL544090075.Q": {
+    "table": "S1281.1.s Life insurance companies: general accounts",
+    "description": "Life insurance companies, general accounts; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "ce933acc4bb7147df0fb0466fb53f821",
+    "publisherMd5": "ce933acc4bb7147df0fb0466fb53f821",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "7797809"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "7349725"
+    ]
+   },
+   "FL544090085.Q": {
+    "table": "S1281.2.s Life insurance companies: separate accounts",
+    "description": "Life insurance companies, separate accounts; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "8af1943f36fadfdb188d6762c0e8c693",
+    "publisherMd5": "8af1943f36fadfdb188d6762c0e8c693",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "3689593"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "3341898"
+    ]
+   },
+   "FL574090005.Q": {
+    "table": "S129.1.s Private pension funds",
+    "description": "Private pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "fd99b3415894a6b8ac35e27a6a17ce1a",
+    "publisherMd5": "fd99b3415894a6b8ac35e27a6a17ce1a",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "15341007"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "13861988"
+    ]
+   },
+   "FL574090045.Q": {
+    "table": "S129s1.1.s Private defined benefit pension funds",
+    "description": "Private defined benefit pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "915057606ecc7617380b94d7b3c2d663",
+    "publisherMd5": "915057606ecc7617380b94d7b3c2d663",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "3074272"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "3149491"
+    ]
+   },
+   "FL574090055.Q": {
+    "table": "S129s2.1.s Private defined contribution pension funds",
+    "description": "Private defined contribution pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "93aa2456fa7f04c710960947c10f9477",
+    "publisherMd5": "93aa2456fa7f04c710960947c10f9477",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "12266735"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "10712497"
+    ]
+   },
+   "FL594090005.Q": {
+    "table": "S129.s Private and public pension funds",
+    "description": "Pension funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "9ab7fc70ee78db01fdfa83062e84f766",
+    "publisherMd5": "9ab7fc70ee78db01fdfa83062e84f766",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "30829261"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "28774949"
+    ]
+   },
+   "FL614090005.Q": {
+    "table": "S125s2.1.s Finance companies",
+    "description": "Finance companies; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "9fa908755e0fbc501143ba7935a35819",
+    "publisherMd5": "9fa908755e0fbc501143ba7935a35819",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "2931527"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "2809306"
+    ]
+   },
+   "FL624090005.Q": {
+    "table": "S124.7.s Hedge funds",
+    "description": "Hedge funds (domestic); total assets net of short sales",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "7936676f5f364c1f0be7280587652878",
+    "publisherMd5": "7936676f5f364c1f0be7280587652878",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "2386045"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "1877431"
+    ]
+   },
+   "FL624090065.Q": {
+    "table": "S124.7.f.s Foreign hedge funds",
+    "description": "Hedge funds (foreign); total assets net of short sales",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "0b7cc58e4b4e90f116a31ec9ca63cd4f",
+    "publisherMd5": "0b7cc58e4b4e90f116a31ec9ca63cd4f",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "ND"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "7050272"
+    ]
+   },
+   "FL634090005.Q": {
+    "table": "S123.s Money market funds",
+    "description": "Money market funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "628e4dbd24060005140ad4d9b6891b3a",
+    "publisherMd5": "628e4dbd24060005140ad4d9b6891b3a",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "8441374"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "7481232"
+    ]
+   },
+   "FL644090075.Q": {
+    "table": "S124.4.s Mortgage real estate investment trusts (mortgage REITs)",
+    "description": "Mortgage real estate investment trusts; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "9291d47e4783bf30f5e8f05fcfff2bf0",
+    "publisherMd5": "9291d47e4783bf30f5e8f05fcfff2bf0",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "713704"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "612462"
+    ]
+   },
+   "FL664090005.Q": {
+    "table": "S125s3.s Security brokers and dealers",
+    "description": "Security brokers and dealers; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "7d12c2f3706e31989945e7955508e656",
+    "publisherMd5": "7d12c2f3706e31989945e7955508e656",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "7241760"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "6018015"
+    ]
+   },
+   "FL674090005.Q": {
+    "table": "S125s1.3.s Issuers of asset-backed securities (ABS)",
+    "description": "Issuers of asset-backed securities; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "831698fa332992d59b4010b8a1cb28db",
+    "publisherMd5": "831698fa332992d59b4010b8a1cb28db",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "2008650"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "1782745"
+    ]
+   },
+   "FL704090005.Q": {
+    "table": "S122.s Private depository institutions",
+    "description": "Private depository institutions; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "676bfa9d1084017750192f1810269bf9",
+    "publisherMd5": "676bfa9d1084017750192f1810269bf9",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "30030809"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "28566920"
+    ]
+   },
+   "FL714090005.Q": {
+    "table": "S121.s Central bank",
+    "description": "Central bank; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "9eebbfd7d4ccbbdd96dbe3e50290fde6",
+    "publisherMd5": "9eebbfd7d4ccbbdd96dbe3e50290fde6",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "5841838"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "5736684"
+    ]
+   },
+   "FL734090005.Q": {
+    "table": "S127.1.s Holding companies",
+    "description": "Holding companies; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "67fc462cd01c103825c373b70bf0b6cc",
+    "publisherMd5": "67fc462cd01c103825c373b70bf0b6cc",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "5763551"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "5405667"
+    ]
+   },
+   "FL744090005.Q": {
+    "table": "S122.3.s Banks in U.S.-affiliated areas",
+    "description": "Banks in U.S.-affiliated areas; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "59ed938fbb1868ef4cbc7a6c15906489",
+    "publisherMd5": "59ed938fbb1868ef4cbc7a6c15906489",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "154575"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "169491"
+    ]
+   },
+   "FL754090005.Q": {
+    "table": "S122.2.s Foreign banking offices in U.S.",
+    "description": "Foreign banking offices in the U.S., including IBFs; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "771ae52a43ffd25199490f7534b2d52f",
+    "publisherMd5": "771ae52a43ffd25199490f7534b2d52f",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "4295565"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "3953254"
+    ]
+   },
+   "FL764090005.Q": {
+    "table": "S122.1.s U.S.-chartered depository institutions",
+    "description": "U.S.-chartered depository institutions, including IBFs; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "2ace789408331e3557df8ee52af26c6b",
+    "publisherMd5": "2ace789408331e3557df8ee52af26c6b",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "23135348"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "22105706"
+    ]
+   },
+   "FL794090005.Q": {
+    "table": "S12.s Domestic financial sectors",
+    "description": "Domestic financial sectors; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "3ba56fdaf23013a74f3cb3e8b29f16c9",
+    "publisherMd5": "3ba56fdaf23013a74f3cb3e8b29f16c9",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "169855937"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "154000546"
+    ]
+   },
+   "LM554090005.Q": {
+    "table": "S124.2.s Closed-end funds",
+    "description": "Closed-end funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "93bea74cb58a44e7a40e5f003a695c77",
+    "publisherMd5": "93bea74cb58a44e7a40e5f003a695c77",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "266715"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "251452"
+    ]
+   },
+   "LM564090005.Q": {
+    "table": "S124.3.s Exchange-traded funds",
+    "description": "Exchange-traded funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "882021799d22984899fcb4615f7436fe",
+    "publisherMd5": "882021799d22984899fcb4615f7436fe",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "15702340"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "11492136"
+    ]
+   },
+   "LM654090000.Q": {
+    "table": "S124.1.s Mutual funds",
+    "description": "Mutual funds; total financial assets",
+    "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+    "compared": 305,
+    "storedMd5": "99b49e9a59656e4db61232296c0730f5",
+    "publisherMd5": "99b49e9a59656e4db61232296c0730f5",
+    "equal": true,
+    "latest": [
+     "2026:Q2",
+     "25319653"
+    ],
+    "yearEarlier": [
+     "2025:Q2",
+     "22685809"
+    ]
+   }
+  }
+ },
+ "z1Tables": {
+  "S1M_b": {
+   "records": 305,
+   "fields": 55,
+   "cells": 16775,
+   "storedMd5": "c0585fc65f937b28af1d98954782cdd2",
+   "publisherMd5": "c0585fc65f937b28af1d98954782cdd2",
+   "equal": true,
+   "ndCells": 687,
+   "series": {
+    "FL152000005.Q": {
+     "description": "Households and nonprofit organizations; total assets",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 1"
+    },
+    "LM152010005.Q": {
+     "description": "Households and nonprofit organizations; nonfinancial assets",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 2"
+    },
+    "LM155035005.Q": {
+     "description": "Households and nonprofit organizations; real estate at market value",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 3"
+    },
+    "LM155035015.Q": {
+     "description": "Households; owner-occupied real estate including vacant land and mobile homes at market value",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 4"
+    },
+    "LM165035005.Q": {
+     "description": "Nonprofit organizations; real estate at market value",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 5"
+    },
+    "LM165015205.Q": {
+     "description": "Nonprofit organizations; equipment, current cost basis",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 6"
+    },
+    "LM165013765.Q": {
+     "description": "Nonprofit organizations; nonresidential intellectual property products, current cost basis",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 7"
+    },
+    "LM155111005.Q": {
+     "description": "Households and nonprofit organizations; consumer durable goods, current cost basis",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 8"
+    },
+    "FL154090005.Q": {
+     "description": "Households and nonprofit organizations; total financial assets",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 9"
+    },
+    "FL153020005.Q": {
+     "description": "Households and nonprofit organizations; checkable deposits and currency; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 10"
+    },
+    "FL153030005.Q": {
+     "description": "Households and nonprofit organizations; total time and savings deposits; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 11"
+    },
+    "LM153030505.Q": {
+     "description": "Households and nonprofit organizations; other deposits; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 12"
+    },
+    "LM154022005.Q": {
+     "description": "Households and nonprofit organizations; debt securities; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 13"
+    },
+    "LM153061105.Q": {
+     "description": "Households and nonprofit organizations; Treasury securities; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 14"
+    },
+    "LM153061705.Q": {
+     "description": "Households and nonprofit organizations; agency- and GSE-backed securities; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 15"
+    },
+    "LM153062005.Q": {
+     "description": "Households and nonprofit organizations; municipal securities; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 16"
+    },
+    "LM153063005.Q": {
+     "description": "Households and nonprofit organizations; corporate and foreign bonds; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 17"
+    },
+    "FL154035005.Q": {
+     "description": "Households and nonprofit organizations; loans; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 18"
+    },
+    "FL163066223.Q": {
+     "description": "Nonprofit organizations; consumer credit, student loans; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 19"
+    },
+    "FL153065005.Q": {
+     "description": "Households and nonprofit organizations; total mortgages; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 20"
+    },
+    "FL153069005.Q": {
+     "description": "Households and nonprofit organizations; other loans and advances; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 21"
+    },
+    "LM153064105.Q": {
+     "description": "Households and nonprofit organizations; corporate equities; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 22"
+    },
+    "LM153081115.Q": {
+     "description": "Households and nonprofit organizations; other equity; asset (IMA)",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 23"
+    },
+    "FL153034005.Q": {
+     "description": "Households and nonprofit organizations; money market fund shares; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 24"
+    },
+    "LM153064205.Q": {
+     "description": "Households and nonprofit organizations; mutual fund shares; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 25"
+    },
+    "LM153064705.Q": {
+     "description": "Households and nonprofit organizations; hedge fund shares; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 26"
+    },
+    "LM153064505.Q": {
+     "description": "Households and nonprofit organizations; private debt fund shares; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 27"
+    },
+    "FL153040005.Q": {
+     "description": "Households and nonprofit organizations; life insurance reserves; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 28"
+    },
+    "FL153050005.Q": {
+     "description": "Households and nonprofit organizations; pension entitlements; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 29"
+    },
+    "FL163070005.Q": {
+     "description": "Nonprofit organizations; grants and trade receivables; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 30"
+    },
+    "FL153090005.Q": {
+     "description": "Households and nonprofit organizations; total miscellaneous assets",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 31"
+    },
+    "FL154190005.Q": {
+     "description": "Households and nonprofit organizations; total liabilities",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 32"
+    },
+    "FL163162003.Q": {
+     "description": "Nonprofit organizations; municipal securities; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 33"
+    },
+    "FL154135005.Q": {
+     "description": "Households and nonprofit organizations; loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 34"
+    },
+    "FL153168005.Q": {
+     "description": "Households and nonprofit organizations; depository institution loans n.e.c.; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 35"
+    },
+    "FL153166000.Q": {
+     "description": "Households and nonprofit organizations; consumer credit; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 36"
+    },
+    "FL153165105.Q": {
+     "description": "Households and nonprofit organizations; one-to-four-family residential mortgages; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 37"
+    },
+    "FL163165505.Q": {
+     "description": "Nonprofit organizations; commercial mortgages; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 38"
+    },
+    "FL153169005.Q": {
+     "description": "Households and nonprofit organizations; other loans and advances; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 39"
+    },
+    "FL163170005.Q": {
+     "description": "Nonprofit organizations; trade payables; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 40"
+    },
+    "FL543077073.Q": {
+     "description": "Life insurance companies, general accounts; deferred and unpaid life insurance premiums; asset",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 41"
+    },
+    "FL152090005.Q": {
+     "description": "Households and nonprofit organizations; net worth",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 42"
+    },
+    "FL893131573.Q": {
+     "description": "All sectors; IRAs; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 43"
+    },
+    "FL154023205.Q": {
+     "description": "Households and nonprofit organizations; assets in 529 plans",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 44"
+    },
+    "LM154023223.Q": {
+     "description": "Households and nonprofit organizations; assets in 529 savings plans",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 45"
+    },
+    "FL154023213.Q": {
+     "description": "Households and nonprofit organizations; assets in 529 pre-paid plans",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 46"
+    },
+    "LM155012605.Q": {
+     "description": "Households and nonprofit organizations; residential structures, current cost basis",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 47"
+    },
+    "LM155012665.Q": {
+     "description": "Households; residential structures, current cost basis",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 48"
+    },
+    "LM165012665.Q": {
+     "description": "Nonprofit organizations; residential structures, current cost basis",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 49"
+    },
+    "LM165013665.Q": {
+     "description": "Nonprofit organizations; nonresidential structures, current cost basis",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, market value, not seasonally adjusted",
+     "line": "Line 50"
+    },
+    "FA156012005.Q": {
+     "description": "Households and nonprofit organizations; disposable personal income",
+     "unitAndBasis": "Millions of dollars; transactions at a seasonally adjusted annual rate",
+     "line": "Line 51"
+    },
+    "FL152090006.Q": {
+     "description": "Households and nonprofit organizations; net worth as a percentage of disposable personal income",
+     "unitAndBasis": "Percent Change",
+     "line": "Line 52"
+    },
+    "FL155035065.Q": {
+     "description": "Households; owners' equity in real estate",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, not seasonally adjusted",
+     "line": "Line 53"
+    },
+    "FL155035066.Q": {
+     "description": "Households; owners' equity in real estate as a percentage of household real estate",
+     "unitAndBasis": "Percent Change",
+     "line": "Line 54"
+    }
+   },
+   "latest": {
+    "date": "2026:Q2",
+    "FL152000005.Q": "217751104",
+    "LM152010005.Q": "64263839",
+    "LM155035005.Q": "54073947",
+    "LM155035015.Q": "49791678",
+    "LM165035005.Q": "4282269",
+    "LM165015205.Q": "764787",
+    "LM165013765.Q": "310284",
+    "LM155111005.Q": "9114821",
+    "FL154090005.Q": "153487265",
+    "FL153020005.Q": "5764559",
+    "FL153030005.Q": "9097764",
+    "LM153030505.Q": "72773",
+    "LM154022005.Q": "6006233",
+    "LM153061105.Q": "2831137",
+    "LM153061705.Q": "868910",
+    "LM153062005.Q": "2114174",
+    "LM153063005.Q": "192012",
+    "FL154035005.Q": "973921",
+    "FL163066223.Q": "10423",
+    "FL153065005.Q": "58239",
+    "FL153069005.Q": "905259",
+    "LM153064105.Q": "52119174",
+    "LM153081115.Q": "16754129",
+    "FL153034005.Q": "5327219",
+    "LM153064205.Q": "14412656",
+    "LM153064705.Q": "2491007",
+    "LM153064505.Q": "144574",
+    "FL153040005.Q": "2216061",
+    "FL153050005.Q": "35728286",
+    "FL163070005.Q": "505332",
+    "FL153090005.Q": "1873576",
+    "FL154190005.Q": "21880608",
+    "FL163162003.Q": "243645",
+    "FL154135005.Q": "21052257",
+    "FL153168005.Q": "733383",
+    "FL153166000.Q": "5120258",
+    "FL153165105.Q": "13976938",
+    "FL163165505.Q": "595380",
+    "FL153169005.Q": "626298",
+    "FL163170005.Q": "540876",
+    "FL543077073.Q": "43830",
+    "FL152090005.Q": "195870496",
+    "FL893131573.Q": "ND",
+    "FL154023205.Q": "653583",
+    "LM154023223.Q": "627002",
+    "FL154023213.Q": "26581",
+    "LM155012605.Q": "30148079",
+    "LM155012665.Q": "29697221",
+    "LM165012665.Q": "450858",
+    "LM165013665.Q": "3135340",
+    "FA156012005.Q": "23642219",
+    "FL152090006.Q": "828.4776300945932",
+    "FL155035065.Q": "35814740",
+    "FL155035066.Q": "71.92916856507627"
+   },
+   "yearEarlier": {
+    "date": "2025:Q2",
+    "FL152000005.Q": "196310392",
+    "LM152010005.Q": "61962825",
+    "LM155035005.Q": "52563982",
+    "LM155035015.Q": "48598104",
+    "LM165035005.Q": "3965878",
+    "LM165015205.Q": "699830",
+    "LM165013765.Q": "282076",
+    "LM155111005.Q": "8416937",
+    "FL154090005.Q": "134347567",
+    "FL153020005.Q": "4693342",
+    "FL153030005.Q": "9754093",
+    "LM153030505.Q": "60323",
+    "LM154022005.Q": "5733482",
+    "LM153061105.Q": "2642280",
+    "LM153061705.Q": "926909",
+    "LM153062005.Q": "1969541",
+    "LM153063005.Q": "194752",
+    "FL154035005.Q": "925469",
+    "FL163066223.Q": "14057",
+    "FL153065005.Q": "66704",
+    "FL153069005.Q": "844708",
+    "LM153064105.Q": "39641419",
+    "LM153081115.Q": "16043803",
+    "FL153034005.Q": "4739084",
+    "LM153064205.Q": "12798451",
+    "LM153064705.Q": "2038391",
+    "LM153064505.Q": "150944",
+    "FL153040005.Q": "2178711",
+    "FL153050005.Q": "33376388",
+    "FL163070005.Q": "469086",
+    "FL153090005.Q": "1744581",
+    "FL154190005.Q": "21063877",
+    "FL163162003.Q": "226298",
+    "FL154135005.Q": "20272184",
+    "FL153168005.Q": "615645",
+    "FL153166000.Q": "4995650",
+    "FL153165105.Q": "13568853",
+    "FL163165505.Q": "560591",
+    "FL153169005.Q": "531445",
+    "FL163170005.Q": "523374",
+    "FL543077073.Q": "42021",
+    "FL152090005.Q": "175246515",
+    "FL893131573.Q": "17475000",
+    "FL154023205.Q": "567868",
+    "LM154023223.Q": "542426",
+    "FL154023213.Q": "25442",
+    "LM155012605.Q": "28933299",
+    "LM155012665.Q": "28497728",
+    "LM165012665.Q": "435571",
+    "LM165013665.Q": "2983093",
+    "FA156012005.Q": "22786610",
+    "FL152090006.Q": "769.0767279555845",
+    "FL155035065.Q": "35029251",
+    "FL155035066.Q": "72.07946013696336"
+   }
+  },
+  "D3_s": {
+   "records": 305,
+   "fields": 11,
+   "cells": 3355,
+   "storedMd5": "547f0387e0771d34f962492ceb944afc",
+   "publisherMd5": "547f0387e0771d34f962492ceb944afc",
+   "equal": true,
+   "ndCells": 0,
+   "series": {
+    "LA384104005.Q": {
+     "description": "Domestic nonfinancial sectors; debt securities and loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 1"
+    },
+    "LA154104005.Q": {
+     "description": "Households and nonprofit organizations; debt securities and loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 2"
+    },
+    "LA153165105.Q": {
+     "description": "Households and nonprofit organizations; one-to-four-family residential mortgages; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 3"
+    },
+    "LA153166000.Q": {
+     "description": "Households and nonprofit organizations; consumer credit; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 4"
+    },
+    "LA144104005.Q": {
+     "description": "Nonfinancial business; debt securities and loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 5"
+    },
+    "LA104104005.Q": {
+     "description": "Nonfinancial corporate business; debt securities and loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 6"
+    },
+    "LA314104005.Q": {
+     "description": "Federal government; debt securities and loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 7"
+    },
+    "LA214104005.Q": {
+     "description": "State and local governments; debt securities and loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 8"
+    },
+    "LA794104005.Q": {
+     "description": "Domestic financial sectors; debt securities and loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 9"
+    },
+    "LA264104005.Q": {
+     "description": "Rest of the world; debt securities and loans; liability",
+     "unitAndBasis": "Millions of dollars; amounts outstanding end of period, seasonally adjusted",
+     "line": "Line 10"
+    }
+   },
+   "latest": {
+    "date": "2026:Q2",
+    "LA384104005.Q": "84092940",
+    "LA154104005.Q": "21377787",
+    "LA153165105.Q": "14010942",
+    "LA153166000.Q": "5168140",
+    "LA144104005.Q": "23971523",
+    "LA104104005.Q": "15698562",
+    "LA314104005.Q": "34924533",
+    "LA214104005.Q": "3819096",
+    "LA794104005.Q": "27662394",
+    "LA264104005.Q": "8610967"
+   },
+   "yearEarlier": {
+    "date": "2025:Q2",
+    "LA384104005.Q": "79019241",
+    "LA154104005.Q": "20578920",
+    "LA153165105.Q": "13601410",
+    "LA153166000.Q": "5043532",
+    "LA144104005.Q": "22815910",
+    "LA104104005.Q": "14890244",
+    "LA314104005.Q": "31998709",
+    "LA214104005.Q": "3625701",
+    "LA794104005.Q": "26479745",
+    "LA264104005.Q": "7575509"
+   }
+  },
+  "D3_g": {
+   "records": 305,
+   "fields": 11,
+   "cells": 3355,
+   "storedMd5": "c5b40b554aa02b2339cd95b695c3ad97",
+   "publisherMd5": "c5b40b554aa02b2339cd95b695c3ad97",
+   "equal": true,
+   "ndCells": 25,
+   "series": {
+    "FG384104005.Q": {
+     "description": "Domestic nonfinancial sectors; debt securities and loans; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 1"
+    },
+    "FG154104005.Q": {
+     "description": "Households and nonprofit organizations; debt securities and loans; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 2"
+    },
+    "FG153165105.Q": {
+     "description": "Households and nonprofit organizations; one-to-four-family residential mortgages; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 3"
+    },
+    "FG153166000.Q": {
+     "description": "Households and nonprofit organizations; consumer credit; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 4"
+    },
+    "FG144104005.Q": {
+     "description": "Nonfinancial business; debt securities and loans; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 5"
+    },
+    "FG104104005.Q": {
+     "description": "Nonfinancial corporate business; debt securities and loans; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 6"
+    },
+    "FG314104005.Q": {
+     "description": "Federal government; debt securities and loans; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 7"
+    },
+    "FG214104005.Q": {
+     "description": "State and local governments; debt securities and loans; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 8"
+    },
+    "FG794104005.Q": {
+     "description": "Domestic financial sectors; debt securities and loans; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 9"
+    },
+    "FG264104005.Q": {
+     "description": "Rest of the world; debt securities and loans; liability",
+     "unitAndBasis": "Percent growth rate, seasonally adjusted annual rate",
+     "line": "Line 10"
+    }
+   },
+   "latest": {
+    "date": "2026:Q2",
+    "FG384104005.Q": "5.165831748653175",
+    "FG154104005.Q": "5.023698190874346",
+    "FG153165105.Q": "4.433793507356153",
+    "FG153166000.Q": "2.8618160211574675",
+    "FG144104005.Q": "4.570938077639383",
+    "FG104104005.Q": "5.484258093397211",
+    "FG314104005.Q": "5.240127528770887",
+    "FG214104005.Q": "9.059053333050413",
+    "FG794104005.Q": "9.740655168463421",
+    "FG264104005.Q": "21.68331013121804"
+   },
+   "yearEarlier": {
+    "date": "2025:Q2",
+    "FG384104005.Q": "3.420986771032999",
+    "FG154104005.Q": "4.041347893498908",
+    "FG153165105.Q": "3.6232481282767903",
+    "FG153166000.Q": "2.8327731329216737",
+    "FG144104005.Q": "4.858164421114994",
+    "FG104104005.Q": "5.573584099863382",
+    "FG314104005.Q": "1.477959578478188",
+    "FG214104005.Q": "8.165559895892882",
+    "FG794104005.Q": "8.777937236232445",
+    "FG264104005.Q": "13.390460655358385"
+   }
+  }
+ },
+ "ofr": {
+  "datasetId": "official_01_financials_data_ofr_mmf_complete_monthly_history_e039b3593e",
+  "snapshotId": "9ec6d14fabd3bec203b84fb2c89d50305a4eb2b3d7acf4588fa70d81fdfcc69d",
+  "rows": 6848,
+  "retrievedAt": "2026-11-24T10:14:39Z",
+  "totalChildren": [
+   "MMF-MMF_T_TOT-M",
+   "MMF-MMF_AG_TOT-M",
+   "MMF-MMF_BRA_TOT-M",
+   "MMF-MMF_RP_TOT-M",
+   "MMF-MMF_OA_TOT-M"
+  ],
+  "monthsPartsEqualTotal": 192,
+  "months": 192,
+  "series": {
+   "MMF-MMF_AG_TOT-M": {
+    "name": "Money Market Mutual Fund Investments in Federal Agency and GSE Securities",
+    "unit": {
+     "display_magnitude": 0,
+     "magnitude": 0,
+     "type": "Volume",
+     "name": "USD",
+     "precision": 2
+    },
+    "frequency": "Monthly",
+    "compared": 192,
+    "periods": [
+     "2010-11-30",
+     "2026-10-31"
+    ],
+    "storedMd5": "5494d501a1684db297b48a3f949fa087",
+    "publisherMd5": "5494d501a1684db297b48a3f949fa087",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "1236609537093.35"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "994635534269.03"
+    ]
+   },
+   "MMF-MMF_BRA_TOT-M": {
+    "name": "Money Market Mutual Fund Investments in Bank-Related Assets",
+    "unit": {
+     "display_magnitude": 0,
+     "magnitude": 0,
+     "type": "Volume",
+     "name": "USD",
+     "precision": 2
+    },
+    "frequency": "Monthly",
+    "compared": 192,
+    "periods": [
+     "2010-11-30",
+     "2026-10-31"
+    ],
+    "storedMd5": "be15154293ec244ef956f2b920cac4a0",
+    "publisherMd5": "be15154293ec244ef956f2b920cac4a0",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "484208366540.83"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "437340296725.06"
+    ]
+   },
+   "MMF-MMF_OA_TOT-M": {
+    "name": "Money Market Mutual Fund Investments in Other Assets",
+    "unit": {
+     "display_magnitude": 0,
+     "magnitude": 0,
+     "type": "Volume",
+     "name": "USD",
+     "precision": 2
+    },
+    "frequency": "Monthly",
+    "compared": 192,
+    "periods": [
+     "2010-11-30",
+     "2026-10-31"
+    ],
+    "storedMd5": "0f11afce58e5d814e3b6d9cd985ed1d9",
+    "publisherMd5": "0f11afce58e5d814e3b6d9cd985ed1d9",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "342689521992.04"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "320141536604.0"
+    ]
+   },
+   "MMF-MMF_RP_TOT-M": {
+    "name": "Money Market Mutual Fund Investments in Repurchase Agreements",
+    "unit": {
+     "display_magnitude": 0,
+     "magnitude": 0,
+     "type": "Volume",
+     "name": "USD",
+     "precision": 2
+    },
+    "frequency": "Monthly",
+    "compared": 192,
+    "periods": [
+     "2010-11-30",
+     "2026-10-31"
+    ],
+    "storedMd5": "7af1b12c6cc8ebd9be96407601b1f6f2",
+    "publisherMd5": "7af1b12c6cc8ebd9be96407601b1f6f2",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "2789414202784.37"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "2765828659052.33"
+    ]
+   },
+   "MMF-MMF_T_TOT-M": {
+    "name": "Money Market Mutual Fund Investments in U.S. Treasury Securities",
+    "unit": {
+     "display_magnitude": 0,
+     "magnitude": 0,
+     "type": "Volume",
+     "name": "USD",
+     "precision": 2
+    },
+    "frequency": "Monthly",
+    "compared": 192,
+    "periods": [
+     "2010-11-30",
+     "2026-10-31"
+    ],
+    "storedMd5": "f8e19e2a337affe6cf3634fdf5d23e63",
+    "publisherMd5": "f8e19e2a337affe6cf3634fdf5d23e63",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "3620456613944.79"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "3405963676794.02"
+    ]
+   },
+   "MMF-MMF_TOT-M": {
+    "name": "Money Market Mutual Fund Investments: Total",
+    "unit": {
+     "display_magnitude": 0,
+     "magnitude": 0,
+     "type": "Volume",
+     "name": "USD",
+     "precision": 2
+    },
+    "frequency": "Monthly",
+    "compared": 192,
+    "periods": [
+     "2010-11-30",
+     "2026-10-31"
+    ],
+    "storedMd5": "e24f3d122cb5b552450c382a0e2e0d8e",
+    "publisherMd5": "e24f3d122cb5b552450c382a0e2e0d8e",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "8473378242355.38"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "7923909703444.44"
+    ]
+   },
+   "MMF-MY_MMF_RP_TOT-M": {
+    "name": "Median Yield on Money Market Mutual Fund Investments in Repurchase Agreements: Total",
+    "unit": {
+     "display_magnitude": 0,
+     "magnitude": 0,
+     "type": "Rate",
+     "name": "Percent",
+     "precision": 2
+    },
+    "frequency": "Monthly",
+    "compared": 127,
+    "periods": [
+     "2016-04-30",
+     "2026-10-31"
+    ],
+    "storedMd5": "1633ad81281246f9d5655c37291b3dc0",
+    "publisherMd5": "1633ad81281246f9d5655c37291b3dc0",
+    "equal": true,
+    "latest": [
+     "2026-10-31",
+     "3.94"
+    ],
+    "yearEarlier": [
+     "2025-10-31",
+     "4.15"
+    ]
+   }
+  }
+ }
+}
