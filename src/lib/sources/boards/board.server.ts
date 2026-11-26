@@ -16,9 +16,20 @@ import type { MeasureSpec, Profile, SeriesAddress } from "../profiles/types";
 import { readSourceCrossSection, readSourceSeriesFields, type SourceDirectClient, type SourceSnapshotKnown } from "../read.server";
 import { SERIES_SURE_LIMIT, type SourceCellMatch, type SourceSeriesAddress } from "../read-types";
 import type { SourceColumn, SourceIngest } from "../schema";
-import { computeRankTile, computeSeriesTile, type CellInput, type RankCellInput, type TileContext } from "./compute";
+import { computeRankTile, computeSeriesTile, isClassicSpec, type CellInput, type RankCellInput, type TileContext } from "./compute";
 import { boardSpec, tileSpec } from "./specs";
-import type { Board, BoardRead, BoardTile, RankTileSpec, SeriesTileSpec, TileResult, TileSource, TileSpec } from "./types";
+import type {
+  Board,
+  BoardRead,
+  BoardTile,
+  RankTileSpec,
+  SeriesTileSpec,
+  ShareTileSpec,
+  TileResult,
+  TileSeriesSpec,
+  TileSource,
+  TileSpec,
+} from "./types";
 
 type DatasetMeta = {
   dataset: { id: string; source_id: string | null; name: string; sector: string; agency: string; source_url: string | null; grain: string };
@@ -257,6 +268,18 @@ async function rankCells(db: SourceDirectClient, meta: DatasetMeta, measure: Mea
   });
 }
 
+/** The rows behind a tile's chart, for its "Open records" link. */
+export function selectionOf(spec: TileSpec): BoardTile["selection"] {
+  if (spec.transform === "records") return { records: spec.per };
+  if (spec.transform === "rank") return { across: spec.across };
+  if (spec.form === "map" || spec.form === "distribution") return { across: spec.across };
+  const line = (l: TileSeriesSpec) => ({ datasetId: l.datasetId ?? spec.datasetId, series: l.series });
+  if (spec.form === "compare") return { lines: spec.lines.map(line) };
+  if (spec.form === "mix") return { lines: [line(spec.whole), ...spec.parts.map(line)] };
+  if (spec.form === "curve") return { lines: spec.categories.map(line) };
+  return { series: spec.series };
+}
+
 function boardTile(spec: TileSpec, source: TileSource, result: TileResult): BoardTile {
   return {
     id: spec.id,
@@ -264,7 +287,9 @@ function boardTile(spec: TileSpec, source: TileSource, result: TileResult): Boar
     form: spec.form,
     transform: spec.transform,
     note: spec.note,
-    selection: spec.transform === "rank" ? { across: spec.across } : { series: spec.series },
+    ...(spec.section ? { section: spec.section } : {}),
+    ...(spec.size ? { size: spec.size } : {}),
+    selection: selectionOf(spec),
     source,
     result,
   };
@@ -277,21 +302,23 @@ const refusedBy = (spec: TileSpec, error: unknown): Outcome => ({
 /** Computes one tile on a dataset's snapshot and keeps the outcome; never rejects. */
 async function buildTile(db: SourceDirectClient, spec: TileSpec, meta: DatasetMeta, key: string): Promise<Outcome> {
   try {
+    if (!isClassicSpec(spec)) stop("This chart form is computed by the next version of the boards.");
+    const classic = spec as SeriesTileSpec | ShareTileSpec | RankTileSpec;
     const status = profileStatus(meta.dataset, meta.snapshot.columns);
     if (status.state === "none") stop("No reviewed profile covers this table.");
     if (status.state === "off") stop(status.reason);
     const profile = (status as { profile: Profile }).profile;
-    const measure = measureOf(profile, spec.measure);
-    if (!measure) stop(`${spec.measure} is not a measure of the ${profile.family} profile.`);
+    const measure = measureOf(profile, classic.measure);
+    if (!measure) stop(`${classic.measure} is not a measure of the ${profile.family} profile.`);
     let result: TileResult;
-    if (spec.transform === "rank") {
+    if (classic.transform === "rank") {
       const context = contextFor(profile, measure!, meta, "day");
-      result = computeRankTile(spec, context, await rankCells(db, meta, measure!, spec));
-    } else if (spec.transform === "share") {
+      result = computeRankTile(classic, context, await rankCells(db, meta, measure!, classic));
+    } else if (classic.transform === "share") {
       result = { ok: false, reason: "Share tiles are not served by this board." };
     } else {
       const context = contextFor(profile, measure!, meta);
-      result = computeSeriesTile(spec, context, await seriesCells(db, meta, profile, measure!, spec));
+      result = computeSeriesTile(classic, context, await seriesCells(db, meta, profile, measure!, classic));
     }
     const outcome: Outcome = result.ok
       ? { tile: boardTile(spec, sourceOf(meta), result) }
