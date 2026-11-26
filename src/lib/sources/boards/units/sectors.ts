@@ -58,9 +58,10 @@ const FHFA_Q_FAMILY: readonly FieldMatch[] = [
 const FHFA_Q_NOTE = "Purchase-only index, seasonally adjusted, quarterly. FHFA re-estimates the whole history with each release.";
 
 /** One place of the quarterly purchase-only family: four cell filters inside one select of the 40,304-record table. */
-const fhfaPlace = (placeId: string, label: string): TileSeriesSpec => ({
+const fhfaPlace = (placeId: string, label: string, subject?: string): TileSeriesSpec => ({
   series: { where: [{ field: "place_id", value: placeId }, ...FHFA_Q_FAMILY] },
   label,
+  ...(subject ? { subject } : {}),
 });
 
 const fhfaDivisions = (spec: { id: string; title: string; lines: readonly TileSeriesSpec[] }): CompareTileSpec => ({
@@ -111,7 +112,7 @@ const HOUSING: TileSpec[] = [
     datasetId: FHFA_QUARTERLY_DATASET,
     measure: "index_sa",
     title: "FHFA purchase-only house price index by state, change over four quarters",
-    subject: "The FHFA purchase-only index",
+    subject: "the FHFA purchase-only index",
     entities: "states",
     unit: FHFA_Q_UNIT,
     decimals: 2,
@@ -129,7 +130,7 @@ const HOUSING: TileSpec[] = [
     id: "fhfa-divisions-east",
     title: "FHFA purchase-only index, change over four quarters: United States and eastern divisions",
     lines: [
-      fhfaPlace("USA", "United States"),
+      fhfaPlace("USA", "United States", "The FHFA purchase-only index for the United States"),
       fhfaPlace("DV_NE", "New England"),
       fhfaPlace("DV_MA", "Middle Atlantic"),
       fhfaPlace("DV_SA", "South Atlantic"),
@@ -140,7 +141,7 @@ const HOUSING: TileSpec[] = [
     id: "fhfa-divisions-west",
     title: "FHFA purchase-only index, change over four quarters: central and western divisions",
     lines: [
-      fhfaPlace("DV_PAC", "Pacific"),
+      fhfaPlace("DV_PAC", "Pacific", "The FHFA purchase-only index for the Pacific Division"),
       fhfaPlace("DV_MT", "Mountain"),
       fhfaPlace("DV_WSC", "West South Central"),
       fhfaPlace("DV_WNC", "West North Central"),
