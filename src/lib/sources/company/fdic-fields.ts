@@ -24,12 +24,26 @@ export const FDIC_LINES: readonly FdicLineDef[] = [
   { field: "DEP", label: "Total deposits", basis: "balance", hint: { current: 235, history: 235 } },
   { field: "LNLSNET", label: "Net loans and leases", basis: "balance", hint: { current: 918, history: 918 } },
   { field: "NETINC", label: "Net income", basis: "ytd", hint: { current: 1281, history: 1282 } },
+  { field: "NETINCQ", label: "Net income", basis: "quarter", hint: { current: 1283, history: 1284 } },
   { field: "NIMY", label: "Net interest margin", basis: "ytd", hint: { current: 1295, history: 1296 } },
   { field: "ROA", label: "Return on assets", basis: "ytd", hint: { current: 1894, history: 1895 } },
+  { field: "EEFFR", label: "Efficiency ratio", basis: "ytd", hint: { current: 420, history: 420 } },
   { field: "NTLNLSR", label: "Net charge-off rate", basis: "ytd", hint: { current: 1415, history: 1416 } },
   { field: "RBCT1CER", label: "Common equity tier 1 ratio", basis: "quarter", hint: { current: 1880, history: 1881 } },
   { field: "NCLNLSR", label: "Noncurrent loans to loans", basis: "quarter", hint: { current: 1238, history: 1239 } },
 ];
+
+/**
+ * The three measures of the trend charts: two balances and the FDIC's own quarterly net income (NETINCQ, "Net
+ * income - quarterly" in both dictionaries), never a difference of year-to-date figures.
+ */
+export const TREND_FIELDS: readonly string[] = ["ASSET", "DEP", "NETINCQ"];
+
+/**
+ * The latest quarter's ratios shown as stat tiles, each a ratio the FDIC itself publishes (unit "Percent" in the
+ * dictionary), in the order they are shown.
+ */
+export const RATIO_FIELDS: readonly string[] = ["ROA", "NIMY", "EEFFR", "RBCT1CER", "NCLNLSR", "NTLNLSR"];
 
 /** Identity fields of the cohort tables. */
 export const FDIC_IDS = { cert: { field: "CERT", hint: { current: 0, history: 0 } }, date: { field: "REPDTE", hint: { current: 1, history: 1 } }, name: { field: "NAME", hint: { current: 1175, history: 1176 } }, state: { field: "STALP", hint: { current: 2049, history: 2050 } } } as const;

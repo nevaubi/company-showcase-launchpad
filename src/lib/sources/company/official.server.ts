@@ -8,9 +8,10 @@
 // Each part degrades to a note; the call never throws to the page.
 import { readNative } from "../numbers";
 import type { SourceColumn } from "../schema";
-import { ALL_BANKS_FIELDS, ALL_BANKS_LABELS, FDIC_ALL_BANKS, FDIC_CURRENT, FDIC_HISTORY, FDIC_IDS, FDIC_LINES, fdicInstitutionUrl, QUANTITY_UNITS } from "./fdic-fields";
+import { ALL_BANKS_FIELDS, ALL_BANKS_LABELS, FDIC_ALL_BANKS, FDIC_CURRENT, FDIC_HISTORY, FDIC_IDS, FDIC_LINES, fdicInstitutionUrl, QUANTITY_UNITS, TREND_FIELDS } from "./fdic-fields";
 import { absSponsors, provenBanks, registrantLink } from "./links.server";
-import type { BankHistory, BankLine, CompanyLink, CompanyOfficial, CompanyOfficialResult, FigureRef, HistoryPoint, OfficialBank, OfficialCell, OfficialSource, Y9cLine, Y9cPointer, Y9cQuarter, Y9cReport } from "./types";
+import { SOD_BY_STATE, SOD_MAX_STATES, SOD_STATE_FIELDS, SOD_TOTAL_FIELDS, SOD_TOTALS, SOD_UNIT, sodUnit } from "./sod-fields";
+import type { BankHistory, BankLine, CompanyLink, CompanyOfficial, CompanyOfficialResult, DepositsByState, DepositsState, FigureRef, HistoryPoint, OfficialBank, OfficialCell, OfficialSource, Y9cLine, Y9cPointer, Y9cQuarter, Y9cReport } from "./types";
 import { Y9C_FIELDS, Y9C_KEYS, Y9C_VARIABLES } from "./y9c-fields";
 
 export type PgError = { message: string; code?: string | null };
@@ -73,6 +74,7 @@ const MINUTES = 60_000;
 const latestCache = new Map<string, { at: number; id: string }>();
 const snapshotCache = new Map<string, Omit<OfficialSource, "newerSnapshot">>();
 const fieldCache = new Map<string, Map<string, { position: number; column: SourceColumn }>>();
+const fieldsInFlight = new Map<string, Promise<Map<string, { position: number; column: SourceColumn }>>>();
 const resultCache = new Map<string, { at: number; value: CompanyOfficial }>();
 
 /** Forget every cached read (tests). */
@@ -80,6 +82,7 @@ export function resetOfficialCache() {
   latestCache.clear();
   snapshotCache.clear();
   fieldCache.clear();
+  fieldsInFlight.clear();
   resultCache.clear();
 }
 
@@ -116,6 +119,15 @@ export async function fieldsOf(db: OfficialClient, snapshot: string, wanted: rea
   const key = `${snapshot}|${wanted.map(w => `${w.label}@${w.hint}`).join(",")}`;
   const hit = fieldCache.get(key);
   if (hit) return hit;
+  // reads that start together (a bank's history and the trends) share one probe
+  const pending = fieldsInFlight.get(key);
+  if (pending) return pending;
+  const run = resolveFields(db, snapshot, wanted, key).finally(() => fieldsInFlight.delete(key));
+  fieldsInFlight.set(key, run);
+  return run;
+}
+
+async function resolveFields(db: OfficialClient, snapshot: string, wanted: readonly Wanted[], key: string): Promise<Map<string, { position: number; column: SourceColumn }>> {
   const out = new Map<string, { position: number; column: SourceColumn }>();
   const probe = await select(db.from("source_snapshots").select(wanted.map((w, i) => `d${i}:columns->${w.hint}`).join(",")).eq("id", snapshot).limit(1));
   let exact = !!probe[0];
@@ -187,10 +199,12 @@ async function readIdentity(db: OfficialClient, certs: string[]) {
   return { source, byCert: new Map(rows.map(r => [text(r.entity_id) ?? "", r])) };
 }
 
+/** Every field the history reads ask for: one probe serves both the selected bank's history and the trends. */
+const HISTORY_WANTED: Wanted[] = [{ label: FDIC_IDS.date.field, hint: FDIC_IDS.date.hint.history }, ...FDIC_LINES.map(l => ({ label: l.field, hint: l.hint.history }))];
+
 async function readHistory(db: OfficialClient, cert: string, current: { source: OfficialSource; fields: Fields; row: Record<string, unknown> | undefined }): Promise<{ history: BankHistory | null; note: string | null }> {
   const source = await sourceOf(db, FDIC_HISTORY);
-  const wanted: Wanted[] = [{ label: FDIC_IDS.date.field, hint: FDIC_IDS.date.hint.history }, ...FDIC_LINES.map(l => ({ label: l.field, hint: l.hint.history }))];
-  const fields = await fieldsOf(db, source.snapshot, wanted);
+  const fields = await fieldsOf(db, source.snapshot, HISTORY_WANTED);
   const measures = FDIC_LINES.filter(l => quantity(fields, l.field)).map(l => ({ field: l.field, label: l.label, unit: fields.get(l.field)!.column.unit! }));
   if (!measures.length) return { history: null, note: "The history table's dictionary states no unit for these lines." };
   const cols = projection(fields, measures.map(m => m.field));
@@ -210,6 +224,97 @@ async function readHistory(db: OfficialClient, cert: string, current: { source: 
   }
   if (!points.length) return { history: null, note: "No quarterly history is stored for this bank." };
   return { history: { cert, measures, sources, points }, note: null };
+}
+
+/**
+ * Charters per trends select: at most `TREND_ROWS_PER_CHARTER` quarters each, so one select stays under 1,000 rows
+ * (the table holds 107 quarters a bank since 2000; 120 leaves room for three more years).
+ */
+export const TREND_ROWS_PER_CHARTER = 120;
+export const TREND_CHARTERS_PER_SELECT = Math.floor(1000 / TREND_ROWS_PER_CHARTER);
+/** Selects one trends read may issue; charters beyond them are named in the note, not read. */
+export const TREND_MAX_SELECTS = 5;
+
+/**
+ * Assets, deposits and quarterly net income of each cohort charter by quarter: the history table read through its
+ * entity index (`entity_id in` the certificates, a few charters per select), then each charter's latest quarter from
+ * the current-quarter table where both dictionaries state the same unit. Each charter's own figures, never summed.
+ */
+async function readTrends(db: OfficialClient, certs: string[], current: { source: OfficialSource; fields: Fields; byCert: Map<string, Record<string, unknown>> }): Promise<{ trends: BankHistory[]; note: string | null }> {
+  if (!certs.length) return { trends: [], note: null };
+  const source = await sourceOf(db, FDIC_HISTORY);
+  const fields = await fieldsOf(db, source.snapshot, HISTORY_WANTED);
+  const measures = FDIC_LINES.filter(l => TREND_FIELDS.includes(l.field) && quantity(fields, l.field)).map(l => ({ field: l.field, label: l.label, unit: fields.get(l.field)!.column.unit! }));
+  if (!measures.length) return { trends: [], note: "The history table's dictionary states no unit for these lines." };
+  const cols = projection(fields, measures.map(m => m.field));
+  const chunks: string[][] = [];
+  for (let i = 0; i < certs.length; i += TREND_CHARTERS_PER_SELECT) chunks.push(certs.slice(i, i + TREND_CHARTERS_PER_SELECT));
+  const read = chunks.slice(0, TREND_MAX_SELECTS);
+  const pages = await Promise.all(read.map(c => select(db.from("source_records").select(`row_number,entity_id,period,${cols}`).eq("snapshot_id", source.snapshot).in("entity_id", c).order("period", { ascending: true }).limit(1000))));
+  const byCert = new Map<string, HistoryPoint[]>();
+  for (const r of pages.flat()) {
+    const cert = text(r.entity_id) ?? "";
+    const period = isoDay(text(r.period));
+    if (!period) continue;
+    const list = byCert.get(cert) ?? [];
+    list.push({ period, source: 0, row: Number(r.row_number), cells: measures.map(m => cellOf(cellAt(r, m.field))) });
+    byCert.set(cert, list);
+  }
+  const sameUnits = measures.every(m => quantity(current.fields, m.field) === m.unit);
+  const trends: BankHistory[] = [];
+  for (const cert of read.flat()) {
+    const points = (byCert.get(cert) ?? []).sort((a, b) => a.period.localeCompare(b.period));
+    const sources = [source];
+    const cur = current.byCert.get(cert);
+    const curPeriod = cur ? isoDay(text(cur.period)) : null;
+    if (cur && curPeriod && sameUnits && (!points.length || curPeriod > points[points.length - 1].period)) {
+      sources.push(current.source);
+      points.push({ period: curPeriod, source: 1, row: Number(cur.row_number), cells: measures.map(m => cellOf(cellAt(cur, m.field))) });
+    }
+    if (points.length) trends.push({ cert, measures, sources, points });
+  }
+  const cut = pages.some(p => p.length >= 1000);
+  const left = certs.length - read.flat().length;
+  const note = [cut ? "One read returned as many rows as it may; some quarters may be missing." : null, left > 0 ? `${left} more ${left === 1 ? "charter is" : "charters are"} not charted.` : null].filter(Boolean).join(" ") || null;
+  return { trends, note };
+}
+
+/**
+ * One charter's 2026 Summary of Deposits by branch state, and its totals, read by certificate. Each row's CERT cell
+ * must equal the certificate; the deposits are shown in `SOD_UNIT` unless a dictionary states another unit for them.
+ */
+async function readDeposits(db: OfficialClient, cert: string): Promise<{ deposits: DepositsByState | null; note: string | null }> {
+  const source = await sourceOf(db, SOD_BY_STATE);
+  const f = SOD_STATE_FIELDS;
+  const fields = await fieldsOf(db, source.snapshot, Object.values(f));
+  if (!fields.has(f.cert.label) || !fields.has(f.state.label) || !fields.has(f.deposits.label)) return { deposits: null, note: "The stored Summary of Deposits table lacks the certificate, state or deposits field." };
+  if (!sodUnit(fields.get(f.deposits.label)!.column.unit)) return { deposits: null, note: "The Summary of Deposits dictionary states another unit for the deposits." };
+  const cols = projection(fields, Object.values(f).map(x => x.label));
+  const rows = await select(db.from("source_records").select(`row_number,entity_id,${cols}`).eq("snapshot_id", source.snapshot).eq("entity_id", cert).limit(SOD_MAX_STATES));
+  const own = rows.filter(r => text(cellAt(r, f.cert.label))?.trim() === cert && text(r.entity_id) === cert);
+  if (!own.length) return { deposits: null, note: "No 2026 Summary of Deposits row is stored for this bank." };
+  const states: DepositsState[] = own
+    .map(r => ({ code: (text(cellAt(r, f.state.label)) ?? "").trim(), deposits: cellOf(cellAt(r, f.deposits.label)), branches: cellOf(cellAt(r, f.branches.label)), row: Number(r.row_number) }))
+    .filter(x => x.code)
+    .sort((a, b) => a.row - b.row);
+  let totals: DepositsByState["totals"] = null;
+  let totalsSource: OfficialSource | null = null;
+  try {
+    totalsSource = await sourceOf(db, SOD_TOTALS);
+    const t = SOD_TOTAL_FIELDS;
+    const tf = await fieldsOf(db, totalsSource.snapshot, Object.values(t));
+    if (tf.has(t.cert.label) && tf.has(t.deposits.label) && sodUnit(tf.get(t.deposits.label)!.column.unit)) {
+      const tr = await select(db.from("source_records").select(`row_number,entity_id,${projection(tf, Object.values(t).map(x => x.label))}`).eq("snapshot_id", totalsSource.snapshot).eq("entity_id", cert).limit(2));
+      const r = tr.find(x => text(cellAt(x, t.cert.label))?.trim() === cert);
+      if (r) totals = { row: Number(r.row_number), deposits: cellOf(cellAt(r, t.deposits.label)), branches: cellOf(cellAt(r, t.branches.label)), states: cellOf(cellAt(r, t.states.label)), surveyYear: text(cellAt(r, t.year.label))?.trim() || null };
+    }
+  } catch {
+    totalsSource = null;
+  }
+  return {
+    deposits: { cert, name: text(cellAt(own[0], f.name.label))?.trim() || null, unit: SOD_UNIT, states, totals, source, totalsSource: totals ? totalsSource : null, fields: { deposits: f.deposits.label, branches: f.branches.label, state: f.state.label, states: SOD_TOTAL_FIELDS.states.label } },
+    note: null,
+  };
 }
 
 // ------------------------------------------------------------------ FR Y-9C
@@ -260,6 +365,8 @@ async function readY9c(db: OfficialClient, reg: CompanyLink): Promise<Y9cReport 
     field: f.field,
     label: dictionary?.labels.get(f.field)?.text ?? f.short,
     short: f.short,
+    group: f.group,
+    basis: f.basis,
     unit: f.unit,
     unitEvidence: f.unitEvidence,
     labelRef: dictionary?.labels.get(f.field) ? { dataset: dictionary.source.dataset, snapshot: dictionary.source.snapshot, row: dictionary.labels.get(f.field)!.row } : null,
@@ -304,7 +411,7 @@ export async function readCompanyOfficial(db: OfficialClient, ticker: string, ce
   try {
     const reg = registrantLink(t);
     const banks = provenBanks(t);
-    const empty: CompanyOfficial = { ticker: t, registrant: null, banks: [], history: null, historyNote: null, y9c: null, y9cNote: null, abs: [], sources: { current: null, history: null }, caveats: [] };
+    const empty: CompanyOfficial = { ticker: t, registrant: null, banks: [], history: null, historyNote: null, trends: [], trendsNote: null, deposits: null, depositsNote: null, y9c: null, y9cNote: null, abs: [], sources: { current: null, history: null }, caveats: [] };
     if (!reg) return { ok: true, data: empty };
     const cohortInsured = banks.filter(b => b.link_kind === "insured_bank" && b.evidence.fdic?.cohort500);
     const chosen = cohortInsured.find(b => b.key_value === cert) ?? cohortInsured[0] ?? null;
@@ -353,14 +460,33 @@ export async function readCompanyOfficial(db: OfficialClient, ticker: string, ce
     let partial = fdic.status === "rejected" || identity.status === "rejected" || y9c.status === "rejected";
     if (fdic.status === "rejected") out.historyNote = fdic.reason instanceof Stop ? fdic.reason.message : SENTENCE.error;
     if (chosen && lines) {
-      try {
-        const h = await readHistory(db, chosen.key_value, { source: lines.current, fields: lines.fields, row: lines.byCert.get(chosen.key_value) });
-        out.history = h.history;
-        out.historyNote = h.note;
-        out.sources.history = h.history?.sources[0] ?? null;
-      } catch (e) {
+      const [h, tr, dep] = await Promise.allSettled([
+        readHistory(db, chosen.key_value, { source: lines.current, fields: lines.fields, row: lines.byCert.get(chosen.key_value) }),
+        readTrends(db, cohortInsured.map(b => b.key_value), { source: lines.current, fields: lines.fields, byCert: lines.byCert }),
+        readDeposits(db, chosen.key_value),
+      ]);
+      const why = (e: unknown) => (e instanceof Stop ? e.message : SENTENCE.error);
+      if (h.status === "fulfilled") {
+        out.history = h.value.history;
+        out.historyNote = h.value.note;
+        out.sources.history = h.value.history?.sources[0] ?? null;
+      } else {
         partial = true;
-        out.historyNote = e instanceof Stop ? e.message : SENTENCE.error;
+        out.historyNote = why(h.reason);
+      }
+      if (tr.status === "fulfilled") {
+        out.trends = tr.value.trends;
+        out.trendsNote = tr.value.note;
+      } else {
+        partial = true;
+        out.trendsNote = why(tr.reason);
+      }
+      if (dep.status === "fulfilled") {
+        out.deposits = dep.value.deposits;
+        out.depositsNote = dep.value.note;
+      } else {
+        partial = true;
+        out.depositsNote = why(dep.reason);
       }
     }
     if (y9c.status === "fulfilled") out.y9c = y9c.value;

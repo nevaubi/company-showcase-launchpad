@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fakeStore, FIXTURE_SNAPSHOTS } from "@/test/fixtures/sources/company/fake-store";
 import { FDIC_CURRENT, FDIC_HISTORY } from "./fdic-fields";
-import { cellOf, readCompanyOfficial, resetOfficialCache, type OfficialClient } from "./official.server";
+import { cellOf, readCompanyOfficial, resetOfficialCache, type OfficialClient, type OfficialQuery } from "./official.server";
 import type { CompanyOfficial } from "./types";
 
 const Y9C = "official_01_financials_data_fed_y9_family_all_native_2026q1_q3_ffceb6e988";
@@ -13,6 +13,24 @@ const read = async (client: OfficialClient, ticker: string, cert?: string): Prom
 };
 
 beforeEach(() => resetOfficialCache());
+
+/** The client, recording the snapshot of every whole-dictionary read (`columns` selected by id). */
+function recordFullReads(base: OfficialClient, into: string[]): OfficialClient {
+  const wrap = (inner: OfficialQuery): OfficialQuery => ({
+    eq: (column, value) => {
+      if (column === "id") into.push(String(value));
+      return wrap(inner.eq(column, value));
+    },
+    in: (column, values) => wrap(inner.in(column, values)),
+    order: (column, options) => wrap(inner.order(column, options)),
+    limit: count => wrap(inner.limit(count)),
+    then: (ok, fail) => inner.then(ok, fail),
+  });
+  return {
+    rpc: (fn, args) => base.rpc(fn, args),
+    from: table => ({ select: columns => (table === "source_snapshots" && columns === "columns" ? wrap(base.from(table).select(columns)) : base.from(table).select(columns)) }),
+  };
+}
 
 describe("cellOf", () => {
   it("keeps the publisher's string and reads a number only from a plain decimal", () => {
@@ -94,10 +112,11 @@ describe("readCompanyOfficial: the two read modes and the failures", () => {
     expect(d.y9c!.lines.find(l => l.field === "BHCAP793")!.cells[2].text).toBe("13.9676");
   });
   it("finds a field by its label when the publisher moved it", async () => {
-    const log: string[] = [];
+    // the fixture keeps only the descriptors round 4 read, so other snapshots may be read whole too; the moved one is read whole once
+    const full: string[] = [];
     const cur = FIXTURE_SNAPSHOTS[FDIC_CURRENT];
-    const d = await read(fakeStore({ log, shift: [{ snapshot: cur, from: 35, to: 40 }] }), "JPM");
-    expect(log.filter(l => l === "source_snapshots:columns")).toHaveLength(1);
+    const d = await read(recordFullReads(fakeStore({ shift: [{ snapshot: cur, from: 35, to: 40 }] }), full), "JPM");
+    expect(full.filter(id => id === cur)).toHaveLength(1);
     expect(d.banks[0].lines.find(l => l.field === "ASSET")).toMatchObject({ cell: { text: "4174631000" }, ref: { row: 10 } });
   });
   it("turns a database failure into a note on that part only, and never throws", async () => {
