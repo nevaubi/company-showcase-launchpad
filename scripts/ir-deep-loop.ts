@@ -22,6 +22,7 @@ import { args, dbGate, sb } from "./lib/supa";
 import { CONFIG_STATUS_LIKE, REREAD_WINDOW_DAYS, requeueEnabled, requeueLimit, requeuePlan, rereadTickers, type FailedDoc } from "./lib/ir-requeue";
 import { canonResetAllowed, catchupDueAfter, clearStalePausesNow, countsAgainstCompany, creditStopAfter, exitCode, healConfigDue, healedSince, laneBudget, LOOP_REQUEST_MAX, LOOP_REQUEST_PREFIX, loopRunRow, loopSleepMs, nextDue, planLoopRequests, proseMode, stepLimit } from "./lib/loop-schedule";
 import { loadRank } from "./lib/rank";
+import { REBUILD_STATE, rebuildDue, rebuildSettings, type RebuildState } from "./lib/ir-rebuild-stale";
 import { priorityCampaign, priorityCandidates, priorityKey, priorityList, priorityMaxRuns, restorePriority, settlePriority, unknownGroups, type PriorityState } from "./lib/ir-priority";
 import { COVERAGE } from "@/lib/coverage";
 import { fairOrder } from "@/lib/jobs/priority";
@@ -355,7 +356,8 @@ async function maybeIrSite() {
 /** Once a day: cross-document label canon for the next 40 companies with figures (resumes from its cursor). */
 let canoning = false;
 async function maybeCanon() {
-  if (canoning || !sideReady() || sideBusy()) return;
+  // Canon rebuilds payloads too: never beside a stale-payload pass.
+  if (canoning || rebuildingStale || !sideReady() || sideBusy()) return;
   if (state.lastCanon && Date.now() - Date.parse(state.lastCanon) < 24 * 3_600_000) return;
   // Its providers are out: no child is launched to find that out again; it runs once a probe heals them.
   if (aiOpen(CANON_ROUTE)) return;
@@ -365,6 +367,48 @@ async function maybeCanon() {
     canoning = false;
     settle("canon", "lastCanon", 24 * 3_600_000, code);
     log("label canon pass ended");
+  });
+}
+
+// ---------- stale payload lane ----------
+/**
+ * Rebuilds stored IR payloads below the current build format (scripts/ir-rebuild-stale.ts, rules in
+ * scripts/lib/ir-rebuild-stale.ts): no model call, so it runs while the reader route is closed on
+ * credit too. Only with no reading run and memory under half the limit; no lane starts while a pass
+ * runs (at most 30 min of new companies, killed at 45). IR_REBUILD_STALE=0 switches it off.
+ */
+const REBUILD = rebuildSettings(process.env);
+let rebuildingStale = false;
+let lastStale: { endMs: number; left: number | null; failed: boolean } | null = null;
+const rebuildEnv = { ...process.env, NODE_OPTIONS: `--max-old-space-size=${Math.max(1024, Math.min(6144, Math.floor(MEM_GB * 1024 * 0.4)))}` };
+async function maybeRebuildStale(laneStarted: boolean) {
+  const due = rebuildDue({
+    enabled: REBUILD.enabled,
+    running: rebuildingStale,
+    busy: busy.size,
+    laneStarted,
+    otherRebuilder: canoning,
+    memUsedGB: memUsedGB(),
+    memLimitGB: MEM_GB,
+    lastEndMs: lastStale?.endMs ?? null,
+    lastLeft: lastStale?.left ?? null,
+    lastFailed: lastStale?.failed ?? false,
+    nowMs: Date.now(),
+  });
+  // A deep build started by hand rebuilds its company itself and holds memory: not beside it.
+  if (!due || deepRunning()) return;
+  rebuildingStale = true;
+  void run("ir-rebuild", "scripts/ir-rebuild-stale.ts", [], `${OUT}/ir-rebuild.log`, rebuildEnv).then(async (code) => {
+    let left: number | null = null;
+    try {
+      const { data } = await sb.storage.from("ir-documents").download(REBUILD_STATE);
+      if (data) left = (JSON.parse(await data.text()) as RebuildState).left ?? null;
+    } catch {
+      /* unreadable state: treated as work left */
+    }
+    lastStale = { endMs: Date.now(), left, failed: code !== 0 };
+    rebuildingStale = false;
+    log(`stale payload pass ended (exit ${code}${left !== null ? `, ${left} left` : ""})`);
   });
 }
 
@@ -991,7 +1035,7 @@ for (;;) {
   // after a heal one more lane every 5 minutes. The memory guard stays in force on top of it.
   let allowed = laneBudget(decision(READER_ROUTE), lanes, busy.size, healedAt, Date.now());
   let laneStarted = false;
-  while (!creditStop && allowed > 0 && memUsedGB() < MEM_GB * 0.8 && busy.size < lanes) {
+  while (!creditStop && !rebuildingStale && allowed > 0 && memUsedGB() < MEM_GB * 0.8 && busy.size < lanes) {
     allowed--;
     const t = await pickNext(busy);
     if (!t) break;
@@ -1008,6 +1052,8 @@ for (;;) {
   }
   // After the lanes: with no lane to take a due probe, the text sweep may be the probe (review F4).
   await maybeProse(laneStarted);
+  // Idle or closed on credit (no lane started, none running): rebuild stale payloads, which needs no model.
+  await maybeRebuildStale(laneStarted);
   if (!busy.size && !creditStop && !idleLogged) {
     log("nothing readable left — waiting for the mirror to bring more files");
     idleLogged = true;

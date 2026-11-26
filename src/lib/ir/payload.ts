@@ -222,6 +222,8 @@ export interface IrStats {
   unlinked?: number;
   /** tables and lines before the merge pass (same tables split by era or wording, repeats) */
   tidied?: { groupsBefore: number; seriesBefore: number };
+  /** `BUILD_FORMAT` of the build, copied here so the worker finds stale payloads from the table alone */
+  build?: number;
 }
 
 const locOf = (f: IrFact): PayloadLocator | undefined => {
@@ -508,6 +510,7 @@ export function buildPayload(
         partial: fy.filter((c) => c.partial).length,
       },
       unlinked: unlink.size,
+      build: BUILD_FORMAT,
     },
   });
 }

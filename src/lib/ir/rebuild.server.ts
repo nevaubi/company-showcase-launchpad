@@ -171,7 +171,8 @@ export async function rebuildCompany(
           payload: null,
           payload_path: path,
           payload_bytes: body.length,
-          stats: payload.stats as never,
+          // The build format rides in stats so the worker's stale-payload lane reads it without the payload.
+          stats: { ...payload.stats, build: payload.build } as never,
           built_at: payload.builtAt,
         })
         .abortSignal(AbortSignal.timeout(60_000)),
