@@ -61,12 +61,19 @@ function titleLike(s: string, company?: string) {
   if (!/[a-z]{3,}/i.test(s)) return false;
   if (NOISE.test(s) || SCALE.test(s)) return false;
   if (ENTITY.test(s) || SUBSIDIARIES.test(s)) return false;
+  // A sentence introducing the table ("The following table summarizes our financial results ...").
+  if (/^(the following|below|the table below|this table)\b/i.test(s) || /\b(summarizes|sets forth|presents|shows)\b/i.test(s)) return false;
   // A clause ending a paragraph ("Our summary results, and forecast for Q4, are below.") is running text.
   if (/[a-z]\.\s*$/.test(s) && s.split(/\s+/).length >= 4) return false;
   // A bullet or a sentence carrying figures names a highlight, not the table.
   if (/^[•·▪◦‣*]/.test(s) || /\d\s*%|\$\s*\d/.test(s)) return false;
   if (/[.;]\s+\S/.test(s) && s.split(" ").length > 14) return false;
+  // "Third Quarter 2026 GAAP and Non-GAAP Results" names a table; "Three months ended September 30, 2026" heads columns.
+  const named =
+    /\b(results|statements?|highlights|summary|reconciliations?|information|data|metrics)\b/i.test(s) &&
+    !/\b(ended|ending|as of)\b/i.test(s);
   if (
+    !named &&
     PERIODISH.test(s) &&
     // "Quarterly Financial Results" is a title; "Three months ended" and "Quarter ended" are period heads.
     (MONTH.test(s) || /\b(19|20)\d{2}\b/.test(s) || /\b(months?|quarters?|weeks?)\s+(ended|ending)\b|^(three|six|nine|twelve)\s+months\b|\b(trailing|last|next)\s+(\d+|twelve)\s+months\b/i.test(s))
@@ -205,7 +212,8 @@ export function sentenceCase(title: string, keep: Set<string> = new Set()): stri
   else if (titled >= Math.max(2, longWords * 0.6))
     // Title Case ("Consolidated Statement of Operations") is lowered too; words in capitals stay.
     out = ws.map((w, i) =>
-      i > 0 && /^[A-Z][a-z]/.test(w) && !keep.has(strip(w)) && !/:$/.test(ws[i - 1] ?? "")
+      // A word with capitals of its own past the first ("Non-GAAP", "McDonald's") keeps them.
+      i > 0 && /^[A-Z][a-z]/.test(w) && !/[A-Z]/.test(w.slice(1)) && !keep.has(strip(w)) && !/:$/.test(ws[i - 1] ?? "")
         ? w.toLowerCase()
         : w,
     );

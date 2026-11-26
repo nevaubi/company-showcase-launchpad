@@ -33,6 +33,14 @@ describe("IR tab layout", () => {
     expect(users).toEqual([]);
   });
 
+  it("shows the XBRL breakdowns without the Money map", () => {
+    const route = readFileSync(ROUTE, "utf8");
+    expect(route).not.toMatch(/\bMoneyMap\b|money-map/);
+    const views = [...route.matchAll(/<FilingDetailView\b[^>]*>/g)].map((m) => m[0]);
+    expect(views.length).toBeGreaterThan(0);
+    for (const v of views) expect(v).toMatch(/\bmap=\{false\}/);
+  });
+
   it("keeps the order KPIs, statements, XBRL breakdowns, documents", () => {
     const route = readFileSync(ROUTE, "utf8");
     const at = (s: string) => route.indexOf(s);

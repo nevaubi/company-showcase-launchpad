@@ -26,7 +26,7 @@ import { args, dbGate, sb } from "./lib/supa";
 import { CONFIG_STATUS_LIKE, REREAD_WINDOW_DAYS, requeueEnabled, requeueLimit, requeuePlan, rereadTickers, type FailedDoc } from "./lib/ir-requeue";
 import { canonResetAllowed, catchupDueAfter, clearStalePausesNow, countsAgainstCompany, creditStopAfter, exitCode, healConfigDue, healedSince, laneBudget, LOOP_REQUEST_MAX, LOOP_REQUEST_PREFIX, loopRunRow, loopSleepMs, nextDue, planLoopRequests, proseMode, stepLimit } from "./lib/loop-schedule";
 import { loadRank } from "./lib/rank";
-import { REBUILD_STATE, rebuildDue, rebuildSettings, type RebuildState } from "./lib/ir-rebuild-stale";
+import { besideEnabled, REBUILD_STATE, rebuildSettings, staleLane, type LaneInput, type RebuildState } from "./lib/ir-rebuild-stale";
 import { FRESH_MAX_TRIES, freshCompanies, freshDue, freshLine, freshOutcome, freshSettings, freshSince, planFresh, settleFresh, type FreshDoc, type FreshPlan } from "./lib/ir-fresh";
 import { priorityCampaign, priorityCandidates, priorityKey, priorityList, priorityMaxRuns, restorePriority, settlePriority, unknownGroups, type PriorityState } from "./lib/ir-priority";
 import { COVERAGE } from "@/lib/coverage";
@@ -388,24 +388,32 @@ const REBUILD = rebuildSettings(process.env);
 let rebuildingStale = false;
 let lastStale: { endMs: number; left: number | null; failed: boolean } | null = null;
 const rebuildEnv = { ...process.env, NODE_OPTIONS: `--max-old-space-size=${Math.max(1024, Math.min(6144, Math.floor(MEM_GB * 1024 * 0.4)))}` };
+/** IR_REBUILD_BESIDE (default on): the stale pass takes one lane's place beside reading while payloads are stale. */
+const BESIDE = besideEnabled(process.env);
+const staleInput = (laneStarted: boolean): LaneInput => ({
+  beside: BESIDE,
+  lanes: BATCH_ARG ?? LANES,
+  enabled: REBUILD.enabled,
+  running: rebuildingStale,
+  busy: lanesBusy(),
+  laneStarted,
+  otherRebuilder: canoning,
+  memUsedGB: memUsedGB(),
+  memLimitGB: MEM_GB,
+  lastEndMs: lastStale?.endMs ?? null,
+  lastLeft: lastStale?.left ?? null,
+  lastFailed: lastStale?.failed ?? false,
+  nowMs: Date.now(),
+});
 async function maybeRebuildStale(laneStarted: boolean) {
-  const due = rebuildDue({
-    enabled: REBUILD.enabled,
-    running: rebuildingStale,
-    busy: lanesBusy(),
-    laneStarted,
-    otherRebuilder: canoning,
-    memUsedGB: memUsedGB(),
-    memLimitGB: MEM_GB,
-    lastEndMs: lastStale?.endMs ?? null,
-    lastLeft: lastStale?.left ?? null,
-    lastFailed: lastStale?.failed ?? false,
-    nowMs: Date.now(),
-  });
+  const due = staleLane(staleInput(laneStarted)).start;
   // A deep build started by hand rebuilds its company itself and holds memory: not beside it.
   if (!due || deepRunning()) return;
+  // Beside reading: companies a lane holds now are left for a later pass (their read rebuilds them).
+  const skip = BESIDE ? [...busy, ...freshBusy] : [];
+  if (BESIDE) log(`stale payload pass beside ${lanesBusy()} reading lane(s)${skip.length ? `, leaving ${skip.join(", ")} to their reads` : ""}`);
   rebuildingStale = true;
-  void run("ir-rebuild", "scripts/ir-rebuild-stale.ts", [], `${OUT}/ir-rebuild.log`, rebuildEnv).then(async (code) => {
+  void run("ir-rebuild", "scripts/ir-rebuild-stale.ts", skip.length ? [`--skip=${skip.join(",")}`] : [], `${OUT}/ir-rebuild.log`, rebuildEnv).then(async (code) => {
     let left: number | null = null;
     try {
       const { data } = await sb.storage.from("ir-documents").download(REBUILD_STATE);
@@ -957,7 +965,7 @@ let freshPasses = 0;
 let companiesSinceFresh = 0;
 /** companies of the running pass: no company run starts on them meanwhile */
 const freshBusy = new Set<string>();
-const lanesBusy = () => busy.size + (freshRunning ? 1 : 0);
+const lanesBusy = () => busy.size + (freshRunning ? 1 : 0) + (BESIDE && rebuildingStale ? 1 : 0);
 const withFresh = (b: Set<string>) => (freshBusy.size ? new Set([...b, ...freshBusy]) : b);
 if (FRESH.days > 0) {
   state.fresh ??= { tries: {} };
@@ -1133,7 +1141,9 @@ for (;;) {
   // after a heal one more lane every 5 minutes. The memory guard stays in force on top of it.
   let allowed = laneBudget(decision(READER_ROUTE), lanes, lanesBusy(), healedAt, Date.now());
   let laneStarted = false;
-  while (!creditStop && !rebuildingStale && allowed > 0 && memUsedGB() < MEM_GB * 0.8 && lanesBusy() < lanes) {
+  // Stale payloads left: one lane is kept for the stale pass (IR_REBUILD_BESIDE=0: every lane, none while it runs).
+  const readingLanes = Math.min(lanes, staleLane(staleInput(false)).readingLanes);
+  while (!creditStop && (BESIDE || !rebuildingStale) && allowed > 0 && memUsedGB() < MEM_GB * 0.8 && lanesBusy() < readingLanes) {
     allowed--;
     // Fresh lane: one pass of newest files before the next company (off with IR_FRESH_DAYS=0).
     if (await startFresh()) {

@@ -18,6 +18,8 @@
  *   IR_REBUILD_MAX=20           companies per pass (1 to 200)
  *   IR_REBUILD_MINUTES=15       minutes per pass before no new company starts (1 to 30); the loop
  *                               stops a pass outright at 45 min (`ir-rebuild` in loop-schedule.ts)
+ *   IR_REBUILD_BESIDE=0         back to idle-only passes (default: the lane takes one reading lane's
+ *                               place while stale payloads are left, `staleLane`)
  * Pure: the script (scripts/ir-rebuild-stale.ts) and the loop own the database and storage.
  */
 import { byRank } from "@/lib/jobs/priority";
@@ -148,6 +150,8 @@ export interface PassDeps {
   log: (line: string) => void;
   /** set by a stop signal: no new company starts */
   stopped?: () => boolean;
+  /** companies a reading lane holds now: left for a later pass (their read rebuilds them anyway) */
+  skip?: ReadonlySet<string>;
 }
 
 export interface PassResult {
@@ -167,7 +171,7 @@ export interface PassResult {
 export async function runPass(state: RebuildState, order: readonly string[], settings: RebuildSettings, deps: PassDeps): Promise<PassResult> {
   const t0 = deps.now();
   pruneFailures(state, order);
-  const todo = eligible(state, order, t0);
+  const todo = eligible(state, order, t0).filter((t) => !deps.skip?.has(t));
   const result: PassResult = { rebuilt: [], failed: {}, review: [], left: 0, stale: order.length, stoppedBy: "done" };
   let i = 0;
   for (; i < todo.length; i++) {
@@ -258,4 +262,48 @@ export function rebuildDue(i: DueInput): boolean {
   if (i.lastEndMs === null) return true;
   const gap = i.lastFailed ? 15 * 60_000 : i.lastLeft === 0 ? IDLE_RECHECK_MS : 60_000;
   return i.nowMs - i.lastEndMs >= gap;
+}
+
+/** IR_REBUILD_BESIDE=0 restores idle-only passes (`rebuildDue`); on by default. */
+export const besideEnabled = (env: Record<string, string | undefined>) => env["IR_REBUILD_BESIDE"] !== "0";
+
+export interface LaneInput extends DueInput {
+  /** IR_REBUILD_BESIDE */
+  beside: boolean;
+  /** the loop's lanes (reading lanes, fresh pass and stale pass together) */
+  lanes: number;
+}
+
+export interface LaneDecision {
+  /** busy lanes of every kind (the stale pass included) below which a read (company or fresh pass) may start */
+  readingLanes: number;
+  /** start a stale pass now */
+  start: boolean;
+}
+
+/** The usual gap after the last pass: 15 min after a failure, 1 h once nothing is left, else 1 min. */
+const gapOver = (i: DueInput) => {
+  if (i.lastEndMs === null) return true;
+  const gap = i.lastFailed ? 15 * 60_000 : i.lastLeft === 0 ? IDLE_RECHECK_MS : 60_000;
+  return i.nowMs - i.lastEndMs >= gap;
+};
+
+/**
+ * Beside reading (round 8): while stale payloads are left (no pass yet in this process, which a new
+ * build format's deploy always starts, or the last pass left some) and the gap since the last pass has
+ * gone by (1 min; 15 min after a failure; 1 h when nothing was left, the idle recheck), one lane is kept for the stale pass (reading gets lanes minus one, so with one lane it alternates:
+ * the running read ends, one pass, the next read). The pass starts as soon as a lane is free, counts as
+ * a busy lane while it runs (`busy` includes it) and reading goes on beside it. Never beside canon; a
+ * pass starts only with memory under half the limit. Off (IR_REBUILD_BESIDE=0): `rebuildDue` exactly,
+ * and reading keeps every lane.
+ */
+export function staleLane(i: LaneInput): LaneDecision {
+  if (!i.beside) return { readingLanes: i.lanes, start: rebuildDue(i) };
+  const memOk = i.memUsedGB < i.memLimitGB * 0.5;
+  const due = i.enabled && !i.running && !i.otherRebuilder && gapOver(i);
+  const start = due && i.busy < i.lanes && memOk;
+  // Keep a lane free for it (the loop offers lanes to reading before it starts the pass); but with
+  // every lane idle and memory still too high the pass cannot start, so reading is not held back for nothing.
+  const reserve = due && !(i.busy === 0 && !memOk);
+  return { readingLanes: reserve ? Math.max(0, i.lanes - 1) : i.lanes, start };
 }

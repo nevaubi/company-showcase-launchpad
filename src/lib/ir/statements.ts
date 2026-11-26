@@ -18,6 +18,7 @@ import { parseNumber } from "@/lib/ir/tables";
 import { capitalWords, sentenceCase, type TableCaption } from "@/lib/ir/table-captions";
 import { shapeRows } from "@/lib/ir/statement-tree";
 import { basisOf } from "@/lib/ir/kpis";
+import { FILTER_OF, sectionKind, sectorOf, type SectionKind } from "@/lib/ir/sector-order";
 
 export type StatementRow =
   /** `k` is the line shown; `ks` every line printed in this row (the same printed cell, or the same name under the
@@ -40,11 +41,25 @@ export type StatementRow =
       /** what tells this line from the other lines printed on the same row (column groups: "Operating
        *  income", "margin"), shown after the printed name */
       twin?: string;
+      /** a line only older documents' copies of the table print, listed after the table's own rows */
+      old?: true;
+      /** the name the anchor table prints the row under (`PayloadTable.rows`, build format 3) */
+      name?: string;
+      /** printed in bold, and with a rule above it, as the anchor table marks the row */
+      bold?: boolean;
+      rule?: "single";
       /** the heading printed over it, when its stored name repeats that heading ("Cloud Memory Business Unit:
        *  Revenue" under "Cloud Memory Business Unit"): the row reads "Revenue" */
       under?: string;
     }
-  | { kind: "head"; text: string; depth: number }
+  | {
+      kind: "head";
+      text: string;
+      depth: number;
+      /** its printed row in the anchor table */
+      r?: number;
+      bold?: boolean;
+    }
   | { kind: "gap" };
 
 /**
@@ -74,6 +89,8 @@ export interface Statement {
   keys: string[];
   /** documents whose copies of this table were stitched together */
   docs: number;
+  /** the documents whose copies of this table were stitched together (indexes into payload.docs) */
+  copies?: number[];
   /** newest and oldest period end any of its lines carries */
   last: string;
   first: string;
@@ -81,6 +98,9 @@ export interface Statement {
   cat: string;
   /** the newest document that prints it, index into payload.docs */
   doc: number;
+  /** what kind of statement it is for the company's sector, and the tab filter it belongs to (sector-order.ts) */
+  kind?: SectionKind;
+  filter?: "revenue" | "profit" | "cost" | "kpi" | "balance";
 }
 
 interface Table {
@@ -467,7 +487,13 @@ export function sameRows(
     const mine = docsIn(at);
     const hit =
       groups.find(
-        (g) => [...at].some((x) => g.at.has(x)) && g.ks.every((o) => agree(byKey.get(o)!, s)),
+        (g) =>
+          [...at].some((x) => g.at.has(x)) &&
+          g.ks.every((o) => {
+            const b = byKey.get(o)!;
+            // One printed row is one measure: never a cost line and a revenue line that share a slide's height.
+            return agree(b, s) && b.unit === s.unit && (b.met === s.met || sameName(b, s, byKey));
+          }),
       ) ??
       // By name only across documents: two rows of one document are two printed rows.
       groups.find(
@@ -546,6 +572,40 @@ export function rowLabel(
   return `${r.wrap} ${/^[A-Z][a-z]/.test(name) && !/^[A-Z][a-z]+\s+[A-Z]/.test(name) ? name[0].toLowerCase() + name.slice(1) : name}`;
 }
 
+const MONTH_YEAR = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+(19|20)\d{2}\b/i;
+
+/** The printed layout irtables' build format 3 adds to a section table (`PayloadTable.rows`): [row, indent
+ *  level, flags (1 bold, 2 rule above, 4 filled by the build), printed name]. Read optionally, so older payloads lay out as before. */
+type PrintedLayout = { rows?: [number, number, number, string][] };
+
+/**
+ * Indent levels as the table prints them (build format 3), where the table prints at least two levels among
+ * the section's lines: each row's depth is its printed level above the least indented line's; headings too.
+ * Tables printed flush (JPM's statements, which mark totals by type and rules only) keep the levels of the
+ * stored hierarchy (`shapeRows`).
+ */
+function printedLevels(rows: StatementRow[], printed: Map<number, { l: number; f: number; n: string }>) {
+  const lev = (r: StatementRow) =>
+    r.kind === "line" && r.at ? printed.get(r.at[2])?.l : r.kind === "head" && r.r != null ? printed.get(r.r)?.l : undefined;
+  const lines = rows.filter((r) => r.kind === "line");
+  const known = lines.map(lev).filter((x): x is number => x != null);
+  if (known.length < Math.max(2, lines.length * 0.6) || new Set(known).size < 2) return;
+  // A table that indents its totals past their parts (JPM prints "Noninterest revenue" and "TOTAL NET REVENUE"
+  // to the right of the lines they close) marks totals by indent, not hierarchy: keep the stored levels.
+  for (const r of rows) {
+    if (r.kind !== "line" || r.up == null) continue;
+    const a = lev(r);
+    const b = lev(rows[r.up]);
+    if (a != null && b != null && b > a) return;
+  }
+  const min = Math.min(...known);
+  for (const r of rows) {
+    if (r.kind === "gap") continue;
+    const l = lev(r);
+    if (l != null) r.depth = Math.max(0, l - min);
+  }
+}
+
 /** What a line measures, in words, for telling lines printed on one row apart. */
 function measureWord(s: PayloadSeries): string {
   if (s.unit === "pct") return s.met === "margin" || /margin/i.test(s.label) ? "margin" : "percent";
@@ -574,8 +634,13 @@ function nameTwins(rows: StatementRow[], byKey: Map<string, PayloadSeries>) {
     }
     for (const same of names.values()) {
       if (same.length < 2) continue;
+      const basisWord = (r: LineRow) => {
+        const bd = (byKey.get(r.k)!.bd ?? "").toLowerCase();
+        return /non[- ]?gaap/.test(bd) ? "non-GAAP" : /\bgaap\b/.test(bd) ? "GAAP" : (basisOf(bd) ?? "");
+      };
       const tries = [
         (r: LineRow) => measureWord(byKey.get(r.k)!),
+        (r: LineRow) => (basisWord(r) ? `${basisWord(r)} ${measureWord(byKey.get(r.k)!)}` : ""),
         (r: LineRow) => byKey.get(r.k)!.bd ?? "",
       ];
       for (const q of tries) {
@@ -606,9 +671,10 @@ const DANGLING = /(?:\s(?:or|and|of|to|for|the|in|on|by|with|from|at|a|an|nor|th
 export const wrapped = (text: string) => DANGLING.test(text.trim());
 
 function printedName(
-  r: { k: string; ks: string[]; at?: [number, number, number] },
+  r: { k: string; ks: string[]; at?: [number, number, number]; name?: string },
   byKey: Map<string, PayloadSeries>,
 ): string {
+  if (r.name) return shownLabel(r.name);
   const s = byKey.get(r.k)!;
   // A balance's period change the build split off the same cells ("<name>: net change") names the row last.
   const derived = (k: string) => /:\s*net change$/i.test(byKey.get(k)?.label ?? "");
@@ -640,8 +706,24 @@ export function tableTitle(t: string): boolean {
   );
 }
 
-/** Statement sections of a payload, in the company's order, arranged into groups (`arrange`). */
-export function assembleStatements(p: IrPayload): Statement[] {
+/**
+ * Statement sections of a payload, in the company's order, arranged into groups (`arrange`), each classified
+ * by kind for the company's sector when the caller gives the sector and industry fields it has.
+ */
+export function assembleStatements(
+  p: IrPayload,
+  company?: { sector?: string | null; industry?: string | null },
+): Statement[] {
+  const out = assembleSections(p);
+  const sector = sectorOf(company?.sector, company?.industry);
+  for (const s of out) {
+    s.kind = sectionKind(s, sector);
+    s.filter = FILTER_OF[s.kind];
+  }
+  return out;
+}
+
+function assembleSections(p: IrPayload): Statement[] {
   const byKey = new Map(p.series.map((s) => [s.k, s]));
   const keep = capitalWords(p.series.flatMap((s) => [s.label, s.bd ?? ""]));
   // Payloads built with printing positions list every line a table prints; only older ones need a total
@@ -660,7 +742,7 @@ export function assembleStatements(p: IrPayload): Statement[] {
     // an older copy's line (no row of the anchor table) is listed apart.
     const grouped = sameRows([...keys, ...extra], byKey, dr.places);
     const groupOf = new Map(grouped.filter((g) => set.has(g[0])).map((g) => [g[0], g]));
-    const gone = grouped.filter((g) => !set.has(g[0]));
+    let gone = grouped.filter((g) => !set.has(g[0]));
     const groups: { slot: string; ks: string[] }[] = slots.flatMap((x) =>
       x.includes(REPEAT)
         ? [{ slot: x, ks: [slotKey(x)] }]
@@ -702,7 +784,7 @@ export function assembleStatements(p: IrPayload): Statement[] {
         let gap = false;
         for (let i = prevR + 1; i < r; i++) {
           const h = heads.get(i);
-          if (h) between.push({ kind: "head", text: headText(h, keep), depth: 0 });
+          if (h) between.push({ kind: "head", text: headText(h, keep), depth: 0, r: i });
           else if (blank.has(i) || !cap) {
             // A spacer band closes the headings above it: their rows are not in this section (the reader
             // did not keep them), so they would head the wrong lines.
@@ -724,10 +806,13 @@ export function assembleStatements(p: IrPayload): Statement[] {
         const before = [...heads.entries()].filter(
           ([i]) => i < r && i >= r - 2 && [...Array(r - i - 1).keys()].every((x) => heads.has(i + 1 + x) || blank.has(i + 1 + x) || wraps.has(i + 1 + x)),
         );
-        for (const [, h] of before)
-          rows.push({ kind: "head", text: headText(h, keep), depth: Math.max(0, depth - 1) });
+        for (const [i, h] of before)
+          rows.push({ kind: "head", text: headText(h, keep), depth: Math.max(0, depth - 1), r: i });
       }
-      if (bases.size > 1) {
+      // Lines of several bases on one printed row (GAAP and non-GAAP columns) are told apart by their names.
+      const rowBases =
+        r == null ? 0 : new Set(groups.filter((g) => dr.slotR.get(g.slot) === r).map((g) => basisOfKey(g.ks[0]))).size;
+      if (bases.size > 1 && rowBases < 2) {
         const b = basisOfKey(k);
         if (b && b !== lastBasis) {
           if (rows.at(-1)?.kind !== "head") {
@@ -751,6 +836,21 @@ export function assembleStatements(p: IrPayload): Statement[] {
         ...(r != null && wraps.has(r - 1) ? { wrap: wraps.get(r - 1)!.trim() } : {}),
       });
     }
+    // The table's printed layout (build format 3): the row's printed name, bold and rule marks.
+    const printedRows = new Map(((cap as PrintedLayout | undefined)?.rows ?? []).map(([r, l, f, n]) => [r, { l, f, n }]));
+    for (const r of rows) {
+      const pr = r.kind === "line" ? (r.at ? printedRows.get(r.at[2]) : undefined) : r.kind === "head" && r.r != null ? printedRows.get(r.r) : undefined;
+      if (!pr) continue;
+      if (r.kind === "line") {
+        // A printed row's name names its lines only when they are one line under one name (a table printed
+        // with dates down the side names its rows "As of July 31, 2026", not "Current" and "Noncurrent").
+        const same = rows.filter((x): x is LineRow => x.kind === "line" && !!x.at && x.at[2] === r.at![2]);
+        const one = new Set(same.map((x) => nameCore(lineLabel(byKey.get(x.k)!)))).size === 1;
+        if (pr.n?.trim() && one && !(MONTH_YEAR.test(pr.n))) r.name = pr.n.trim();
+        if (pr.f & 1) r.bold = true;
+        if (pr.f & 2) r.rule = "single";
+      } else if (r.kind === "head" && pr.f & 1) r.bold = true;
+    }
     nameTwins(rows, byKey);
     let head = "";
     for (const r of rows) {
@@ -768,6 +868,31 @@ export function assembleStatements(p: IrPayload): Statement[] {
       (r) => rowLabel(r as LineRow, byKey),
       (r, f) => rowCells(r.ks, byKey, f, (r as LineRow).at).cells,
     );
+    printedLevels(rows, printedRows);
+    // Lines only older documents' copies print (not the same release) close the section, under a heading that
+    // says so, never among the rows the table prints now; lines another document of the same release prints
+    // stay apart in the more group.
+    const anchorDay = Date.parse(`${p.docs[dr.anchor.d]?.filed ?? ""}T00:00:00Z`);
+    const older = (g: string[]) => {
+      const ds = g.flatMap((k) => [...(dr.places.get(k) ?? [])].map((x) => Number(x.split(":")[0])));
+      return (
+        Number.isFinite(anchorDay) &&
+        ds.length > 0 &&
+        ds.every((d) => {
+          const f = Date.parse(`${p.docs[d]?.filed ?? ""}T00:00:00Z`);
+          return Number.isFinite(f) && anchorDay - f > RELEASE_DAYS * DAY_MS;
+        })
+      );
+    };
+    const earlier = gone.filter(older);
+    if (earlier.length) {
+      rows.push({ kind: "gap" }, { kind: "head", text: "Printed only in earlier periods", depth: 0 });
+      for (const g of earlier) {
+        rows.push({ kind: "line", k: g[0], ks: g, depth: 0, total: false, old: true });
+        keys.push(g[0]);
+      }
+    }
+    gone = gone.filter((g) => !older(g));
     const lines = keys.map((k) => byKey.get(k)!);
     const money = lines.filter((s) => s.unit === "usd");
     // The section's scale is the one its own table prints (a line can also be printed in another table at
@@ -797,6 +922,7 @@ export function assembleStatements(p: IrPayload): Statement[] {
       rows,
       keys,
       docs: dr.docs.size,
+      copies: [...dr.docs],
       last: lines.reduce((m, s) => (lastEnd(s) > m ? lastEnd(s) : m), ""),
       first: lines.reduce((m, s) => (firstEnd(s) < m ? firstEnd(s) : m), "9999"),
       cat,
@@ -846,14 +972,39 @@ const KIND_WORD: Record<string, string> = {
 export function arrange(p: IrPayload, sections: Statement[], retired: Statement[] = []): Statement[] {
   const lines = new Map<number, number>();
   for (const s of sections) lines.set(s.doc, (lines.get(s.doc) ?? 0) + s.keys.length);
-  const rankKind = (d: number) =>
-    p.docs[d]?.kind === "supplement" ? 0 : p.docs[d]?.kind === "press-release" ? 1 : 2;
+  // A document stored under another kind whose own title calls it a supplement (`hint`, build format 3).
+  const kindRank = (d: number) =>
+    p.docs[d]?.kind === "supplement" || (p.docs[d] as { hint?: string } | undefined)?.hint === "supplement"
+      ? 0
+      : p.docs[d]?.kind === "press-release"
+        ? 1
+        : 2;
+  // A document whose tables are the supplement's own (a stored supplement copy of the same release is
+  // stitched onto them: Citigroup's EX-99.2 stored as "other" beside the investor-site PDF) ranks as one.
+  const rankKind = (d: number) => {
+    let r = kindRank(d);
+    for (const s of sections)
+      if (s.doc === d)
+        for (const c of s.copies ?? []) if (c !== d && recent(c)) r = Math.min(r, kindRank(c));
+    return r;
+  };
   const docs = [...lines.keys()];
   const newest = docs.reduce((m, d) => ((p.docs[d]?.filed ?? "") > m ? (p.docs[d]?.filed ?? "") : m), "");
   const lastDay = Date.parse(`${newest || "1970-01-01"}T00:00:00Z`);
+  // A copy stored without a filing date (an investor-site PDF or workbook of the supplement) belongs to the
+  // release when it prints the newest period any section carries.
+  const lastOf = new Map<number, string>();
+  for (const s of p.series)
+    for (const [key, c] of endsOf(s)) {
+      const e = key.slice(2);
+      if (c.d != null && e > (lastOf.get(c.d) ?? "")) lastOf.set(c.d, e);
+    }
+  for (const s of sections) if (s.last > (lastOf.get(s.doc) ?? "")) lastOf.set(s.doc, s.last);
+  const newestPeriod = [...lastOf.values()].reduce((m, x) => (x > m ? x : m), "");
   const recent = (d: number) => {
     const f = p.docs[d]?.filed;
-    return !newest || (!!f && lastDay - Date.parse(`${f}T00:00:00Z`) <= RELEASE_DAYS * DAY_MS);
+    if (!f) return !newest || (!!newestPeriod && lastOf.get(d) === newestPeriod);
+    return !newest || lastDay - Date.parse(`${f}T00:00:00Z`) <= RELEASE_DAYS * DAY_MS;
   };
   const main = docs
     .filter(recent)

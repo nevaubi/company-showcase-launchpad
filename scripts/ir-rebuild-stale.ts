@@ -2,7 +2,8 @@
  * One bounded pass of the stale IR payload lane (rules in scripts/lib/ir-rebuild-stale.ts): rebuilds
  * companies whose ir_company_series stats lack the current BUILD_FORMAT, banks first, one at a time,
  * from stored facts, label maps and document text. No model or paid API is called.
- *   bun scripts/ir-rebuild-stale.ts [--max=20] [--minutes=15] [--dry]
+ *   bun scripts/ir-rebuild-stale.ts [--max=20] [--minutes=15] [--skip=JPM,NVDA] [--dry]
+ * --skip: companies a reading lane holds now (the loop passes them); left for a later pass.
  * The IR loop starts it in idle time (scripts/ir-deep-loop.ts); by hand it waits for nothing and
  * exits when another pass holds the `ir-rebuild-stale` lease.
  */
@@ -78,6 +79,7 @@ if (import.meta.main) {
       now: Date.now,
       log,
       stopped: () => stop,
+      skip: new Set((args.skip ?? "").split(",").map((t) => t.trim()).filter(Boolean)),
     });
     log(`pass ended (${r.stoppedBy}): ${r.rebuilt.length} rebuilt, ${Object.keys(r.failed).length} failed, ${r.left} left, ${r.review.length} for review${r.review.length ? ` (${r.review.join(", ")})` : ""}`);
     if (!DRY) {

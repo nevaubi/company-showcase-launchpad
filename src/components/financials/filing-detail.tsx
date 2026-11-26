@@ -63,8 +63,11 @@ const SECTION_HINT: Record<Section, string> = {
 
 const fmtShare = (x: number) => `${(x * 100).toFixed(x >= 0.995 || x < 0.1 ? 1 : 0)}%`;
 
-/** The dimensional detail behind the statements, from the latest 10-K and 10-Q, every value clickable to its tag. */
-export function FilingDetailView({ ticker }: { ticker: string }) {
+/**
+ * The dimensional detail behind the statements, from the latest 10-K and 10-Q, every value clickable to its tag.
+ * `map={false}` leaves the Money map out (the IR tab, where the owner had the map visuals removed).
+ */
+export function FilingDetailView({ ticker, map = true }: { ticker: string; map?: boolean }) {
   const q = useQuery(filingDetailQuery(ticker));
   const [which, setWhich] = useState<"annual" | "quarterly">("annual");
   const [section, setSection] = useState<Section | null>(null);
@@ -82,9 +85,10 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
     const has = new Set<Section>(d.tables.map((t) => t.family as Section));
     if (d.segments) has.add("segments");
     if (d.concentration.length) has.add("concentration");
-    if (base && hasMoneyMap(base)) has.add("map");
+    if (map && base && hasMoneyMap(base)) has.add("map");
+    else has.delete("map");
     return (["map", "revenue", "segments", "insurance", "lending", "capital", "concentration", "geography", "costs", "commitments", "inventory", "other"] as Section[]).filter((s) => has.has(s));
-  }, [d, base]);
+  }, [d, base, map]);
 
   if (q.isLoading) return <Skeleton className="h-[480px]" />;
   if (q.isError) return <Empty text="Filing detail could not be loaded. Refresh to try again." />;
@@ -135,7 +139,7 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
         <Empty text={`${ticker}'s ${d.form} tags no business breakdowns beyond the statements themselves.`} />
       )}
       <p className="text-[11px] text-muted-foreground">{SECTION_HINT[active]}. Click any number to see it highlighted in the filing.</p>
-      {active === "map" ? (
+      {map && active === "map" ? (
         <MoneyMap d={base} ticker={ticker} />
       ) : active === "segments" && d.segments ? (
         <SegmentPnl m={d.segments} d={d} ticker={ticker} />

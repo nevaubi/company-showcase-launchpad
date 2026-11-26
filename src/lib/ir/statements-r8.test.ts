@@ -11,10 +11,16 @@ import amd from "@/lib/ir/fixtures/statements/amd-corp.json";
 import mu from "@/lib/ir/fixtures/statements/mu-bu.json";
 import nflx from "@/lib/ir/fixtures/statements/nflx-geo.json";
 import csco from "@/lib/ir/fixtures/statements/csco-gm.json";
-import { buildPayload, type IrPayload } from "@/lib/ir/payload";
+import citi from "@/lib/ir/fixtures/statements/c-supp.json";
+import layout from "@/lib/ir/fixtures/statements/jpm-layout.json";
+import tsla from "@/lib/ir/fixtures/statements/tsla-rows.json";
+import now from "@/lib/ir/fixtures/statements/now-sum.json";
+import crm from "@/lib/ir/fixtures/statements/crm-rpo.json";
+import intc2 from "@/lib/ir/fixtures/statements/intc-two.json";
+import { buildPayload, type IrPayload, type PayloadSeries } from "@/lib/ir/payload";
 import type { IrFact } from "@/lib/ir/kpis";
 import type { TableCaption } from "@/lib/ir/table-captions";
-import { assembleStatements, rowCells, rowLabel, type Statement, type StatementRow } from "@/lib/ir/statements";
+import { assembleStatements, rowCells, rowLabel, sameRows, type Statement, type StatementRow } from "@/lib/ir/statements";
 
 interface Fixture {
   ticker: string;
@@ -225,5 +231,88 @@ describe("audb-12 CSCO: one reconciliation printed for two quarters and two fisc
     const first = secs[0].rows.find((r): r is Line => r.kind === "line")!;
     expect(rowCells(first.ks, by, "q", first.at).cells["2026-07-25"]?.v).toBe(8430e6);
     expect(rowCells(first.ks, by, "y", first.at).cells["2026-07-25"]?.v).toBe(30514e6);
+  });
+});
+
+describe("auda-02 C: the supplement stored as another kind leads the page", () => {
+  it("a document whose tables a supplement copy of the same release prints ranks as the supplement", async () => {
+    const p = await payloadOf(citi);
+    const secs = assembleStatements(p);
+    expect(secs[0].group).toBe("main");
+    expect(p.docs[secs[0].doc].kind).toBe("other");
+    expect(secs.find((s) => p.docs[s.doc].kind === "press-release")?.group).toBe("other");
+  });
+});
+
+describe("auda-06, audd-03, irtables-01, irstyle-01: the printed row layout of build format 3", () => {
+  const p = layout as unknown as IrPayload;
+  const secs = assembleStatements(p);
+  it("rows read under their printed names, at their printed levels", () => {
+    const s = secs.find((x) => x.id === "2:24")!;
+    const o = outline(p, s);
+    expect(o).toContain("  Loans retained");
+    expect(o).toContain("  Loans held-for-sale and loans at fair value");
+    expect(o).toContain("Consumer exposure");
+    expect(o.some((x) => /Consumer loans excluding credit card/.test(x))).toBe(false);
+    for (const r of s.rows) if (r.kind !== "gap") expect(r.depth).toBeLessThanOrEqual(2);
+  });
+  it("a table that indents totals past their parts keeps the stored levels; bold marks are carried", () => {
+    const s = secs.find((x) => x.id === "2:3")!;
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    const nir = s.rows.find((r): r is Line => r.kind === "line" && rowLabel(r, by) === "Noninterest revenue")!;
+    const ib = s.rows.find((r): r is Line => r.kind === "line" && rowLabel(r, by) === "Investment banking fees")!;
+    expect(ib.depth).toBe(nir.depth + 1);
+    const total = s.rows.find((r): r is Line => r.kind === "line" && rowLabel(r, by) === "TOTAL NET REVENUE")!;
+    expect(total.bold).toBe(true);
+  });
+});
+
+describe("audb-09 TSLA: lines of one slide height are one row only when they measure the same thing", () => {
+  it("restructuring costs and services revenue at one height stay two rows", () => {
+    const series = (tsla as unknown as { series: PayloadSeries[] }).series;
+    const by = new Map(series.map((x) => [x.k, x]));
+    const keys = series.map((x) => x.k);
+    const places = new Map(keys.map((k) => [k, new Set(["20:p1:0"])]));
+    expect(sameRows(keys, by, places)).toHaveLength(2);
+  });
+});
+
+describe("audd-08 CRM: a table printed with dates down the side", () => {
+  it("is one row per label, not one per printed date", async () => {
+    const p = await payloadOf(crm);
+    const s = assembleStatements(p)[0];
+    const rows = linesOf(p, s, "2026-07-31").map((r) => r.replace(/ -?\d+$/, ""));
+    expect(rows).toHaveLength(3);
+    expect(new Set(rows).size).toBe(3);
+  });
+});
+
+describe("audd-09 NOW: GAAP and non-GAAP amount and margin columns on one printed row", () => {
+  it("names each line by basis and measure, under the printed title", async () => {
+    const p = await payloadOf(now);
+    const s = assembleStatements(p)[0];
+    expect(s.title).toBe("Third quarter 2026 GAAP and Non-GAAP results");
+    const rows = linesOf(p, s, "2026-09-30").map((r) => r.replace(/ -?[\d.]+$/, ""));
+    expect(rows.filter((r) => r.startsWith("Subscription gross profit"))).toEqual([
+      "Subscription gross profit: GAAP gross profit",
+      "Subscription gross profit: GAAP margin",
+      "Subscription gross profit: non-GAAP gross profit",
+      "Subscription gross profit: non-GAAP margin",
+    ]);
+    expect(new Set(rows).size).toBe(rows.length);
+  });
+});
+
+describe("lines only older documents print", () => {
+  it("close the section under a heading saying so, after the table's own rows, never among them", async () => {
+    const p = await payloadOf(intc2);
+    const s = assembleStatements(p).find((x) => x.group === "main")!;
+    const i = s.rows.findIndex((r) => r.kind === "head" && r.text === "Printed only in earlier periods");
+    expect(i).toBeGreaterThan(0);
+    const after = s.rows.slice(i + 1);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.every((r) => r.kind === "line" && r.old)).toBe(true);
+    expect(s.rows.slice(0, i).some((r) => r.kind === "line" && r.old)).toBe(false);
+    expect(assembleStatements(p).some((x) => x.id === `${s.id}~old`)).toBe(false);
   });
 });

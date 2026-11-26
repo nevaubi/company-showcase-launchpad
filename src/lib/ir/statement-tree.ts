@@ -160,7 +160,9 @@ export function shapeRows(
     }
     if (!orphans.length) continue;
     let take: number[] = [];
-    if (kids.length) take = orphans.slice(0, sibs);
+    // Not when the stored parts already add up to the total: the rows above are parts of something else
+    // (JPM's interest income and expense, above net interest income under total net revenue).
+    if (kids.length) take = addsUp(tr, kids.map(line), cells, byKey.get(tr.k)?.unit) ? [] : orphans.slice(0, sibs);
     else {
       const unit = byKey.get(tr.k)?.unit;
       for (let n = orphans.length; n >= 2; n--) {

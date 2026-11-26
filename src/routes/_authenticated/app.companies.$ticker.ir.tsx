@@ -269,7 +269,7 @@ function IrXbrlBreakdowns({ ticker }: { ticker: string }) {
         {on ? (
           // The filings' tables take the statements' table language (head band, stripes, hover).
           <div className="irt-root irt-scope">
-            <FilingDetailView ticker={ticker} />
+            <FilingDetailView ticker={ticker} map={false} />
           </div>
         ) : (
           <Skeleton className="m-4 h-40" />
