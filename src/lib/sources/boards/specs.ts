@@ -7,6 +7,8 @@
  * Subjects and titles use the publisher's own words; notes state a caveat the publisher or the store states
  * (adjustment, cohort, an unpublished month). Nothing here is a model's sentence.
  */
+import { composeBoards } from "./compose";
+import { UNIT_SPECS } from "./units/index";
 import type { BoardSpec, RankTileSpec, SeriesTileSpec, TileSpec } from "./types";
 
 const FRED_NOTE_SA = "Seasonally adjusted. FRED copy of the publisher's series.";
@@ -34,7 +36,8 @@ const mer = (
   };
 };
 
-export const TILES: readonly TileSpec[] = [
+/** The tiles of round 4 (boards report of 25 Nov 2026). Later units add theirs in ./units/<unit>.ts. */
+export const CORE_TILES: readonly TileSpec[] = [
   // Macro and rates
   fred({
     id: "pce-prices-12m",
@@ -496,7 +499,7 @@ export const TILES: readonly TileSpec[] = [
   }),
 ];
 
-export const BOARDS: readonly BoardSpec[] = [
+export const CORE_BOARDS: readonly BoardSpec[] = [
   {
     id: "library",
     title: "What the data says",
@@ -548,6 +551,14 @@ export const BOARDS: readonly BoardSpec[] = [
     tiles: ["mortgage-rate-30y", "house-prices-12m", "case-shiller-12m", "housing-starts", "new-home-price"],
   },
 ];
+
+/** Every tile: round 4's, then each unit's (./units/index.ts lists the units in a fixed order). */
+export const TILES: readonly TileSpec[] = [...CORE_TILES, ...UNIT_SPECS.flatMap((u) => u.tiles)];
+
+/**
+ * Every board: round 4's, the boards units define, and the tiles units add to a board (appended in unit order).
+ */
+export const BOARDS: readonly BoardSpec[] = composeBoards(CORE_BOARDS, UNIT_SPECS);
 
 const TILE_BY_ID = new Map(TILES.map((t) => [t.id, t] as const));
 

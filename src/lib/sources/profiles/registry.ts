@@ -1,6 +1,7 @@
 import { EIA_MER_ENTRY, FDIC_FINANCIALS_ENTRY, FDIC_SUMMARY_ENTRY, FHFA_ENTRY } from "./families";
 import { FRED_ENTRY } from "./fred";
 import type { ProfileEntry } from "./types";
+import { UNIT_PROFILE_ENTRIES } from "./units/index";
 
 /**
  * The families that have a profile. A family is added only after its dictionary and rows were read on
@@ -10,4 +11,12 @@ import type { ProfileEntry } from "./types";
  *
  * Families without a profile, and why, are listed in the boards report of 25 Nov 2026 (round 4).
  */
-export const PROFILE_ENTRIES: readonly ProfileEntry[] = [FRED_ENTRY, EIA_MER_ENTRY, FDIC_FINANCIALS_ENTRY, FDIC_SUMMARY_ENTRY, FHFA_ENTRY];
+export const PROFILE_ENTRIES: readonly ProfileEntry[] = [
+  FRED_ENTRY,
+  EIA_MER_ENTRY,
+  FDIC_FINANCIALS_ENTRY,
+  FDIC_SUMMARY_ENTRY,
+  FHFA_ENTRY,
+  // Round 6 units add their families in ./units/<unit>.ts.
+  ...UNIT_PROFILE_ENTRIES,
+];
