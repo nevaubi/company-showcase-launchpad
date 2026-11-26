@@ -36,6 +36,7 @@ export function ColumnChart({
   label,
   onSelect,
   roomFor,
+  plotHeight = COLUMN_PLOT_HEIGHT,
   className,
 }: {
   columns: ColumnMark[];
@@ -46,18 +47,20 @@ export function ColumnChart({
   onSelect?: (index: number) => void;
   /** Width a tick label needs, px (the chart fits as many as there is room for). */
   roomFor?: number;
+  /** Height of the plot, px: lower for a row of equal columns, which says one thing. */
+  plotHeight?: number;
   className?: string;
 }) {
   const [boxRef, width] = useWidth(240, 640);
   const [hover, setHover] = useState<number | null>(null);
   const roving = useRoving(columns.length, (i) => columns[i]?.actionable && onSelect?.(i));
   const max = Math.max(0, ...columns.map((c) => c.value));
-  const yTicks = countTicks(max, 4);
+  const yTicks = countTicks(max, plotHeight < 100 ? 1 : 4);
   const top = yTicks[yTicks.length - 1];
   const yLabels = yTicks.map((t) => axisLabel(t, top));
   const gutter = labelWidth(yLabels);
   const plotW = Math.max(40, width - gutter);
-  const plotH = COLUMN_PLOT_HEIGHT;
+  const plotH = plotHeight;
   const slot = columns.length ? plotW / columns.length : plotW;
   const bar = Math.max(1, Math.min(24, slot - 2));
   const y = (v: number) => TOP_ROOM + plotH - (top > 0 ? (v / top) * plotH : 0);

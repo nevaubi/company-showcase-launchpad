@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { PeriodFormat } from "@/lib/sources/periods";
 import { ColumnChart, ColumnChartSkeleton, type ColumnMark } from "./column-chart";
 import { CountPanel, CountTable } from "./panel";
-import { outerWindow, periodCaption, periodChart, periodTicks, windowLabel, type PeriodColumn, type PeriodWindow } from "./period-model";
+import { isUniform, openingWindow, outerWindow, periodCaption, periodChart, periodTicks, windowLabel, type PeriodColumn, type PeriodWindow } from "./period-model";
 import type { AllFacets } from "./queries";
 
 const NAME = "Records per period";
@@ -39,7 +39,7 @@ export function PeriodPanel({
   view: "chart" | "table";
   onPeriod: (period: string) => void;
 }) {
-  const [base, setBase] = useState<"recent" | "all">("recent");
+  const [base, setBase] = useState<"recent" | "all">(() => openingWindow(facets.values, format));
   const [zoom, setZoom] = useState<PeriodWindow | null>(null);
   const chart = useMemo(() => periodChart(facets.values, format, zoom ?? { kind: base }), [facets.values, format, zoom, base]);
   const caption = useMemo(() => periodCaption(facets.values, format, total, facets.complete), [facets.values, format, total, facets.complete]);
@@ -73,6 +73,7 @@ export function PeriodPanel({
           columns={marks}
           ticks={(room) => periodTicks(chart, room)}
           roomFor={longest * 6.6 + 14}
+          plotHeight={isUniform(chart) ? 56 : undefined}
           label={NAME}
           onSelect={(i) => {
             const action = chart.columns[i]?.action;

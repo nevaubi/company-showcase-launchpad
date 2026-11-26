@@ -176,6 +176,22 @@ export function periodChart(values: readonly SourceFacetValue[], format: PeriodF
   return { columns, grain, window: shown, dated, windowed, periods: items.length, max: max(columns) };
 }
 
+/** Every column holds the same exact count (a series of one record per period): the chart says one thing. */
+export function isUniform(chart: Pick<PeriodChart, "columns">): boolean {
+  const first = chart.columns[0];
+  return !!first && chart.columns.every((c) => c.rows === first.rows && c.exact);
+}
+
+/**
+ * The window a table opens on: the last ten years, unless those are uniform while the whole table is not (a series
+ * that changed its cadence, quarterly from 1952 after years of one figure, shows the change at once).
+ */
+export function openingWindow(values: readonly SourceFacetValue[], format: PeriodFormat): "recent" | "all" {
+  const recent = periodChart(values, format, { kind: "recent" });
+  if (!recent.windowed || !isUniform(recent)) return "recent";
+  return isUniform(periodChart(values, format, { kind: "all" })) ? "recent" : "all";
+}
+
 /** The window one step out from a zoom: a month goes back to its year, a year to the default window. */
 export function outerWindow(window: PeriodWindow): PeriodWindow {
   if (window.kind === "month") return { kind: "year", year: window.month.slice(0, 4) };
@@ -261,10 +277,12 @@ export function periodCaption(values: readonly SourceFacetValue[], format: Perio
     if (equal) parts.push(sorted[0].rows === 1 ? "one in each period" : `${n(sorted[0].rows)} in each period`);
     else {
       // "most in" at the grain a reader sees over the whole table: years when the periods are many and dated
-      const whole = dated && sorted.length > MAX_PERIOD_COLUMNS ? periodChart(sorted, format, { kind: "all" }).columns : sorted.map((v) => ({ label: label(v.value), rows: v.rows }));
+      const byYear = dated && sorted.length > MAX_PERIOD_COLUMNS;
+      const whole = byYear ? periodChart(sorted, format, { kind: "all" }).columns : sorted.map((v) => ({ label: label(v.value), rows: v.rows }));
       let best = whole[0];
       for (const c of whole) if (c.rows > best.rows) best = c;
-      parts.push(`most in ${best.label}`);
+      const tied = whole.filter((c) => c.rows === best.rows).length;
+      parts.push(tied > 1 ? `the most, ${n(best.rows)} each, in ${n(tied)} ${byYear ? "years" : "periods"}` : `most in ${best.label}`);
     }
   }
   let line = parts.join("; ");

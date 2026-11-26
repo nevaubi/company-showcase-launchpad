@@ -39,13 +39,16 @@ describe("countFields", () => {
     expect(first).toEqual({
       position: 7, filled: 5, blank: 0, missing: 0, distinct: 3,
       top: [{ value: "A", rows: 2, row: 1 }, { value: "N", rows: 2, row: 2 }],
-      otherRows: 1, otherValues: 1,
+      otherRows: 1, otherValues: 1, numeric: false,
     });
+    // nine numbers and one marker: a field of numbers
+    const [series] = countFields([0], [...Array.from({ length: 9 }, (_, i) => ({ row: i + 1, cells: [String(i)] })), { row: 10, cells: ["ND"] }]);
+    expect(series.numeric).toBe(true);
     expect(second).toMatchObject({ filled: 3, blank: 1, missing: 1, distinct: 2, top: [{ value: "a", rows: 2, row: 3 }, { value: "b", rows: 1, row: 4 }] });
   });
 });
 
-const counts = (over: Partial<FieldCounts>): FieldCounts => ({ position: 0, filled: 100, blank: 0, missing: 0, distinct: 3, top: [{ value: "x", rows: 60, row: 1 }, { value: "y", rows: 30, row: 2 }, { value: "z", rows: 10, row: 3 }], otherRows: 0, otherValues: 0, ...over });
+const counts = (over: Partial<FieldCounts>): FieldCounts => ({ position: 0, filled: 100, blank: 0, missing: 0, distinct: 3, top: [{ value: "x", rows: 60, row: 1 }, { value: "y", rows: 30, row: 2 }, { value: "z", rows: 10, row: 3 }], otherRows: 0, otherValues: 0, numeric: false, ...over });
 
 describe("isCategorical", () => {
   it("takes few values that repeat", () => {
@@ -61,6 +64,11 @@ describe("isCategorical", () => {
     // 200 values in 5,000 records, but the ten most common hold only 30%
     expect(isCategorical(counts({ filled: 5000, distinct: 200, top: Array.from({ length: 10 }, (_, i) => ({ value: `v${i}`, rows: 150, row: i + 1 })) }))).toBe(false);
     expect(isCategorical(counts({ filled: 5000, distinct: 200, top: Array.from({ length: 10 }, (_, i) => ({ value: `v${i}`, rows: 250, row: i + 1 })) }))).toBe(true);
+  });
+  it("takes a field of numbers only with at most 12 values", () => {
+    // a Z.1 series: 50 values in 305 quarters, zero in 214 of them
+    expect(isCategorical(counts({ filled: 305, distinct: 50, numeric: true, top: [{ value: "0", rows: 214, row: 2 }] }))).toBe(false);
+    expect(isCategorical(counts({ filled: 1012, distinct: 7, numeric: true, top: [{ value: "2", rows: 762, row: 2 }] }))).toBe(true);
   });
 });
 

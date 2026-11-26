@@ -6,6 +6,7 @@
  * elsewhere and never here.
  */
 import { fieldCode, fieldTitle, type FieldRole } from "@/lib/sources/fields";
+import { readNative } from "@/lib/sources/numbers";
 import type { SourceFieldFill } from "@/lib/sources/read-types";
 import type { SourceColumn, SourceIngest } from "@/lib/sources/schema";
 
@@ -28,6 +29,8 @@ export const CATEGORY_RULE = {
   recordsPerValue: 4,
   /** The ten most common values hold at least this share of the filled records. */
   topShare: 0.5,
+  /** A field whose every value reads as a plain number is a category only with at most this many values (codes, months). */
+  numericValues: 12,
 } as const;
 
 /**
@@ -71,6 +74,8 @@ export type FieldCounts = {
   /** Records and values beyond `top`. */
   otherRows: number;
   otherValues: number;
+  /** At least 90% of the filled records hold a value that reads as a plain number (`numbers.ts`); used to classify the field, never to show a number. */
+  numeric: boolean;
 };
 
 const byCount = (a: { value: string; rows: number }, b: { value: string; rows: number }) =>
@@ -98,17 +103,22 @@ export function countFields(positions: readonly number[], rows: readonly { row: 
       }
     }
     const all = [...seen.entries()].map(([value, c]) => ({ value, rows: c.rows, row: c.row })).sort(byCount);
+    const filled = all.reduce((s, v) => s + v.rows, 0);
+    // a field of numbers with a marker or two ("ND") is still a field of numbers
+    const numericRows = all.reduce((s, v) => s + (readNative(v.value).kind === "number" ? v.rows : 0), 0);
+    const numeric = filled > 0 && numericRows >= filled * 0.9;
     const head = all.slice(0, top);
     const tail = all.slice(top);
     return {
       position,
-      filled: all.reduce((s, v) => s + v.rows, 0),
+      filled,
       blank,
       missing,
       distinct: all.length,
       top: head,
       otherRows: tail.reduce((s, v) => s + v.rows, 0),
       otherValues: tail.length,
+      numeric,
     };
   });
 }
@@ -117,10 +127,13 @@ export function countFields(positions: readonly number[], rows: readonly { row: 
  * A field is a category when, over every record: at least 10 hold a value, at least 2 distinct values occur, there is
  * at most one distinct value per 4 filled records, and the 10 most common values hold at least half of the filled
  * records. Identifiers and names fail the third test; amounts and dates, spread over many values, fail the fourth.
- * A code field with a long tail of rare codes passes when its common codes hold most records.
+ * A code field with a long tail of rare codes passes when its common codes hold most records. A field of plain
+ * numbers (at least 90% of its records: amounts, years, numeric codes, a marker such as "ND" aside) passes only with
+ * at most 12 values: past that, its values are a measure's, and counting records by each one says little.
  */
 export function isCategorical(c: FieldCounts): boolean {
   if (c.filled < CATEGORY_RULE.minFilled || c.distinct < CATEGORY_RULE.minValues) return false;
+  if (c.numeric && c.distinct > CATEGORY_RULE.numericValues) return false;
   if (c.distinct * CATEGORY_RULE.recordsPerValue > c.filled) return false;
   const top = c.top.slice(0, TOP_VALUES).reduce((s, v) => s + v.rows, 0);
   return top >= c.filled * CATEGORY_RULE.topShare;

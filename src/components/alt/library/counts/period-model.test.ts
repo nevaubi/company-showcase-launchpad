@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceFacetValue } from "@/lib/sources/read-types";
-import { MAX_PERIOD_COLUMNS, outerWindow, periodCaption, periodChart, periodTicks, windowLabel } from "./period-model";
+import { isUniform, MAX_PERIOD_COLUMNS, openingWindow, outerWindow, periodCaption, periodChart, periodTicks, windowLabel } from "./period-model";
 
 const v = (value: string, rows: number, exact = true): SourceFacetValue => ({ value, label: null, rows, exact });
 
@@ -113,6 +113,20 @@ describe("periodChart", () => {
   });
 });
 
+describe("openingWindow", () => {
+  it("opens a series of one record per quarter on All when its early years held one record a year", () => {
+    const z1 = [...Array.from({ length: 7 }, (_, i) => v(`${1945 + i}:Q4`, 1)), ...Array.from({ length: 298 }, (_, i) => v(`${1952 + Math.floor(i / 4)}:Q${(i % 4) + 1}`, 1))];
+    expect(isUniform(periodChart(z1, "quarter"))).toBe(true);
+    expect(openingWindow(z1, "quarter")).toBe("all");
+    const all = periodChart(z1, "quarter", { kind: "all" });
+    expect(all.columns.slice(0, 8).map((c) => c.rows)).toEqual([1, 1, 1, 1, 1, 1, 1, 4]);
+  });
+  it("keeps ten years when they vary, and when the whole table is as flat", () => {
+    expect(openingWindow(years(2000, 2026, (y) => y), "year")).toBe("recent");
+    expect(openingWindow(years(1950, 2026, () => 1), "year")).toBe("recent");
+  });
+});
+
 describe("periodTicks", () => {
   it("labels every column when a few fit, and always the last", () => {
     const chart = periodChart(years(2017, 2026), "year");
@@ -153,8 +167,11 @@ describe("periodTicks", () => {
 
 describe("periodCaption", () => {
   it("says the records, the range and where most are", () => {
-    const facets = months("1960-01", "2024-12", (i) => (i >= 756 ? 9 : 1));
-    expect(periodCaption(facets, "yyyy-mm", 972, true)).toBe("972 records from Jan 1960 to Dec 2024; most in 2023.");
+    const facets = months("1960-01", "2024-12", (i) => (i >= 756 && i < 768 ? 9 : 1));
+    expect(periodCaption(facets, "yyyy-mm", 876, true)).toBe("876 records from Jan 1960 to Dec 2024; most in 2023.");
+    // MSHA coal by state: 26 records in each year from 2000 to 2016, fewer since
+    const msha = years(2000, 2026, (y) => (y <= 2016 ? 26 : 24));
+    expect(periodCaption(msha, "year", 682, true)).toBe("682 records from 2000 to 2026; the most, 26 each, in 17 periods.");
   });
 
   it("says one period, equal periods and records without a period", () => {
