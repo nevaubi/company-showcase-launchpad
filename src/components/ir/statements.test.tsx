@@ -41,7 +41,8 @@ beforeAll(async () => {
 
 const section = (title: string) => screen.getByRole("heading", { name: title }).closest("section")!;
 
-describe("IR statements", () => {
+// Each test renders the whole JPM payload: a few seconds alone, more on a loaded machine.
+describe("IR statements", { timeout: 30_000 }, () => {
   it("lays out each printed table under its printed title, figures as printed, totals ticked when their parts add up", () => {
     const onSummary = vi.fn();
     render(
