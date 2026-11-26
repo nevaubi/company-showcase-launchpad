@@ -83,6 +83,26 @@ const fhfaDivisions = (spec: { id: string; title: string; lines: readonly TileSe
   note: FHFA_Q_NOTE,
 });
 
+/** A state's quarterly purchase-only index as a compact tile: the latest level, its change on a year earlier, 24 quarters. */
+const fhfaStat = (id: string, placeId: string, name: string): StatTileSpec => ({
+  id,
+  collection: "11_real_estate",
+  datasetId: FHFA_QUARTERLY_DATASET,
+  measure: "index_sa",
+  title: `FHFA purchase-only house price index, ${name}`,
+  subject: `The FHFA purchase-only index for ${name}`,
+  unit: FHFA_Q_UNIT,
+  decimals: 2,
+  form: "stat",
+  transform: "level",
+  headline: "level",
+  series: { where: [{ field: "place_id", value: placeId }, ...FHFA_Q_FAMILY] },
+  changeAs: "percent",
+  window: 24,
+  section: "States and divisions",
+  note: FHFA_Q_NOTE,
+});
+
 const COUNTY_NOTE = "FHFA's developmental annual county index: all transactions, not seasonally adjusted. Counties as FHFA names them; the FIPS code tells counties of one name apart.";
 
 const countyRank = (id: string, order: "highest" | "lowest"): RankTileSpec => ({
@@ -148,6 +168,9 @@ const HOUSING: TileSpec[] = [
       fhfaPlace("DV_ESC", "East South Central"),
     ],
   }),
+  fhfaStat("fhfa-california", "CA", "California"),
+  fhfaStat("fhfa-texas", "TX", "Texas"),
+  fhfaStat("fhfa-florida", "FL", "Florida"),
   countyRank("fhfa-counties-highest", "highest"),
   countyRank("fhfa-counties-lowest", "lowest"),
   {
