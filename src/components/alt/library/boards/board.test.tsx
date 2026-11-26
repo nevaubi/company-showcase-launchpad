@@ -105,3 +105,16 @@ describe("a board section", () => {
     expect(articles(container)).toHaveLength(1);
   });
 });
+
+describe("a packed board", () => {
+  const tile = (id: string, size: "regular" | "wide" = "regular", form = "line") => ({ id, title: id, form: form as "line", size, collection: "c", datasetId: "d" });
+  it("gives a section as many columns as its tiles fill, at most the board's", async () => {
+    const { sectionSpan } = await import("./board");
+    expect(sectionSpan({ title: "One", tiles: [tile("a")] })).toBe("@container");
+    expect(sectionSpan({ title: "Two", tiles: [tile("a"), tile("b")] })).toBe("@container @2xl:col-span-2");
+    expect(sectionSpan({ title: "Wide", tiles: [tile("a", "wide")] })).toBe("@container @2xl:col-span-2");
+    expect(sectionSpan({ title: "Many", tiles: [tile("a"), tile("b", "wide")] })).toBe("@container @2xl:col-span-2 @5xl:col-span-3");
+    // a stat is a small tile, never wide
+    expect(sectionSpan({ title: "Stat", tiles: [tile("a", "wide", "stat")] })).toBe("@container");
+  });
+});
