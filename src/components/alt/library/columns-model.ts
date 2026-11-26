@@ -92,16 +92,19 @@ export function pickerRows(groups: readonly FieldGroup[]): PickerRow[] {
   return rows;
 }
 
-/** The two lines of a column head: the title, then the unit as stated, else the code where it differs. */
-export function columnHead(column: SourceColumn): { title: string; sub: string | null; code: string } {
+/**
+ * The two lines of a column head: the title, then the unit (the one a reviewed profile establishes for
+ * the field, else the dictionary's as stated), else the code where it differs.
+ */
+export function columnHead(column: SourceColumn, profileUnit?: string): { title: string; sub: string | null; code: string } {
   const title = fieldTitle(column);
   const code = fieldCode(column);
-  return { title, sub: statedUnit(column) ?? (code !== title ? code : null), code };
+  return { title, sub: profileUnit ?? statedUnit(column) ?? (code !== title ? code : null), code };
 }
 
 /** A starting width for a column, from its head and its role; the table is laid out fixed from these. */
-export function columnWidth(column: SourceColumn, quantity: boolean, names = false, longest = 0): number {
-  const head = columnHead(column);
+export function columnWidth(column: SourceColumn, quantity: boolean, names = false, longest = 0, profileUnit?: string): number {
+  const head = columnHead(column, profileUnit);
   const chars = Math.max(head.title.length, (head.sub ?? "").length * 0.85, longest);
   const fromHead = Math.round(chars * 7.2 + 28);
   // a column of entity or place names holds long text whatever its head says

@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { SERIES_SURE_LIMIT } from "../read-types";
 import type { SourceColumn } from "../schema";
+import { FRED_REFUSED, FRED_SERIES, fredSeries } from "./fred";
 import {
   PROFILE_ENTRIES,
   defineProfile,
@@ -12,7 +15,7 @@ import {
   unitOf,
   unmatchedFields,
 } from "./index";
-import type { ProfileDataset, ProfileEntry } from "./types";
+import type { Cadence, ProfileDataset, ProfileEntry } from "./types";
 
 /** A long table's dictionary in the form production stores every dictionary: positional keys, the headers as labels. */
 const MER_FIELDS: SourceColumn[] = [
@@ -158,5 +161,121 @@ describe("series addresses", () => {
     expect(sameAddress({ where: [{ field: "MSN", value: "TETCBUS" }] }, { where: [{ field: "MSN", value: "TERCBUS" }] })).toBe(false);
     expect(sameAddress({ whole: true }, { whole: true })).toBe(true);
     expect(sameAddress({ whole: true }, { where: [] })).toBe(false);
+  });
+});
+
+/**
+ * What production and FRED said when each FRED profile was checked (fred.checks.json): every FRED series
+ * file of the store with its latest snapshot and its row in the store's series catalogue, FRED's series page,
+ * and for each profiled series the snapshot it was proven on and the values check of its last 24 rows.
+ */
+type FredDatasetFact = {
+  datasetId: string;
+  latestSnapshotId: string;
+  latestRows: number;
+  retrievedAt: string;
+  catalogue: { unit: string; frequency: string; adjustment: string };
+  page: { unit: string; adjustment: string; frequency: string; title: string };
+};
+type FredCheck = {
+  snapshotId: string;
+  rows: number;
+  values: { rows: [number, number]; periods: [string, string]; equal: number; of: number; empty: number; null: number } | null;
+  by: string;
+};
+const FRED_FACTS = JSON.parse(readFileSync("src/lib/sources/profiles/fred.checks.json", "utf8")) as {
+  datasets: Record<string, FredDatasetFact>;
+  checks: Record<string, FredCheck>;
+};
+
+/** FRED's "Frequency:" as the cadence a profile declares; null for a frequency no FRED profile reads. */
+function cadenceOfFrequency(frequency: string): { cadence: Cadence; weekEnding?: string } | null {
+  if (frequency === "Monthly" || frequency === "Monthly, End of Period") return { cadence: "month" };
+  if (frequency === "Quarterly") return { cadence: "quarter" };
+  const week = /^Weekly, Ending (Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/.exec(frequency);
+  return week ? { cadence: "week", weekEnding: week[1] } : null;
+}
+
+/** A FRED series file's dictionary as production stores it. */
+const fredColumns = (code: string): SourceColumn[] => [
+  { key: "col0001", label: "observation_date", type: "string" },
+  { key: "col0002", label: code, type: "string" },
+];
+
+describe("FRED series profiles", () => {
+  it("lists each series once and none that was refused", () => {
+    const codes = FRED_SERIES.map((s) => s.code);
+    expect(new Set(codes).size).toBe(codes.length);
+    for (const code of Object.keys(FRED_REFUSED)) expect(codes).not.toContain(code);
+  });
+
+  it.each(FRED_SERIES.map((s) => [s.code, s] as const))("%s: unit, cadence and ids as production and FRED state them", (code, s) => {
+    const fact = FRED_FACTS.datasets[code];
+    const check = FRED_FACTS.checks[code];
+    expect(fact).toBeDefined();
+    expect(check).toBeDefined();
+    expect(s.datasetId).toBe(fact.datasetId);
+    expect(s.snapshotId).toBe(check.snapshotId);
+    expect(s.rows).toBe(check.rows);
+    // the unit as FRED's page states it, equal to the store's catalogue row retrieved with the data
+    expect(s.unit).toBe(fact.page.unit);
+    expect(s.unit).toBe(fact.catalogue.unit);
+    expect(s.adjustment).toBe(fact.page.adjustment);
+    expect(fact.catalogue.adjustment).toBe(`${s.unit} , ${s.adjustment}`);
+    expect(fact.catalogue.frequency).toBe(fact.page.frequency);
+    expect(cadenceOfFrequency(fact.page.frequency)).toEqual(s.weekEnding ? { cadence: s.cadence, weekEnding: s.weekEnding } : { cadence: s.cadence });
+    // a first look reads the whole series
+    expect(s.rows).toBeLessThanOrEqual(SERIES_SURE_LIMIT);
+    if (check.values) {
+      expect(check.values.of).toBe(24);
+      expect(check.values.equal).toBe(check.values.of);
+      expect(check.values.rows).toEqual([check.rows - 23, check.rows]);
+    }
+    const status = profileStatus({ id: s.datasetId, source_id: `FRED_${code}` }, fredColumns(code));
+    expect(status.state).toBe("on");
+    if (status.state !== "on") return;
+    expect(status.profile.cadence).toBe(s.cadence);
+    expect(status.profile.proof).toMatchObject({ snapshotId: s.snapshotId, datasetId: s.datasetId });
+    const measure = measureOf(status.profile, code);
+    expect(measure?.label).toBe(s.title);
+    expect(measure ? unitOf(measure, fredColumns(code)) : null).toEqual({ ok: true, text: s.unit });
+  });
+
+  it.each(Object.entries(FRED_REFUSED))("%s is refused for a plain reason and gets no profile", (code, reason) => {
+    const fact = FRED_FACTS.datasets[code];
+    expect(fact).toBeDefined();
+    expect(reason.length).toBeGreaterThan(40);
+    expect(reason).not.toMatch(/\u2014/);
+    const dataset = { id: fact.datasetId, source_id: `FRED_${code}` };
+    expect(fredSeries(dataset)).toBeNull();
+    expect(profileStatus(dataset, fredColumns(code))).toEqual({ state: "none" });
+  });
+
+  it("refuses a rebased index only where the catalogue and FRED's page disagree on the base", () => {
+    const rebased = Object.entries(FRED_REFUSED).filter(([, reason]) => /Index 2022=100/.test(reason));
+    expect(rebased.map(([code]) => code).sort()).toEqual(
+      ["INDPRO", "IPG311A2S", "IPG322S", "IPG325S", "IPG332S", "IPG333S", "IPG3361T3S", "IPG3364S", "IPMAN"],
+    );
+    for (const [code] of rebased) {
+      expect(FRED_FACTS.datasets[code].catalogue.unit).toBe("Index 2017=100");
+      expect(FRED_FACTS.datasets[code].page.unit).toBe("Index 2022=100");
+    }
+  });
+
+  it("refuses a series longer than a first look reads, with its row count", () => {
+    const long = Object.entries(FRED_REFUSED).filter(([, reason]) => /a first look reads at most 4,999 records/.test(reason));
+    expect(long.map(([code]) => code).sort()).toEqual(["DEXCHUS", "DEXJPUS", "DEXUSEU", "DFF", "DTWEXBGS"]);
+    expect(SERIES_SURE_LIMIT).toBe(4999);
+    for (const [code, reason] of long) {
+      const fact = FRED_FACTS.datasets[code];
+      expect(fact.latestRows).toBeGreaterThan(SERIES_SURE_LIMIT);
+      expect(reason).toContain(`${fact.page.frequency} series of ${fact.latestRows.toLocaleString("en-US")} rows`);
+    }
+  });
+
+  it("refuses WALCL because FRED dates it as a Wednesday level, not a week ending", () => {
+    expect(FRED_FACTS.datasets.WALCL.page.frequency).toBe("Weekly, As of Wednesday");
+    expect(cadenceOfFrequency(FRED_FACTS.datasets.WALCL.page.frequency)).toBeNull();
+    expect(FRED_REFUSED.WALCL).toContain("As of Wednesday");
   });
 });

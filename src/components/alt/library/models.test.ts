@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { SourceColumn, SourceIngest } from "@/lib/sources/schema";
-import { columnWidth, fieldGroups, openingFields, pickerRows, toggle } from "./columns-model";
+import { fieldRoles, formatCell } from "@/lib/sources/fields";
+import { profileStatus } from "@/lib/sources/profiles";
+import { columnHead, columnWidth, fieldGroups, openingFields, pickerRows, toggle } from "./columns-model";
 import { fillBands, periodBars, yearBars } from "./coverage-model";
 import {
   bytesText,
   canOrderNewest,
   count,
   effectiveOrder,
+  profileFields,
   rangeFormat,
   recordDims,
   refreshState,
@@ -64,6 +67,30 @@ describe("the column picker", () => {
     expect(toggle([1, 2], 2, 24)).toEqual([1]);
     expect(toggle([1, 2], 5, 2)).toEqual([1, 2]);
     expect(toggle([1], 5, 24)).toEqual([1, 5]);
+  });
+  it("heads a reviewed measure with its profile's unit, else the dictionary's", () => {
+    expect(columnHead(col("PAYEMS"))).toEqual({ title: "PAYEMS", sub: null, code: "PAYEMS" });
+    expect(columnHead(col("PAYEMS"), "Thousands of Persons")).toEqual({ title: "PAYEMS", sub: "Thousands of Persons", code: "PAYEMS" });
+    expect(columnHead(col("ASSET", { unit: "USD thousands" }))).toMatchObject({ sub: "USD thousands" });
+    expect(columnWidth(col("X"), true, false, 0, "Millions of 1982-84 CPI Adjusted Dollars")).toBeGreaterThan(columnWidth(col("X"), true));
+  });
+  it("shows a profiled FRED value grouped, with the unit FRED states in the head", () => {
+    // the dictionary of a FRED series file as production stores it: no unit, no native type
+    const columns: SourceColumn[] = [
+      { key: "col0001", label: "observation_date", type: "string" },
+      { key: "col0002", label: "AMTMNO", type: "string" },
+    ];
+    const status = profileStatus({ id: "official_06_industrials_raw_fred_amtmno_17ff88a923", source_id: "FRED_AMTMNO" }, columns);
+    expect(status.state).toBe("on");
+    const reviewed = profileFields(status.state === "on" ? status.profile : null, columns);
+    const roles = fieldRoles(columns, { dimensions: { period: 0 } } as unknown as SourceIngest, reviewed.hints);
+    expect(roles).toEqual(["date", "quantity"]);
+    expect(formatCell("677247", roles[1], columns[1])).toEqual({ text: "677,247", align: "right", title: "677247" });
+    expect(columnHead(columns[1], reviewed.units.get(1)).sub).toBe("Millions of Dollars");
+    // without a profile the same cell stays as stored and the head names no unit
+    const plain = fieldRoles(columns, { dimensions: { period: 0 } } as unknown as SourceIngest);
+    expect(formatCell("677247", plain[1], columns[1]).text).toBe("677247");
+    expect(columnHead(columns[1]).sub).toBeNull();
   });
   it("gives a column of names room whatever its head says", () => {
     expect(columnWidth(col("NAME"), false, true)).toBeGreaterThanOrEqual(232);

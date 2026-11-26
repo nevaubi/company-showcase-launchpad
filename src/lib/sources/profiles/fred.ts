@@ -5,9 +5,10 @@ import type { Cadence, Profile, ProfileDataset, ProfileEntry } from "./types";
  * FRED single-series files: two fields, `observation_date` (the record's period, declared as the period
  * dimension) and a field named after the series code that holds the value. The dictionary states no unit
  * and no type, so a series is drawn only when it is listed here with the unit FRED states on its series
- * page, checked on 25 Nov 2026 against that page, the store's own series catalogue (retrieved with the
- * data) and FRED's graph file (every stored value of the checked window equal, or a later revision named
- * in the report). A series that is not listed gets no measure chart.
+ * page, checked against that page, the store's own series catalogue (retrieved with the data) and FRED's
+ * graph file (every stored value of the checked window equal, or a later revision named in the report).
+ * The first 19 were checked on 25 Nov 2026 (boards report), the rest on 26 Nov 2026 (fred report: the
+ * last 24 stored rows of each equal FRED's file). A series that is not listed gets no measure chart.
  *
  * FRED dates every observation by the first day of its period (a month, a quarter) or, for a weekly
  * series, by the day the week ends; the cadence says which, so "2026-10-01" is read as Oct 2026.
@@ -30,7 +31,8 @@ export type FredSeries = {
   rows: number;
 };
 
-export const FRED_SERIES: readonly FredSeries[] = [
+/** Checked on 25 Nov 2026. */
+const CHECKED_25_NOV: readonly FredSeries[] = [
   { code: "CPIAUCNS", title: "Consumer Price Index for All Urban Consumers: All Items in U.S. City Average", unit: "Index 1982-1984=100", adjustment: "Not Seasonally Adjusted", cadence: "month", snapshotId: "4578f05e3ab18846e819eb29dda922f3ee6a9cbe2bf2b10192be7ad68c771e31", datasetId: "official_09_consumer_staples_raw_fred_cpiaucns_c8a57a978a", rows: 322 },
   { code: "CPIUFDSL", title: "Consumer Price Index for All Urban Consumers: Food in U.S. City Average", unit: "Index 1982-1984=100", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "afbb53f6a90390e184e0ea12d0a39d8fce92c3eae79ca79c0f03b67c729fa54d", datasetId: "official_09_consumer_staples_raw_fred_cpiufdsl_7b34566789", rows: 322 },
   { code: "CUSR0000SEFV", title: "Consumer Price Index for All Urban Consumers: Food Away from Home in U.S. City Average", unit: "Index 1982-1984=100", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "9a221bef66298b31858f5e1539174fb3f69ffbe25e778f4b4c9aa0ffd08ecbfa", datasetId: "official_09_consumer_staples_raw_fred_cusr0000sefv_80c6f8b4c5", rows: 322 },
@@ -52,14 +54,68 @@ export const FRED_SERIES: readonly FredSeries[] = [
   { code: "MANEMP", title: "All Employees, Manufacturing", unit: "Thousands of Persons", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "3f342f7dade37c520340195cee324f8e0e5059d797e32cd7ac3a56c34623ec16", datasetId: "official_06_industrials_raw_fred_manemp_ae6a27a459", rows: 322 },
 ];
 
+/** Checked on 26 Nov 2026: unit and frequency as the store's catalogue and FRED's page state them, the last 24 stored rows equal FRED's file. */
+const CHECKED_26_NOV: readonly FredSeries[] = [
+  { code: "AIRRPMTSID11", title: "Air Revenue Passenger Miles", unit: "Thousands", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "0d9c643f0cb19d0900334d4b0b16a9ba9b7c158ffdcc514658d2b0fb42aa0909", datasetId: "official_06_industrials_raw_fred_airrpmtsid11_1d8b6455f9", rows: 319 },
+  { code: "AMTMNO", title: "Manufacturers' New Orders: Total Manufacturing", unit: "Millions of Dollars", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "c48a603bdda83db6a7c750d52897e7322d88e3c09464a00ca7a352eb44b682bf", datasetId: "official_06_industrials_raw_fred_amtmno_17ff88a923", rows: 321 },
+  { code: "AMTMTI", title: "Manufacturers' Total Inventories: Total Manufacturing", unit: "Millions of Dollars", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "45d7e14462ce9400c6e9a2ecbf57a418fb1ae8fd477182862b5ea6e05aa978f8", datasetId: "official_06_industrials_raw_fred_amtmti_9819c49e4b", rows: 321 },
+  { code: "AMTMVS", title: "Manufacturers' Value of Shipments: Total Manufacturing", unit: "Millions of Dollars", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "5ab1bb413fac7f7ed2218cf225e8cad2fe4f58d09590d04b978ec6d28a8006e6", datasetId: "official_06_industrials_raw_fred_amtmvs_3e9b8beede", rows: 321 },
+  { code: "ASPNHSUS", title: "Average Sales Price for New Houses Sold in the United States", unit: "Dollars", adjustment: "Not Seasonally Adjusted", cadence: "month", snapshotId: "e187f0259cfbdd13957812d407a4e4be8c6917e579151c00c01fd4772229afc2", datasetId: "official_11_real_estate_raw_fred_aspnhsus_3c728c9e16", rows: 322 },
+  { code: "AWHMAN", title: "Average Weekly Hours of Production and Nonsupervisory Employees, Manufacturing", unit: "Hours", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "c64e455eb22404a4dfd55fc449e2571443bd20d162e10f95f9dd910194ff348d", datasetId: "official_06_industrials_raw_fred_awhman_6bfe61b8fa", rows: 322 },
+  { code: "CES3231100001", title: "All Employees, Food Manufacturing", unit: "Thousands of Persons", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "2d23e8e868a43730ccb21dc7e6d5c3f51266b1842162a2e7a7411f116ef9a027", datasetId: "official_09_consumer_staples_raw_fred_ces3231100001_69d7580241", rows: 322 },
+  { code: "CES3231200001", title: "All Employees: Nondurable Goods: Beverages and Tobacco Products (DISCONTINUED)", unit: "Thousands of Persons", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "c9b3d02a1029fb3a0fae84e56b6b45a9f41e452b1db20bbaba6ccafe7e602f84", datasetId: "official_09_consumer_staples_raw_fred_ces3231200001_1364ea1c26", rows: 156 },
+  { code: "CES3232500001", title: "All Employees, Chemical Manufacturing", unit: "Thousands of Persons", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "fa5138fe8af4f17a7890b6d91fb5cf4c5d8df56383e3a4be69507c25c44d682e", datasetId: "official_09_consumer_staples_raw_fred_ces3232500001_213d30203c", rows: 322 },
+  { code: "CES4300000001", title: "All Employees, Transportation and Warehousing", unit: "Thousands of Persons", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "6c2637e72adaed06160674997746fde7e948dcb957e4dbdd4db8898ded69a690", datasetId: "official_06_industrials_raw_fred_ces4300000001_03cef3c8c6", rows: 322 },
+  { code: "CES7072000001", title: "All Employees, Accommodation and Food Services", unit: "Thousands of Persons", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "b0e8b490f08ee983e2a8d66732ddbfe7400b9f0d3a4014e629843ef2d98ac107", datasetId: "official_08_consumer_discretionary_raw_fred_ces7072000001_056c9c7bd2", rows: 322 },
+  { code: "CIVPART", title: "Labor Force Participation Rate", unit: "Percent", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "e01ea42e6d8d9c45bf420be9ad3bb268750c426a1d63c1f627ee40dbc31387e2", datasetId: "official_00_universal_raw_fred_civpart_af6b261f31", rows: 322 },
+  { code: "COMPUTSA", title: "New Privately-Owned Housing Units Completed: Total Units", unit: "Thousands of Units", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "512b599b844a88844c54a20e5f3335f8c78c57973fb31b57fcd7c349f53c17aa", datasetId: "official_11_real_estate_raw_fred_computsa_8cda69aeb6", rows: 322 },
+  { code: "CPIAUCSL", title: "Consumer Price Index for All Urban Consumers: All Items in U.S. City Average", unit: "Index 1982-1984=100", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "e1f5b3e0fbe93f4d90ada4d4b315cbc6cb6d055d55a5ec1af4fe2aa530cf92f0", datasetId: "official_00_universal_raw_fred_cpiaucsl_2f7637f02f", rows: 322 },
+  { code: "CPILFESL", title: "Consumer Price Index for All Urban Consumers: All Items Less Food and Energy in U.S. City Average", unit: "Index 1982-1984=100", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "9c0bcfe8b5ecfaf8800c005a884e79584f38c047f4f51f332d3356d9e7fcf225", datasetId: "official_00_universal_raw_fred_cpilfesl_e6f9ec4e3f", rows: 322 },
+  { code: "CUSR0000SAF11", title: "Consumer Price Index for All Urban Consumers: Food at Home in U.S. City Average", unit: "Index 1982-1984=100", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "5ed0321bb23bebcf6ecfb261d0ddd8677f621990e2d4795465ed697f7cf13ccb", datasetId: "official_09_consumer_staples_raw_fred_cusr0000saf11_da16f312cb", rows: 322 },
+  { code: "CUSR0000SEHA", title: "Consumer Price Index for All Urban Consumers: Rent of Primary Residence in U.S. City Average", unit: "Index 1982-1984=100", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "41c38da637fe5123fda6a07d01266327400d8d4289f4429a680689702c1692cd", datasetId: "official_11_real_estate_raw_fred_cusr0000seha_36a4f89c12", rows: 322 },
+  { code: "CUSR0000SEHC", title: "Consumer Price Index for All Urban Consumers: Owners' Equivalent Rent of Residences in U.S. City Average", unit: "Index Dec 1982=100", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "f4b644a0eb05f51f1bbc92883a088f2bcc259c4b4421bfb0fd498a505d0a7baf", datasetId: "official_11_real_estate_raw_fred_cusr0000sehc_9b4c95c81e", rows: 322 },
+  { code: "ECOMSA", title: "E-Commerce Retail Sales", unit: "Millions of Dollars", adjustment: "Seasonally Adjusted", cadence: "quarter", snapshotId: "d8d504eacd328a50eb364e41cac39c5f93d165826995bf437f7b1316c85aa1c9", datasetId: "official_08_consumer_discretionary_raw_fred_ecomsa_c68f544dfa", rows: 107 },
+  { code: "EMRATIO", title: "Employment-Population Ratio", unit: "Percent", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "4c89b07011225fac07b0799e66cd0b150e9b04a7ea703ef53646c1e5958ee54a", datasetId: "official_00_universal_raw_fred_emratio_c7b1c5e3e0", rows: 322 },
+];
+
+export const FRED_SERIES: readonly FredSeries[] = [...CHECKED_25_NOV, ...CHECKED_26_NOV];
+
+/** The day each series was checked, for its proof. */
+const CHECKED_ON = new Map<string, string>([
+  ...CHECKED_25_NOV.map((s) => [s.code, "2026-11-25"] as const),
+  ...CHECKED_26_NOV.map((s) => [s.code, "2026-11-26"] as const),
+]);
+
+const IP_REBASED =
+  "The store's series catalogue states Index 2017=100 (retrieved 24 Nov 2026); FRED's page now states Index 2022=100, so the stored unit cannot be established at the publisher.";
+const tooLong = (frequency: string, rows: number) =>
+  `${frequency} series of ${rows.toLocaleString("en-US")} rows: a first look reads at most 4,999 records, so its latest observations would not be drawn.`;
+
 /**
  * Series that were checked and refused, with the reason, so nobody adds them back without a new check.
  * IPMAN: the stored values are on the base the store's catalogue states (Index 2017=100); FRED's page now
  * states Index 2022=100 and every value of the checked window differs, so the stored unit cannot be
- * established at the publisher.
+ * established at the publisher. The other industrial production series are in the same state.
+ * A daily series longer than a first look reads (4,999 records) would be drawn without its latest
+ * observations, and WALCL's period (a Wednesday level) is not a week ending.
  */
 export const FRED_REFUSED: Readonly<Record<string, string>> = {
   IPMAN: "Stored on Index 2017=100 as catalogued at retrieval; FRED now states Index 2022=100 and all 48 checked values differ.",
+  INDPRO: IP_REBASED,
+  IPG311A2S: IP_REBASED,
+  IPG322S: IP_REBASED,
+  IPG325S: IP_REBASED,
+  IPG332S: IP_REBASED,
+  IPG333S: IP_REBASED,
+  IPG3361T3S: IP_REBASED,
+  IPG3364S: IP_REBASED,
+  DEXCHUS: tooLong("Daily", 7015),
+  DEXJPUS: tooLong("Daily", 7015),
+  DEXUSEU: tooLong("Daily", 7015),
+  DFF: tooLong("Daily, 7-Day", 9821),
+  DTWEXBGS: tooLong("Daily", 5450),
+  WALCL:
+    "FRED states the frequency as Weekly, As of Wednesday (the level on each Wednesday); a weekly cadence here reads a period as the week ending on its date, which would misstate it.",
 };
 
 const BY_CODE = new Map(FRED_SERIES.map((s) => [s.code, s] as const));
@@ -104,7 +160,7 @@ function fredProfile(dataset: ProfileDataset): Profile {
     proof: {
       snapshotId: series.snapshotId,
       datasetId: series.datasetId,
-      checked: "2026-11-25",
+      checked: CHECKED_ON.get(series.code) ?? "2026-11-25",
       documentation: [`https://fred.stlouisfed.org/series/${series.code}`, `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${series.code}`],
     },
   });

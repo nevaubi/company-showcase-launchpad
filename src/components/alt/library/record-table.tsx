@@ -273,10 +273,10 @@ function RecordGrid({
     () => [
       88,
       ...columns.map((c, k) =>
-        columnWidth(snapshot.columns[c], roles[c] === "quantity", names.has(c), longest?.key === key ? longest.chars[k] : 0),
+        columnWidth(snapshot.columns[c], roles[c] === "quantity", names.has(c), longest?.key === key ? longest.chars[k] : 0, units.get(c)),
       ),
     ],
-    [columns, roles, snapshot.columns, names, longest, key],
+    [columns, roles, snapshot.columns, names, longest, key, units],
   );
   const total = widths.reduce((a, b) => a + b, 0);
   const sync = (e: UIEvent<HTMLDivElement>) => {
@@ -301,7 +301,7 @@ function RecordGrid({
                 <span className="block pb-1.5">Row</span>
               </th>
               {columns.map((c) => {
-                const h = columnHead(snapshot.columns[c]);
+                const h = columnHead(snapshot.columns[c], units.get(c));
                 const right = roles[c] === "quantity";
                 return (
                   <th key={c} scope="col" className={cn("h-11 px-3 align-bottom font-normal", right ? "text-right" : "text-left")} title={snapshot.columns[c].description || undefined}>
