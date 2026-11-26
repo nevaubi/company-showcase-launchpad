@@ -14,7 +14,6 @@ import type { SectionChartProps, VizPoint, VizSeries } from "./types";
 
 type View = "lines" | "stacked" | "share";
 const M = { top: 10, bottom: 22, left: 46 };
-const LABEL_W = 108;
 
 /** The readout box: title, then one row per mark, then the as-filed lines of the active mark. */
 function Readout({ x, width, title, rows, foot }: { x: number; width: number; title: string; rows: { key: string; color: string; label: string; value: string; active: boolean }[]; foot: string[] }) {
@@ -66,7 +65,8 @@ export function SectionChart({ series, parts: given, title, view: initial = "lin
     return slot(idx);
   };
   const direct = v === "lines" && shown.length >= 2 && shown.length <= 4 && width >= 520;
-  const right = direct ? LABEL_W : 12;
+  const labelW = width >= 900 ? 156 : 108;
+  const right = direct ? labelW : 12;
   const w = Math.max(40, width - M.left - right);
   const h = height;
   const columnsView = v !== "lines" || markOf(cadence) === "columns";
@@ -316,7 +316,7 @@ export function SectionChart({ series, parts: given, title, view: initial = "lin
             {ends &&
               shown.map((s) => (
                 <text key={s.key} x={w + 8} y={ends.get(s.key)} dy="0.32em" className="fill-muted-foreground text-[10px]">
-                  {s.label.length > 17 ? `${s.label.slice(0, 16)}…` : s.label}
+                  {s.label.length > Math.floor((labelW - 8) / 5.6) ? `${s.label.slice(0, Math.floor((labelW - 8) / 5.6) - 1)}…` : s.label}
                 </text>
               ))}
 

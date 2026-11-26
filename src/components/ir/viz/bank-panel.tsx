@@ -67,7 +67,7 @@ export function BankPanel({ figures, scale, onOpen, className }: BankPanelProps)
 
       <Block title="Credit" note={f.credit.length ? "Provision, net charge-offs and the allowance, each on its own axis." : undefined}>
         {f.credit.length ? (
-          <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-3">
+          <div className={cn("grid grid-cols-1 gap-4", f.credit.length === 2 ? "@2xl:grid-cols-2" : f.credit.length >= 3 ? "@2xl:grid-cols-3" : "")}>
             {lines(f.credit).map((s) => (
               <One key={s.key} s={s} scale={scale} onOpen={onOpen} height={120} />
             ))}
