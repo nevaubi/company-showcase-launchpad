@@ -12,6 +12,7 @@ export type PeriodFormat =
   | "yyyymmdd"
   | "yyyy-mm"
   | "yyyymm"
+  | "mmmyyyy"
   | "quarter"
   | "year"
   | "roc-yyymm"
@@ -84,6 +85,13 @@ export function parsePeriod(text: string, format: PeriodFormat): ParsedPeriod | 
     case "yyyymm":
       m = /^(\d{4})(\d{2})$/.exec(text);
       return m ? month(Number(m[1]), Number(m[2])) : null;
+    case "mmmyyyy": {
+      // "jun2016", "Dec 2020", "JUN-2016": an English month abbreviation and the year (FCC Form 477 as-of dates).
+      m = /^([A-Za-z]{3})[- ]?(\d{4})$/.exec(text);
+      if (!m) return null;
+      const index = MONTHS.findIndex((name) => name.toLowerCase() === m![1].toLowerCase());
+      return index < 0 ? null : month(Number(m[2]), index + 1);
+    }
     case "quarter": {
       // "2026Q2" (BEA, FDIC derived tables), "2026-Q2" and "2026 Q2" (EIA), "2026:Q2" (Federal Reserve Board
       // release files such as Z.1 and the DDP packages).
@@ -132,6 +140,7 @@ const DETECTABLE: readonly PeriodFormat[] = [
   "yyyymmdd",
   "yyyy-mm",
   "yyyymm",
+  "mmmyyyy",
   "quarter",
   "year",
 ];

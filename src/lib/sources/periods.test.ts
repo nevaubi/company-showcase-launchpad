@@ -17,6 +17,10 @@ describe("parsePeriod", () => {
     expect(parsePeriod("202402", "yyyymm")).toMatchObject({ end: "2024-02-29" });
     expect(parsePeriod("2026Q2", "quarter")).toMatchObject({ start: "2026-04-01", end: "2026-06-30", label: "Q2 2026" });
     expect(parsePeriod("2026:Q2", "quarter")).toMatchObject({ start: "2026-04-01", end: "2026-06-30", label: "Q2 2026" });
+    expect(parsePeriod("jun2016", "mmmyyyy")).toMatchObject({ start: "2016-06-01", end: "2016-06-30", label: "Jun 2016" });
+    expect(parsePeriod("Dec 2020", "mmmyyyy")).toMatchObject({ start: "2020-12-01", end: "2020-12-31", label: "Dec 2020" });
+    expect(parsePeriod("jux2016", "mmmyyyy")).toBeNull();
+    expect(detectPeriodFormat(["jun2016", "dec2020", "jun2021"])).toBe("mmmyyyy");
     expect(detectPeriodFormat(["1945:Q4", "2026:Q2"])).toBe("quarter");
     expect(parsePeriod("2026-Q4", "quarter")).toMatchObject({ start: "2026-10-01", end: "2026-12-31", label: "Q4 2026" });
     expect(parsePeriod("2026 Q1", "quarter")).toMatchObject({ end: "2026-03-31" });
