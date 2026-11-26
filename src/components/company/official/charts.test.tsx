@@ -62,7 +62,7 @@ describe("Insured banks charts", () => {
   it("shows the charter's deposits by state: the stored totals, the largest states and every state in the table view", async () => {
     const d = await load("WFC");
     render(<InsuredBanks data={d} selected={null} onSelect={() => {}} pending={false} />);
-    const deposits = document.querySelector('[data-section="Deposits by state"]') as HTMLElement;
+    const deposits = document.querySelector('[data-section="Charter deposits by state"]') as HTMLElement;
     expect(within(deposits).getByText("1,554,614,000")).toBeTruthy();
     expect(within(deposits).getByText("4,157")).toBeTruthy();
     expect(within(deposits).getByText(/in 40 states and territories/)).toBeTruthy();

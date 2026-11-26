@@ -7,7 +7,7 @@ import { valueAxis, y9cCharts } from "@/lib/sources/company/charts";
 import { assetsTie, dayLabel, quarterLabel, showCell, unitLabel, usdShort } from "@/lib/sources/company/present";
 import type { Y9cReport } from "@/lib/sources/company/types";
 import { Y9C_INSTRUCTIONS_URL } from "@/lib/sources/company/y9c-fields";
-import { FigureHead } from "./chart-parts";
+import { FigureHead, SourceLine } from "./chart-parts";
 import { OutLink, RecordLink } from "./record-link";
 import { QuarterColumns, RatioLines } from "./small-charts";
 
@@ -51,6 +51,9 @@ function Y9cCharts({ report }: { report: Y9cReport }) {
       <p className="mt-1.5 text-[11px] text-muted-foreground">
         The store holds {report.quarters.length} {report.quarters.length === 1 ? "quarter" : "quarters"} of this form. Net income is reported for the calendar year to date, so each column adds the quarters before it. Ratio labels are rounded to two decimals; the table and the tooltips show the four decimals filed.
       </p>
+      <div className="mt-1">
+        <SourceLine source={report.source}>Federal Reserve, FR Y-9C as filed, {span}</SourceLine>
+      </div>
     </div>
   );
 }

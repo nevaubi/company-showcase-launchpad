@@ -38,7 +38,7 @@ export function DepositsByStateView({ data }: { data: DepositsByState }) {
   const states = countText(data.totals?.states);
   const axisMax = valueAxis([v.max], unit);
   return (
-    <div data-section="Deposits by state" className="min-w-0 border-t px-3.5 pb-2.5 pt-2.5">
+    <div data-section="Charter deposits by state" className="min-w-0 border-t px-3.5 pb-2.5 pt-2.5">
       <div className="flex flex-wrap items-start gap-2">
         <div className="mr-auto min-w-0">
           <FigureHead

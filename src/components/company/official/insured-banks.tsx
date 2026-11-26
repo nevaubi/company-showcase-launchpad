@@ -189,7 +189,7 @@ function BankDetail({ bank, data, pending }: { bank: OfficialBank; data: Company
           <DepositsByStateView data={deposits} />
         </div>
       ) : data.depositsNote && data.history?.cert === bank.cert ? (
-        <p data-section="Deposits by state" className="border-t px-3.5 py-1.5 text-[11px] text-muted-foreground">Deposits by state: {data.depositsNote}</p>
+        <p data-section="Charter deposits by state" className="border-t px-3.5 py-1.5 text-[11px] text-muted-foreground">Deposits by state: {data.depositsNote}</p>
       ) : null}
     </div>
   );
