@@ -279,6 +279,34 @@ describe("distribution", () => {
     expect(r.derivation?.inputs).toHaveLength(2);
   });
 
+  it("reads the median in the reader scale of a whitelisted unit and writes the edges on its axis", () => {
+    const r = ok(computeDistributionTile({ ...spec, draw: { as: "histogram", edges: ["1000000", "3000000", "10000000", "300000000"] } }, c, fdicCrossSection("ASSET")));
+    // the headline keeps the stored figure; the figure above it reads in USD billions, as filed beneath
+    expect(r.reader).toMatchObject({ figure: "$6.116 billion", filed: "6,115,843 USD thousands (monetary measures) as filed" });
+    expect(r.reader?.axis.title).toBe("USD billions");
+    if (r.shape?.kind !== "distribution") throw new Error("shape");
+    expect(r.shape.bins?.map((b) => [b.axisFrom, b.axisTo])).toEqual([
+      ["1", "3"],
+      ["3", "10"],
+      ["10", "300"],
+      ["300", null],
+    ]);
+  });
+
+  it("writes the edges grouped as filed where the unit has no reader scale", () => {
+    const pct: DistributionTileSpec = { ...spec, unit: "Percent", decimals: 1, draw: { as: "histogram", edges: ["5", "7.5", "10"] } };
+    const cells = Array.from({ length: 8 }, (_, i) => ({ row: i + 1, key: `e${i}`, name: null, period: "20260930", text: String(4 + i) }));
+    const r = ok(computeDistributionTile(pct, ctx("fdic", "ASSET", "Percent", "yyyymmdd", "quarter"), cells));
+    expect(r.reader).toBeUndefined();
+    if (r.shape?.kind !== "distribution") throw new Error("shape");
+    expect(r.shape.bins?.map((b) => [b.label, b.axisFrom, b.axisTo])).toEqual([
+      ["below 5.0", null, "5.0"],
+      ["5.0 to 7.5", "5.0", "7.5"],
+      ["7.5 to 10.0", "7.5", "10.0"],
+      ["10.0 and above", "10.0", null],
+    ]);
+  });
+
   it("refuses bin edges that do not rise", () => {
     expect(computeDistributionTile({ ...spec, draw: { as: "histogram", edges: ["5", "1"] } }, c, fdicCrossSection("ASSET")).ok).toBe(false);
   });
@@ -336,8 +364,13 @@ describe("stat", () => {
     expect(r.points).toHaveLength(24);
   });
 
-  it("has no change where the period a year earlier has no figure", () => {
+  it("says a change asked for has no figure a year earlier, never that nothing changed", () => {
     const r = ok(computeStatTile({ ...spec, measure: "UNRATE", datasetId: "unrate" }, fred("UNRATE").context, fredCells("UNRATE")));
+    expect(r.shape).toEqual({ kind: "stat", change: null, missing: "No figure a year earlier" });
+  });
+
+  it("says nothing of a change none asked for", () => {
+    const r = ok(computeStatTile({ ...spec, changeAs: undefined }, fred("FEDFUNDS").context, fredCells("FEDFUNDS")));
     expect(r.shape).toEqual({ kind: "stat", change: null });
   });
 });

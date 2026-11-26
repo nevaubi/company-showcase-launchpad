@@ -3,6 +3,7 @@ import * as d3 from "d3";
 import type { ScaleAxis } from "@/lib/sources/boards/scale";
 import type { TilePoint } from "@/lib/sources/boards/types";
 import { estimateTextWidth, rankLayout } from "./ranked-layout";
+import { timeTicks } from "../charts/primitives";
 
 /**
  * The chart of one tile: one series, so no legend (the tile's title names it). A line breaks at a gap
@@ -47,9 +48,11 @@ const MINUS = "−";
  * Decimal places that show a tick step: none for whole steps, one for tenths, two below. A step computed in
  * floating point (1.2 - 1.1 = 0.0999...) counts as the step it stands for.
  */
-function stepPlaces(step: number): number {
+/** Decimal places that tell ticks one step apart from each other: 0 from a step of 1, 3 for 0.005, at most 6. */
+export function stepPlaces(step: number): number {
   const s = Math.abs(step) * (1 + 1e-9);
-  return s >= 1 ? 0 : s >= 0.1 ? 1 : 2;
+  if (!(s > 0) || s >= 1) return 0;
+  return Math.min(6, Math.ceil(-Math.log10(s) - 1e-9));
 }
 
 /** Axis ticks: in full below 10,000, compact (K, M, B, T) above, with a true minus sign. */
@@ -179,10 +182,9 @@ function LineChart({ points, unit, label, recordHref, onOpen, height = TILE_CHAR
     .defined((d) => d.py !== null)
     .x((d) => d.px)
     .y((d) => d.py as number)(xy);
-  const span = (x.domain()[1].getTime() - x.domain()[0].getTime()) / 86_400_000;
-  // Years on an axis of two years or more (one tick each, never a year twice), months on a shorter one.
-  const years = span > 700 ? x.ticks(d3.utcYear.every(span > 3700 ? 5 : span > 1900 ? 2 : 1) as d3.TimeInterval) : x.ticks(width < 360 ? 3 : 4);
-  const xFormat = span > 700 ? d3.utcFormat("%Y") : d3.utcFormat("%b %Y");
+  // Years on an axis of two years or more (one tick each, never a year twice), months on a shorter one, days on one
+  // of a few months, so no two ticks read alike.
+  const { ticks: years, format: xFormat } = timeTicks(x, width);
   const zeroInside = y.domain()[0] < 0 && y.domain()[1] > 0;
   const lastXy = last ? xy.find((d) => d.p === last) : null;
   const hovered = hover === null ? null : xy[hover];
@@ -246,6 +248,34 @@ function LineChart({ points, unit, label, recordHref, onOpen, height = TILE_CHAR
   );
 }
 
+/**
+ * Where the last column's value is written: ending at the column's right edge, above the tallest column the text
+ * passes over (below the deepest one for a negative value), so it never sits on a neighbour.
+ */
+export function columnEndLabel(
+  points: readonly TilePoint[],
+  at: number,
+  text: string,
+  band: d3.ScaleBand<number>,
+  bar: number,
+  y: d3.ScaleLinear<number, number>,
+): { x: number; y: number; text: string } {
+  const value = points[at].value as number;
+  const right = (band(at) ?? 0) + band.bandwidth() / 2 + bar / 2;
+  const left = right - estimateTextWidth(text, 10);
+  const covered = points.filter((p, i) => {
+    if (p.value === null) return false;
+    const cx = (band(i) ?? 0) + band.bandwidth() / 2;
+    return cx + bar / 2 >= left && cx - bar / 2 <= right;
+  });
+  if (value >= 0) {
+    const top = Math.max(0, ...covered.map((p) => p.value as number));
+    return { x: right, y: y(top) - 4, text };
+  }
+  const bottom = Math.min(0, ...covered.map((p) => p.value as number));
+  return { x: right, y: y(bottom) + 11, text };
+}
+
 function ColumnChart({ points, unit, label, recordHref, onOpen, height = TILE_CHART_HEIGHT, labelOf }: ChartProps) {
   const [ref, width] = useWidth(220);
   const [hover, setHover] = useState<number | null>(null);
@@ -262,6 +292,7 @@ function ColumnChart({ points, unit, label, recordHref, onOpen, height = TILE_CH
   const bar = Math.min(24, Math.max(2, band.bandwidth()));
   const every = Math.max(1, Math.ceil(points.length / (width < 360 ? 4 : 6)));
   const lastIndex = points.length - 1;
+  const endLabel = points[lastIndex] && points[lastIndex].value !== null ? columnEndLabel(points, lastIndex, labelOf(points[lastIndex]), band, bar, y) : null;
 
   return (
     <div ref={ref} className="relative" style={{ height }}>
@@ -295,14 +326,9 @@ function ColumnChart({ points, unit, label, recordHref, onOpen, height = TILE_CH
               </text>
             ) : null,
           )}
-          {points[lastIndex]?.value !== null && points[lastIndex] && (
-            <text
-              x={(band(lastIndex) ?? 0) + band.bandwidth() / 2}
-              y={(points[lastIndex].value as number) >= 0 ? y(points[lastIndex].value as number) - 4 : y(points[lastIndex].value as number) + 11}
-              textAnchor="end"
-              className="fill-foreground font-mono text-[10px] font-medium"
-            >
-              {labelOf(points[lastIndex])}
+          {endLabel && (
+            <text x={endLabel.x} y={endLabel.y} textAnchor="end" className="fill-foreground font-mono text-[10px] font-medium">
+              {endLabel.text}
             </text>
           )}
           {points.map((p, i) => (

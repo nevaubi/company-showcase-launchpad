@@ -41,10 +41,12 @@ describe("board layouts", () => {
     expect(sectionRequests({ title: "x", tiles: Array.from({ length: 13 }, (_, i) => ({ id: `t${i}`, title: "", form: "line", size: "regular", collection: "c", datasetId: "d" })) }, 6).map((r) => r.length)).toEqual([6, 6, 1]);
   });
 
-  it("show every chart of every board in the gallery exactly once, a landing tile through its collection's board", () => {
+  it("show every board whole in the gallery and every chart, a landing tile through its collection's board when it has one", () => {
     const gallery = galleryBoards();
+    // a collection board holds all its tiles, as on its collection page (a tile on two boards is on both)
+    for (const b of gallery.filter((x) => x.id !== "library"))
+      expect(new Set(b.sections.flatMap((s) => s.tiles.map((t) => t.id))), b.id).toEqual(new Set(BOARDS.find((x) => x.id === b.id)!.tiles));
     const shown = gallery.flatMap((b) => b.sections.flatMap((s) => s.tiles.map((t) => t.id)));
-    expect(new Set(shown).size).toBe(shown.length);
     expect(new Set(shown)).toEqual(new Set(BOARDS.flatMap((b) => b.tiles)));
     // a tile shown under the landing board is on no collection board
     const landing = gallery.find((b) => b.id === "library");

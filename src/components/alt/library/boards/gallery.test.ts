@@ -10,10 +10,9 @@ describe("the Charts page", () => {
   const boards = galleryBoards();
   const every = new Set(BOARDS.flatMap((b) => b.tiles));
 
-  it("shows every chart of every board once, unfiltered, each section requested whole", () => {
+  it("shows every chart of every board, unfiltered, each section requested whole, and counts each chart once", () => {
     const all = filterGallery(boards, {});
     expect(all.map((b) => b.board.id)).toEqual(boards.map((b) => b.id));
-    expect(shownIds(all)).toHaveLength(every.size);
     expect(new Set(shownIds(all))).toEqual(every);
     for (const b of all) for (const s of b.sections) expect(s.shown).toEqual(s.section.tiles.map((t) => t.id));
     expect(gallerySummary(all, undefined)).toBe(`${every.size} charts on ${boards.length} boards`);

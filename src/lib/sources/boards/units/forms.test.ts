@@ -3,7 +3,7 @@ import { FakeSourceDb } from "../../read.fake";
 import { resetReadState } from "../../read.server";
 import { readTiles, resetBoardCache } from "../board.server";
 import { boardFixtureTables } from "../fixtures";
-import { BOARDS, CORE_TILES } from "../specs";
+import { BOARDS, CORE_BOARDS, TILES } from "../specs";
 import { SPECS } from "./forms";
 
 /**
@@ -87,10 +87,15 @@ describe("the forms tiles on production rows", () => {
     const landing = BOARDS.find((x) => x.id === "library")!;
     const own = SPECS.boardTiles.library;
     expect(own).toHaveLength(7);
-    const coreAndOwn = landing.tiles.filter((t) => !SPECS.tiles.some((s) => s.id === t) || own.includes(t));
-    expect(coreAndOwn.length).toBeGreaterThanOrEqual(16);
-    const specs = coreAndOwn.map((id) => SPECS.tiles.find((s) => s.id === id) ?? CORE_TILES.find((s) => s.id === id)!);
-    expect(new Set(specs.map((s) => s.collection)).size).toBeGreaterThanOrEqual(6);
+    // the core's landing tiles and forms' own; other units' landing tiles come after them and are theirs to test
+    const coreAndOwn = landing.tiles.filter((t) => CORE_BOARDS.find((b) => b.id === "library")!.tiles.includes(t) || own.includes(t));
+    expect(coreAndOwn).toHaveLength(16);
+    expect(landing.tiles.slice(0, 16)).toEqual(coreAndOwn);
+    const specs = coreAndOwn.map((id) => TILES.find((s) => s.id === id));
+    expect(specs.every((s) => s !== undefined)).toBe(true);
+    expect(new Set(specs.map((s) => s!.collection)).size).toBeGreaterThanOrEqual(6);
+    // every tile on the landing board, whoever added it, is defined once
+    for (const id of landing.tiles) expect(TILES.filter((s) => s.id === id), id).toHaveLength(1);
     // the core's 30-year mortgage line is there, so the 30- and 15-year comparison is not
     expect(landing.tiles).toContain("mortgage-rate-30y");
     expect(landing.tiles).not.toContain("mortgage-30y-15y");

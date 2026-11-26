@@ -68,9 +68,9 @@ export function filterGallery(boards: readonly BoardLayout[], search: ChartsSear
 
 const count = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
-/** "59 charts on 7 boards", with the words searched for when there are any. */
+/** "59 charts on 7 boards" (a chart on two boards counted once), with the words searched for when there are any. */
 export function gallerySummary(shown: readonly GalleryBoard[], q: string | undefined): string {
-  const charts = shown.reduce((s, b) => s + b.sections.reduce((t, x) => t + x.shown.length, 0), 0);
+  const charts = new Set(shown.flatMap((b) => b.sections.flatMap((x) => x.shown))).size;
   return `${count(charts, "chart", "charts")} on ${count(shown.length, "board", "boards")}${q?.trim() ? `, with "${q.trim()}" in the title` : ""}`;
 }
 

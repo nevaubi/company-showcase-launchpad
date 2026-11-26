@@ -17,7 +17,10 @@ type Props = {
   /** Every entity with a figure, largest first. */
   points: TilePoint[];
   median: { value: number; display: string };
+  /** The unit as filed: the bins' labels and the tooltip are in it. */
   unit: string;
+  /** The axis title of the bin edges: the reader scale's ("USD billions") where the bins carry reader-scale edges. */
+  axisTitle?: string;
   label: string;
   recordHref: (row: number) => string;
   /** The records of the period, for a click on a bin. */
@@ -26,21 +29,39 @@ type Props = {
   height: number;
 };
 
-/** A bin edge (decimal text in the unit as filed) as an axis tick: compact above 10,000, as the other charts' ticks. */
-function edgeTick(edge: string | null): string {
-  if (edge === null) return "";
+/** A bin edge (decimal text in the unit as filed) as an axis tick, for results that carry no axis text of their own. */
+function edgeTick(edge: string): string {
   const v = Number(edge);
   return tickFormat(v, Math.abs(v) || 1);
+}
+
+/**
+ * The edges of the bins on the axis, each at the boundary between two columns: every bin's lower edge, and the upper
+ * edge of a last bin that has one. The open side of an end bin has no edge.
+ */
+function binEdges(bins: readonly DistributionBin[], band: d3.ScaleBand<number>): { x: number; text: string }[] {
+  const half = (band.step() - band.bandwidth()) / 2;
+  const out: { x: number; text: string }[] = [];
+  bins.forEach((b, i) => {
+    if (b.from !== null) out.push({ x: (band(i) ?? 0) - half, text: b.axisFrom ?? edgeTick(b.from) });
+    if (i === bins.length - 1 && b.to !== null) out.push({ x: (band(i) ?? 0) + band.bandwidth() + half, text: b.axisTo ?? edgeTick(b.to) });
+  });
+  return out;
+}
+
+/** Where the median's label starts or ends: beside its mark, toward the middle of the chart. */
+function medianLabelX(x: number, iw: number): number {
+  return x > iw / 2 ? x - 4 : x + 4;
 }
 
 export function DistributionChart(props: Props) {
   return props.draw === "histogram" && props.bins ? <Histogram {...props} bins={props.bins} /> : <Strip {...props} />;
 }
 
-function Histogram({ bins, median, unit, label, periodHref, onOpen, height }: Props & { bins: DistributionBin[] }) {
+function Histogram({ bins, median, unit, axisTitle, label, periodHref, onOpen, height }: Props & { bins: DistributionBin[] }) {
   const [ref, width] = useWidth(220);
   const [hover, setHover] = useState<number | null>(null);
-  const margin = { top: 16, right: 8, bottom: 30, left: 36 };
+  const margin = { top: 16, right: 12, bottom: 30, left: 36 };
   const iw = Math.max(40, width - margin.left - margin.right);
   const ih = Math.max(40, height - margin.top - margin.bottom);
   const y = d3.scaleLinear().domain([0, d3.max(bins, (b) => b.count) || 1]).nice(4).range([ih, 0]);
@@ -52,7 +73,11 @@ function Histogram({ bins, median, unit, label, periodHref, onOpen, height }: Pr
     const hi = b.to === null ? Infinity : Number(b.to);
     return median.value >= lo && median.value < hi;
   });
-  const every = Math.max(1, Math.ceil(bins.length / (width < 360 ? 4 : 7)));
+  // the edges stand between the columns, where one bin ends and the next begins; thinned when they would touch
+  const edges = binEdges(bins, band);
+  const room = edges.length > 1 ? Math.abs(edges[1].x - edges[0].x) : iw;
+  const widest = Math.max(...edges.map((e) => e.text.length), 1) * 6 + 6;
+  const every = Math.max(1, Math.ceil(widest / Math.max(1, room)));
   const shown = hover === null ? null : bins[hover];
   return (
     <div ref={ref} className="relative" style={{ height }}>
@@ -76,29 +101,38 @@ function Histogram({ bins, median, unit, label, periodHref, onOpen, height }: Pr
           })}
           {medianBin >= 0 && (
             <g pointerEvents="none">
+              {/* the median's bin is marked above its column: the bins are not to scale, so no line runs through it */}
               <line
                 x1={(band(medianBin) ?? 0) + band.bandwidth() / 2}
                 x2={(band(medianBin) ?? 0) + band.bandwidth() / 2}
                 y1={-10}
-                y2={ih}
+                y2={Math.max(-10, y(bins[medianBin].count) - 3)}
                 stroke="var(--foreground)"
                 strokeWidth={1}
                 opacity={0.7}
               />
-              <text x={(band(medianBin) ?? 0) + band.bandwidth() / 2 + 4} y={-3} className="fill-foreground font-mono text-[10px]">
+              <text
+                x={medianLabelX((band(medianBin) ?? 0) + band.bandwidth() / 2, iw)}
+                y={-3}
+                textAnchor={(band(medianBin) ?? 0) + band.bandwidth() / 2 > iw / 2 ? "end" : "start"}
+                className="fill-foreground font-mono text-[10px]"
+              >
                 Median {median.display}
               </text>
             </g>
           )}
-          {bins.map((b, i) =>
-            i % every === 0 || i === bins.length - 1 ? (
-              <text key={`x${b.label}`} x={(band(i) ?? 0) + band.bandwidth() / 2} y={ih + 14} textAnchor="middle" className="fill-muted-foreground font-mono text-[9px]">
-                {b.from === null ? `< ${edgeTick(b.to)}` : b.to === null ? `≥ ${edgeTick(b.from)}` : edgeTick(b.from)}
-              </text>
+          {edges.map((e, k) =>
+            k % every === 0 || k === edges.length - 1 ? (
+              <g key={`x${e.text}`} transform={`translate(${e.x},${ih})`}>
+                <line y1={0} y2={4} stroke="var(--border)" strokeWidth={1} shapeRendering="crispEdges" />
+                <text y={14} textAnchor="middle" className="fill-muted-foreground font-mono text-[9px]">
+                  {e.text}
+                </text>
+              </g>
             ) : null,
           )}
           <text x={iw / 2} y={ih + 26} textAnchor="middle" className="fill-muted-foreground text-[10px]">
-            {unit}, bins closed on the left
+            {axisTitle ?? unit}, bins closed on the left
           </text>
           {bins.map((b, i) => (
             <rect

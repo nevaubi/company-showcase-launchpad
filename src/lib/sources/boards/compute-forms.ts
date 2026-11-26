@@ -47,7 +47,7 @@ import {
   type TileContext,
   type WholeTable,
 } from "./compute";
-import { axisLabel } from "./scale";
+import { axisLabel, readerFigure } from "./scale";
 import { RULE_WORDS, namedFromCodes, placeName, stateRule } from "./places";
 import type {
   Cadence,
@@ -535,6 +535,10 @@ export function computeDistributionTile(spec: DistributionTileSpec, context: Til
   const q1 = middle(lowerHalf);
   const q3 = middle(upperHalf);
   const print = (d: Decimal) => formatDecimal(d, { decimals: spec.decimals });
+  // a whitelisted unit reads the median in its reader scale, the figure as filed beneath it (scale.ts)
+  const reader = readerFigure(spec.unit, median, print(median));
+  // an edge on the axis: in the reader scale, without trailing zeros ("1", "0.5"), or grouped as filed
+  const axisEdge = (d: Decimal) => (reader ? axisLabel(d, { ...reader.axis, decimals: Math.max(reader.axis.decimals, 3) }).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "") : print(d));
   let bins: DistributionBin[] | null = null;
   if (spec.draw.as === "histogram") {
     const edges = spec.draw.edges.map((e) => parseDecimal(e));
@@ -557,12 +561,15 @@ export function computeDistributionTile(spec: DistributionTileSpec, context: Til
       else for (let i = 0; i < e.length - 1; i += 1) if (compareDecimal(v.value, e[i]) >= 0 && compareDecimal(v.value, e[i + 1]) < 0) at = i + 1;
       buckets[at].members.push({ name: v.cell.name ?? v.cell.key, value: v.value });
     }
+    const edgeAt = new Map(texts.map((t, i) => [t, axisEdge(e[i])] as const));
     bins = buckets
       .filter((b, i) => b.members.length > 0 || (i > 0 && i < buckets.length - 1))
       .map((b) => ({
         from: b.from,
         to: b.to,
         label: b.label,
+        axisFrom: b.from === null ? null : (edgeAt.get(b.from) ?? null),
+        axisTo: b.to === null ? null : (edgeAt.get(b.to) ?? null),
         count: b.members.length,
         members: [...b.members].sort((x, y) => compareDecimal(y.value, x.value)).slice(0, 5).map((m) => m.name),
       }));
@@ -582,6 +589,7 @@ export function computeDistributionTile(spec: DistributionTileSpec, context: Til
     headline: `The median ${spec.subject} of ${n} ${spec.entities} was ${print(median)}${words} ${when}; the middle half were between ${print(q1)} and ${print(q3)}${words.trim() === "%" ? "%" : ""}.`,
     figure: print(median),
     figureUnit: figureUnitOf(spec.unit),
+    ...(reader ? { reader } : {}),
     asOf: table ? `Retrieved ${table.retrieved}` : label,
     unit: spec.unit,
     plotUnit: spec.unit,
@@ -755,7 +763,9 @@ export function computeStatTile(spec: StatTileSpec, context: TileContext, cells:
         against: named(context.cadence, inputs[1].label),
       };
   }
-  return { ...r, shape: { kind: "stat", change } };
+  // a change asked for and not computed says why; it is never shown as no change
+  const missing = spec.changeAs && !change ? "No figure a year earlier" : undefined;
+  return { ...r, shape: { kind: "stat", change, ...(missing ? { missing } : {}) } };
 }
 
 // ---------------------------------------------------------------- records
