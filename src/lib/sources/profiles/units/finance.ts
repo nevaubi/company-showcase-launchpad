@@ -47,7 +47,8 @@ export const h8Series = (code: string) => ({ where: [{ field: "series", value: c
  * states the unit of every series as currency USD with multiplier 1,000,000, so a value is in millions of dollars;
  * the release tables print the same data in billions. A record must carry "USD" and "1000000" to be drawn (`fixed`).
  * Monthly levels are pro rata averages of Wednesday values (the release's notes). The table has no indexed series
- * key: a series is a cell filter on `series`, allowed on 1,932 records.
+ * key: a series is a cell filter, allowed on 1,932 records, on `description` for a reader picking one (each of the six
+ * descriptions belongs to one series code) or on `series` for a tile.
  * Checked on 26 Nov 2026: all 1,932 records (date, value and status of the six series, Jan 2000 to Oct 2026) equal
  * the Board's H.8 package retrieved that day.
  */
@@ -59,16 +60,17 @@ function h8Profile(): Profile {
     period: { from: "dimension", format: "iso-date" },
     cadence: "month",
     fixed: H8_FIXED,
-    measures: [{ field: "value_native", label: "Value", unit: { from: "constant", text: H8_UNIT, evidence: H8_EVIDENCE }, grouping: "none" }],
-    extraFields: ["date", "description"],
+    // "Level" is the Board's own word for these series (H8_UNITS="LEVEL" in the package)
+    measures: [{ field: "value_native", label: "Level", unit: { from: "constant", text: H8_UNIT, evidence: H8_EVIDENCE }, grouping: "none" }],
+    extraFields: ["date", "series"],
     addressing: {
       by: null,
-      where: ["series"],
+      where: ["description"],
       scan: "table",
       rowsScanned: 1932,
-      note: "A series is the records of one series code, found by a cell filter with the unit fields; the table has 1,932 records.",
+      note: "A series is the records of one series description (one series code each), found by a cell filter with the unit fields; the table has 1,932 records.",
     },
-    defaultSeries: () => h8Series("B1151NCBDM"),
+    defaultSeries: () => ({ where: [{ field: "description", value: "Total assets, all commercial banks, not seasonally adjusted" }, ...H8_FIXED] }),
     firstLook: "series",
     proof: {
       snapshotId: H8_MONTHLY_SNAPSHOT,
@@ -153,8 +155,11 @@ function z1SectorsProfile(): Profile {
 
 export const FED_Z1_SECTORS_ENTRY: ProfileEntry = { family: "fed-z1-sectors", claims: z1SectorsClaims, profile: z1SectorsProfile };
 
-/** One series of a Z.1 release table: its code (the field label), the Board's description, and its unit as stated. */
-export type Z1Series = { code: string; description: string; unit: typeof Z1_UNIT | typeof Z1_PERCENT };
+/**
+ * One series of a Z.1 release table: its code (the field label), the Board's description, its label (the description
+ * less the words the table's title already states, for the measure picker) and its unit as stated.
+ */
+export type Z1Series = { code: string; description: string; label: string; unit: typeof Z1_UNIT | typeof Z1_PERCENT };
 
 /** A Z.1 release table as the store keeps it: a `date` column and one column per series, one record per quarter. */
 export type Z1Table = {
@@ -177,12 +182,12 @@ export const Z1_TABLES: readonly Z1Table[] = [
     snapshotId: "14af3d2dc0294c69f4f7df640c28ae5f471c2740c1e76f92266449afaa0b309c",
     basis: Z1_OUTSTANDING_NSA,
     series: [
-      { code: "FL152090005.Q", description: "Households and nonprofit organizations; net worth", unit: Z1_UNIT },
-      { code: "FL152000005.Q", description: "Households and nonprofit organizations; total assets", unit: Z1_UNIT },
-      { code: "FL154090005.Q", description: "Households and nonprofit organizations; total financial assets", unit: Z1_UNIT },
-      { code: "FL154190005.Q", description: "Households and nonprofit organizations; total liabilities", unit: Z1_UNIT },
-      { code: "FL153165105.Q", description: "Households and nonprofit organizations; one-to-four-family residential mortgages; liability", unit: Z1_UNIT },
-      { code: "FL153166000.Q", description: "Households and nonprofit organizations; consumer credit; liability", unit: Z1_UNIT },
+      { code: "FL152090005.Q", description: "Households and nonprofit organizations; net worth", label: "Net worth", unit: Z1_UNIT },
+      { code: "FL152000005.Q", description: "Households and nonprofit organizations; total assets", label: "Total assets", unit: Z1_UNIT },
+      { code: "FL154090005.Q", description: "Households and nonprofit organizations; total financial assets", label: "Total financial assets", unit: Z1_UNIT },
+      { code: "FL154190005.Q", description: "Households and nonprofit organizations; total liabilities", label: "Total liabilities", unit: Z1_UNIT },
+      { code: "FL153165105.Q", description: "Households and nonprofit organizations; one-to-four-family residential mortgages; liability", label: "One-to-four-family residential mortgages; liability", unit: Z1_UNIT },
+      { code: "FL153166000.Q", description: "Households and nonprofit organizations; consumer credit; liability", label: "Consumer credit; liability", unit: Z1_UNIT },
     ],
     first: "FL152090005.Q",
   },
@@ -192,13 +197,13 @@ export const Z1_TABLES: readonly Z1Table[] = [
     snapshotId: "a455ab17ed3b8d37ba3540450b458eaf1939e45b4834ff26c5393edb1ed019f8",
     basis: Z1_OUTSTANDING_SA,
     series: [
-      { code: "LA384104005.Q", description: "Domestic nonfinancial sectors; debt securities and loans; liability", unit: Z1_UNIT },
-      { code: "LA154104005.Q", description: "Households and nonprofit organizations; debt securities and loans; liability", unit: Z1_UNIT },
-      { code: "LA144104005.Q", description: "Nonfinancial business; debt securities and loans; liability", unit: Z1_UNIT },
-      { code: "LA314104005.Q", description: "Federal government; debt securities and loans; liability", unit: Z1_UNIT },
-      { code: "LA214104005.Q", description: "State and local governments; debt securities and loans; liability", unit: Z1_UNIT },
-      { code: "LA794104005.Q", description: "Domestic financial sectors; debt securities and loans; liability", unit: Z1_UNIT },
-      { code: "LA264104005.Q", description: "Rest of the world; debt securities and loans; liability", unit: Z1_UNIT },
+      { code: "LA384104005.Q", description: "Domestic nonfinancial sectors; debt securities and loans; liability", label: "Domestic nonfinancial sectors; debt securities and loans", unit: Z1_UNIT },
+      { code: "LA154104005.Q", description: "Households and nonprofit organizations; debt securities and loans; liability", label: "Households and nonprofit organizations; debt securities and loans", unit: Z1_UNIT },
+      { code: "LA144104005.Q", description: "Nonfinancial business; debt securities and loans; liability", label: "Nonfinancial business; debt securities and loans", unit: Z1_UNIT },
+      { code: "LA314104005.Q", description: "Federal government; debt securities and loans; liability", label: "Federal government; debt securities and loans", unit: Z1_UNIT },
+      { code: "LA214104005.Q", description: "State and local governments; debt securities and loans; liability", label: "State and local governments; debt securities and loans", unit: Z1_UNIT },
+      { code: "LA794104005.Q", description: "Domestic financial sectors; debt securities and loans; liability", label: "Domestic financial sectors; debt securities and loans", unit: Z1_UNIT },
+      { code: "LA264104005.Q", description: "Rest of the world; debt securities and loans; liability", label: "Rest of the world; debt securities and loans", unit: Z1_UNIT },
     ],
     first: "LA384104005.Q",
   },
@@ -208,11 +213,11 @@ export const Z1_TABLES: readonly Z1Table[] = [
     snapshotId: "8a6a503939153c028cd056bdeaf5dc74fc745ecf2d59dc4341f5394b17965dd3",
     basis: Z1_GROWTH_SAAR,
     series: [
-      { code: "FG384104005.Q", description: "Domestic nonfinancial sectors; debt securities and loans; liability", unit: Z1_PERCENT },
-      { code: "FG154104005.Q", description: "Households and nonprofit organizations; debt securities and loans; liability", unit: Z1_PERCENT },
-      { code: "FG144104005.Q", description: "Nonfinancial business; debt securities and loans; liability", unit: Z1_PERCENT },
-      { code: "FG314104005.Q", description: "Federal government; debt securities and loans; liability", unit: Z1_PERCENT },
-      { code: "FG214104005.Q", description: "State and local governments; debt securities and loans; liability", unit: Z1_PERCENT },
+      { code: "FG384104005.Q", description: "Domestic nonfinancial sectors; debt securities and loans; liability", label: "Domestic nonfinancial sectors; debt securities and loans", unit: Z1_PERCENT },
+      { code: "FG154104005.Q", description: "Households and nonprofit organizations; debt securities and loans; liability", label: "Households and nonprofit organizations; debt securities and loans", unit: Z1_PERCENT },
+      { code: "FG144104005.Q", description: "Nonfinancial business; debt securities and loans; liability", label: "Nonfinancial business; debt securities and loans", unit: Z1_PERCENT },
+      { code: "FG314104005.Q", description: "Federal government; debt securities and loans; liability", label: "Federal government; debt securities and loans", unit: Z1_PERCENT },
+      { code: "FG214104005.Q", description: "State and local governments; debt securities and loans; liability", label: "State and local governments; debt securities and loans", unit: Z1_PERCENT },
     ],
     first: "FG384104005.Q",
   },
@@ -237,7 +242,7 @@ function z1TableProfile(dataset: ProfileDataset): Profile {
   const ordered = [first, ...table.series.filter((s) => s !== first)];
   const measures: MeasureSpec[] = ordered.map((s) => ({
     field: s.code,
-    label: s.description,
+    label: s.label,
     unit: { from: "constant", text: s.unit, evidence: `${Z1_PACKAGE} (data_dictionary, ${s.code}: "${table.basis}")` },
     grouping: "none",
   }));

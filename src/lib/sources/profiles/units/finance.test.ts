@@ -127,7 +127,10 @@ describe("H.8 monthly headline balances", () => {
   it("refuses a series address that does not fix the currency and multiplier", () => {
     expect(addressRefusal(profile, h8Series("B1151NCBDM"))).toBeNull();
     expect(addressRefusal(profile, { where: [{ field: "series", value: "B1151NCBDM" }] })).toContain("unit");
-    expect(profile.defaultSeries?.(h8)).toEqual(h8Series("B1151NCBDM"));
+    // a reader picks a series by the Board's description; the first look opens on total assets
+    expect(profile.addressing.where).toEqual(["description"]);
+    expect(profile.defaultSeries?.(h8)).toEqual({ where: [{ field: "description", value: "Total assets, all commercial banks, not seasonally adjusted" }, ...H8_FIXED] });
+    expect(addressRefusal(profile, profile.defaultSeries!(h8)!)).toBeNull();
   });
 });
 
@@ -169,6 +172,8 @@ describe("Z.1 release tables", () => {
       const entry = fact.series[s.code];
       expect(entry, s.code).toBeDefined();
       expect(entry.description).toBe(s.description);
+      // the picker's label is the description less what the table's title states, never other words
+      expect(s.description.toLowerCase()).toContain(s.label.toLowerCase());
       expect(entry.unitAndBasis).toBe(table.basis);
       // the unit is the dictionary's own first words: "Millions of dollars; ..." or "Percent growth rate, ..."
       expect(entry.unitAndBasis.startsWith(s.unit)).toBe(true);
