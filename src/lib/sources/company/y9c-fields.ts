@@ -34,6 +34,10 @@ export interface Y9cFieldDef {
   /** Where the unit comes from. */
   unitEvidence: string;
   kind: "ratio" | "amount";
+  /** Capital lines (Schedule HC-R) or balance sheet and income lines (Schedules HC and HI). */
+  group: "capital" | "statement";
+  /** Schedule HI is reported for the calendar year to date; every other line is a balance or ratio at the report date. */
+  basis: "ytd" | "balance";
   /** Position in today's snapshot, checked against the label before use. */
   hint: number;
 }
@@ -41,19 +45,29 @@ export interface Y9cFieldDef {
 const PCT = (item: string) => `FR Y-9C instructions, Schedule HC-R, Part I, item ${item}: reported as a percentage, rounded to four decimal places`;
 const THOUSANDS = "FR Y-9C instructions, General Instructions, C. Rounding (GEN-5): dollar amounts are reported in thousands";
 
-/** The ten capital lines, in the order the panel shows them. */
+const YTD = "FR Y-9C instructions, Schedule HI: income and expenses are reported for the calendar year to date";
+
+/**
+ * The lines the panel shows, in order: two balance sheet and income lines (Schedules HC and HI; the stored
+ * dictionary states "USD thousands" for both, as the instructions do), then the ten capital lines (Schedule HC-R).
+ */
 export const Y9C_FIELDS: readonly Y9cFieldDef[] = [
-  { field: "BHCAP793", short: "Common equity tier 1 capital ratio", unit: "Percent", unitEvidence: PCT("47"), kind: "ratio", hint: 89 },
-  { field: "BHCA7206", short: "Tier 1 capital ratio", unit: "Percent", unitEvidence: PCT("48"), kind: "ratio", hint: 43 },
-  { field: "BHCA7205", short: "Total capital ratio", unit: "Percent", unitEvidence: PCT("49"), kind: "ratio", hint: 42 },
-  { field: "BHCA7204", short: "Tier 1 leverage ratio", unit: "Percent", unitEvidence: PCT("31"), kind: "ratio", hint: 41 },
-  { field: "BHCAH036", short: "Supplementary leverage ratio", unit: null, unitEvidence: "FR Y-9C instructions, Schedule HC-R, Part I, item 53: taken from FFIEC 101, Schedule A, Table 2, item 2.22; no unit stated, shown as filed", kind: "ratio", hint: 49 },
-  { field: "BHCALE85", short: "Stress capital buffer", unit: "Percent", unitEvidence: "FR Y-9C instructions, Schedule HC-R, Part I, item 60(a): the stress capital buffer or 2.5000 percent", kind: "ratio", hint: 68 },
-  { field: "BHCAP859", short: "Common equity tier 1 capital", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", hint: 105 },
-  { field: "BHCA8274", short: "Tier 1 capital", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", hint: 44 },
-  { field: "BHCA3792", short: "Total capital", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", hint: 38 },
-  { field: "BHCAA223", short: "Total risk-weighted assets", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", hint: 45 },
+  { field: "BHCK3210", short: "Total equity capital", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", group: "statement", basis: "balance", hint: 200 },
+  { field: "BHCK4340", short: "Net income", unit: "USD thousands", unitEvidence: `${THOUSANDS}; ${YTD}`, kind: "amount", group: "statement", basis: "ytd", hint: 288 },
+  { field: "BHCAP793", short: "Common equity tier 1 capital ratio", unit: "Percent", unitEvidence: PCT("47"), kind: "ratio", group: "capital", basis: "balance", hint: 89 },
+  { field: "BHCA7206", short: "Tier 1 capital ratio", unit: "Percent", unitEvidence: PCT("48"), kind: "ratio", group: "capital", basis: "balance", hint: 43 },
+  { field: "BHCA7205", short: "Total capital ratio", unit: "Percent", unitEvidence: PCT("49"), kind: "ratio", group: "capital", basis: "balance", hint: 42 },
+  { field: "BHCA7204", short: "Tier 1 leverage ratio", unit: "Percent", unitEvidence: PCT("31"), kind: "ratio", group: "capital", basis: "balance", hint: 41 },
+  { field: "BHCAH036", short: "Supplementary leverage ratio", unit: null, unitEvidence: "FR Y-9C instructions, Schedule HC-R, Part I, item 53: taken from FFIEC 101, Schedule A, Table 2, item 2.22; no unit stated, shown as filed", kind: "ratio", group: "capital", basis: "balance", hint: 49 },
+  { field: "BHCALE85", short: "Stress capital buffer", unit: "Percent", unitEvidence: "FR Y-9C instructions, Schedule HC-R, Part I, item 60(a): the stress capital buffer or 2.5000 percent", kind: "ratio", group: "capital", basis: "balance", hint: 68 },
+  { field: "BHCAP859", short: "Common equity tier 1 capital", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", group: "capital", basis: "balance", hint: 105 },
+  { field: "BHCA8274", short: "Tier 1 capital", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", group: "capital", basis: "balance", hint: 44 },
+  { field: "BHCA3792", short: "Total capital", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", group: "capital", basis: "balance", hint: 38 },
+  { field: "BHCAA223", short: "Total risk-weighted assets", unit: "USD thousands", unitEvidence: THOUSANDS, kind: "amount", group: "capital", basis: "balance", hint: 45 },
 ];
+
+/** The capital ratios drawn together on one percent axis: each has the unit "Percent" from the instructions. */
+export const Y9C_RATIO_CHART: readonly string[] = ["BHCAP793", "BHCA7206", "BHCA7205", "BHCA7204"];
 
 /** Identity and the tie line: RSSD (RSSD9001), report date (RSSD9999), total assets (BHCK2170, unit from the dictionary). */
 export const Y9C_KEYS = { rssd: { field: "RSSD9001", hint: 0 }, date: { field: "RSSD9999", hint: 1 }, assets: { field: "BHCK2170", hint: 183 } } as const;

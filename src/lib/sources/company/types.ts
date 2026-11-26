@@ -218,6 +218,40 @@ export interface BankHistory {
   sources: OfficialSource[];
   points: HistoryPoint[];
 }
+/** One branch state of an institution in the Summary of Deposits, as stored. */
+export interface DepositsState {
+  /** Branch state's postal abbreviation as stored (STALPBR). */
+  code: string;
+  /** Sum of the branches' deposits, in `DepositsByState.unit`. */
+  deposits: OfficialCell;
+  /** Branch records in the state. */
+  branches: OfficialCell;
+  row: number;
+}
+/** An institution's totals of the survey, as stored. */
+export interface DepositsTotals {
+  row: number;
+  deposits: OfficialCell;
+  branches: OfficialCell;
+  /** States and territories with a branch. */
+  states: OfficialCell;
+  /** The survey year as stored (deposits are as of 30 June of it). */
+  surveyYear: string | null;
+}
+/** One charter's deposits by branch state (FDIC Summary of Deposits), read by its certificate. */
+export interface DepositsByState {
+  cert: string;
+  /** NAMEFULL as stored. */
+  name: string | null;
+  /** The unit the dictionary states for the deposits sums. */
+  unit: string;
+  states: DepositsState[];
+  totals: DepositsTotals | null;
+  source: OfficialSource;
+  totalsSource: OfficialSource | null;
+  /** Field labels the figures come from, for their references. */
+  fields: { deposits: string; branches: string; state: string; states: string };
+}
 export interface Y9cLine {
   /** MDRM mnemonic, e.g. BHCAP793. */
   field: string;
@@ -225,6 +259,10 @@ export interface Y9cLine {
   label: string;
   /** Short name the panel uses. */
   short: string;
+  /** Capital lines (Schedule HC-R) or balance sheet and income lines (Schedules HC and HI). */
+  group: "capital" | "statement";
+  /** Year to date (Schedule HI) or a balance or ratio at the report date. */
+  basis: "ytd" | "balance";
   /** Reviewed unit (y9c-fields.ts), or null when it could not be established: then the value is shown as filed. */
   unit: string | null;
   unitEvidence: string | null;
@@ -268,6 +306,12 @@ export interface CompanyOfficial {
   /** The bank whose history is included. */
   history: BankHistory | null;
   historyNote: string | null;
+  /** Assets, deposits and quarterly net income of every proven cohort charter, largest first (the small multiple). */
+  trends: BankHistory[];
+  trendsNote: string | null;
+  /** The selected charter's deposits by branch state. */
+  deposits: DepositsByState | null;
+  depositsNote: string | null;
   y9c: Y9cReport | null;
   y9cNote: string | null;
   abs: AbsSponsorLine[];
