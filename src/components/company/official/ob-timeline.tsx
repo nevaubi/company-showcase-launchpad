@@ -100,10 +100,12 @@ export function ObTimelineView({ data }: { data: CompanyPatents }) {
           <svg width="10" height="10" aria-hidden><rect x="1.5" y="1.5" width="7" height="7" transform="rotate(45 5 5)" fill="var(--chart-2)" /></svg>
           Exclusivity ends, as listed
         </span>
-        <span className="flex items-center gap-1.5">
-          <svg width="10" height="10" aria-hidden><circle cx="5" cy="5" r="3.5" fill="none" stroke="var(--chart-1)" strokeWidth="1.5" /></svg>
-          Delisting requested
-        </span>
+        {t.rows.some(r => r.events.some(e => e.kind === "patent" && e.delisted && e.items.length === 1)) && (
+          <span className="flex items-center gap-1.5">
+            <svg width="10" height="10" aria-hidden><circle cx="5" cy="5" r="3.5" fill="none" stroke="var(--chart-1)" strokeWidth="1.5" /></svg>
+            Delisting requested
+          </span>
+        )}
       </div>
       <div className="relative">
         <div
