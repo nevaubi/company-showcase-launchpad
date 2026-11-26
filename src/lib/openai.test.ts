@@ -50,3 +50,21 @@ describe("classifyOpenAIError", () => {
     expect(classifyOpenAIError(403, "unsupported_country_region_territory", "", "Country not supported")).toBe("auth");
   });
 });
+
+describe("direct OpenAI model ids", () => {
+  it("refuses a gateway id before any request, as a configuration error", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+    try {
+      const { openaiDirectStructured } = await import("@/lib/openai.server");
+      const { classify } = await import("@/lib/jobs/failure");
+      for (const model of ["google/gemini-3.1-flash-lite", "openai/gpt-6-luna"]) {
+        const e = (await openaiDirectStructured({ model, name: "check", instructions: "Read", input: "test", schema: {} }).then(() => new Error("no error"), (x: unknown) => x)) as Error & { kind: string };
+        expect(e).toMatchObject({ kind: "auth" });
+        expect(classify({ message: e.message })).toBe("config");
+      }
+      expect(request).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+  });
+});

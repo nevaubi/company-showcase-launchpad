@@ -13,6 +13,8 @@
  * Attempted companies are remembered in the private bucket (ops/ir-deep-loop.json).
  * Single flight: job_state `ir-deep-loop` lease.
  *   bun scripts/ir-deep-loop.ts [--batch=10] [--wait-minutes=10] [--mirror-hours=3] [--detail-hours=12] [--seed=CVS,MCK]
+ * Priority (off unless set, scripts/lib/ir-priority.ts): IR_PRIORITY_GROUP=banks and/or
+ * IR_PRIORITY_TICKERS=JPM,BAC put those companies ahead of every other one while they have files waiting.
  */
 import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -20,6 +22,8 @@ import { args, dbGate, sb } from "./lib/supa";
 import { CONFIG_STATUS_LIKE, REREAD_WINDOW_DAYS, requeueEnabled, requeueLimit, requeuePlan, rereadTickers, type FailedDoc } from "./lib/ir-requeue";
 import { canonResetAllowed, catchupDueAfter, clearStalePausesNow, countsAgainstCompany, creditStopAfter, exitCode, healConfigDue, healedSince, laneBudget, LOOP_REQUEST_MAX, LOOP_REQUEST_PREFIX, loopRunRow, loopSleepMs, nextDue, planLoopRequests, proseMode, stepLimit } from "./lib/loop-schedule";
 import { loadRank } from "./lib/rank";
+import { priorityCampaign, priorityCandidates, priorityKey, priorityList, priorityMaxRuns, restorePriority, settlePriority, unknownGroups, type PriorityState } from "./lib/ir-priority";
+import { COVERAGE } from "@/lib/coverage";
 import { fairOrder } from "@/lib/jobs/priority";
 import { providerKey, routeDecision, routeOf, type CircuitDecision, type CircuitRow, type ProviderId } from "@/lib/jobs/provider-health";
 import { circuitEnabled, clearStaleReaderPauses, providerStates, resetProviderCache } from "@/lib/jobs/provider-health.server";
@@ -161,6 +165,8 @@ interface LoopState {
   pendingReread?: string[];
   lastForm4Repair?: string | null;
   lastRegistrantDrift?: string | null;
+  /** priority campaign (IR_PRIORITY_GROUP / IR_PRIORITY_TICKERS); kept while the settings are unchanged */
+  priority?: PriorityState | null;
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -682,6 +688,9 @@ async function maybeHealConfigFailures() {
     const tickers = [...new Set(out.tickers)];
     // Finished companies are rebuilt through the normal re-read path.
     for (const t of tickers) if (state.done.includes(t) && !pendingReread.includes(t)) pendingReread.push(t);
+    // Priority companies that had nothing waiting before this reset are read again in their place.
+    const p = priority();
+    if (p) restorePriority(p, tickers, priorityOrder);
     if (!out.extract && !out.vision && !plan0Found) {
       healConfigIdle = true;
       log("config re-queue: nothing left to re-queue — idle until a configuration trip");
@@ -693,6 +702,51 @@ async function maybeHealConfigFailures() {
   } catch (e) {
     log(`config re-queue failed: ${(e as Error).message.slice(0, 160)}`);
   }
+}
+
+// ---------- priority companies (banks first) ----------
+const PRIORITY_KEY = priorityKey(process.env);
+const PRIORITY_MAX_RUNS = priorityMaxRuns(process.env);
+for (const g of unknownGroups(process.env)) log(`priority: unknown group "${g}" ignored`);
+/** The campaign's full order (largest first); also where restored companies go back to. */
+let priorityOrder: string[] = [];
+if (PRIORITY_KEY) {
+  priorityOrder = priorityList(process.env, COVERAGE, await loadRank());
+  const before = state.priority?.key;
+  state.priority = priorityCampaign(state.priority, PRIORITY_KEY, priorityOrder);
+  log(before === PRIORITY_KEY ? `priority campaign continues: ${state.priority!.queue.length} companies left, ${state.priority!.done.length} finished` : `priority campaign started: ${priorityOrder.length} companies (${PRIORITY_KEY}), first ${priorityOrder.slice(0, 8).join(", ")}`);
+} else if (state.priority) {
+  // Settings unset: the campaign is kept in the state (a later start with the same settings resumes it) but not used.
+  log("priority off (IR_PRIORITY_GROUP / IR_PRIORITY_TICKERS unset): normal order");
+}
+const priority = (): PriorityState | null => (PRIORITY_KEY && state.priority?.key === PRIORITY_KEY ? state.priority : null);
+
+/**
+ * Next priority company with files waiting: taken even when it already has figures or was finished
+ * (it is moved out of `done` and into `attempted`, so a restart resumes it like any started company).
+ * Companies with nothing waiting or held for review leave the queue here.
+ */
+async function pickPriority(busy: Set<string>): Promise<string | null> {
+  const p = priority();
+  if (!p) return null;
+  for (const t of priorityCandidates(p, busy, {})) {
+    if (state.review![t]) {
+      settlePriority(p, t, "review", PRIORITY_MAX_RUNS);
+      log(`${t}: priority: held for review (${state.review![t]}), left out`);
+      continue;
+    }
+    const waiting = await unread(t);
+    if (!waiting) {
+      settlePriority(p, t, "empty", PRIORITY_MAX_RUNS);
+      log(`${t}: priority: nothing waiting to be read`);
+      continue;
+    }
+    state.done = state.done.filter((x) => x !== t);
+    if (!state.attempted.includes(t)) state.attempted.push(t);
+    log(`${t}: priority: ${waiting} files waiting (${p.queue.length} priority companies left)`);
+    return t;
+  }
+  return null;
 }
 
 // ---------- main loop ----------
@@ -742,6 +796,9 @@ const pendingReread: string[] = (state.pendingReread ??= []);
 async function pickNext(busy: Set<string>): Promise<string | null> {
   const free = (t: string) => !busy.has(t) && !state.review![t];
   for (const t of interrupted) if (free(t) && !state.done.includes(t)) return (interrupted.delete(t), t);
+  // Priority companies (IR_PRIORITY_GROUP / IR_PRIORITY_TICKERS) before every other one.
+  const pt = await pickPriority(busy);
+  if (pt) return pt;
   for (const t of state.attempted) {
     if (!free(t) || state.done.includes(t)) continue;
     if (await finished(t)) {
@@ -816,6 +873,7 @@ async function runCompany(t: string) {
       healedDuringRun: healedSince(READER_ROUTE.flatMap((id) => (circuits.get(providerKey(id)) ? [circuits.get(providerKey(id))!] : [])), t0),
     });
     log(`${t}: stopped on credits (${stopped.slice(0, 160)})${creditStop ? " — waiting the fixed interval" : ""}`);
+    // A priority company keeps its place: credit stops never count against it.
     return;
   }
   if (await finished(t)) {
@@ -824,12 +882,19 @@ async function runCompany(t: string) {
     (state.finishedLog ??= []).push({ t, at: new Date().toISOString() });
     if (state.finishedLog.length > 200) state.finishedLog.shift();
     log(`${t}: finished in ${((Date.now() - t0) / 60000).toFixed(1)} min — ${(await facts(t)).toLocaleString()} figures`);
+    const p = priority();
+    if (p?.queue.includes(t)) settlePriority(p, t, "finished", PRIORITY_MAX_RUNS);
   } else {
     // Exit 137 = killed for memory, "incomplete" = a reader couldn't start (busy elsewhere): the
     // machine's fault, not the company's. A deadline kill (124) counts only when no file was read.
     const unreadAfter = code === 124 ? await unread(t).catch(() => null) : null;
     if (countsAgainstCompany(code, await reportStage(t), unreadBefore, unreadAfter)) state.resumes![t] = (state.resumes![t] ?? 0) + 1;
     log(`${t}: run ended without finishing (${stopped ?? "no final report"}) — attempt ${state.resumes![t] ?? 0}`);
+    const p = priority();
+    if (p?.queue.includes(t)) {
+      settlePriority(p, t, "unfinished", PRIORITY_MAX_RUNS);
+      if (!p.queue.includes(t)) log(`${t}: priority: ${PRIORITY_MAX_RUNS} runs without finishing, back to the normal order`);
+    }
   }
 }
 
