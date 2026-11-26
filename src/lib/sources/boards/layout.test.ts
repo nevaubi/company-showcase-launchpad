@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COLLECTIONS } from "../catalog/collections";
 import { boardLayout, galleryBoards, sectionRequests } from "./layout";
 import { BOARDS, tileSpec } from "./specs";
 
@@ -26,10 +27,28 @@ describe("board layouts", () => {
     }
   });
 
-  it("list every collection board once in the gallery and split a long section into requests", () => {
-    const ids = galleryBoards().map((b) => b.id);
+  it("list every collection board once in the gallery, in collection order, and split a long section into requests", () => {
+    const gallery = galleryBoards();
+    const ids = gallery.map((b) => b.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).not.toContain("library");
+    const collections = ids.filter((id) => id !== "library");
+    const rank = (id: string) => {
+      const i = COLLECTIONS.findIndex((c) => c.id === id);
+      return i === -1 ? COLLECTIONS.length : i;
+    };
+    for (let i = 1; i < collections.length; i++) expect(rank(collections[i - 1]) <= rank(collections[i]), collections[i]).toBe(true);
+    expect([...collections].sort()).toEqual(BOARDS.filter((b) => b.id !== "library").map((b) => b.id).sort());
     expect(sectionRequests({ title: "x", tiles: Array.from({ length: 13 }, (_, i) => ({ id: `t${i}`, title: "", form: "line", size: "regular", collection: "c", datasetId: "d" })) }, 6).map((r) => r.length)).toEqual([6, 6, 1]);
+  });
+
+  it("show every chart of every board in the gallery exactly once, a landing tile through its collection's board", () => {
+    const gallery = galleryBoards();
+    const shown = gallery.flatMap((b) => b.sections.flatMap((s) => s.tiles.map((t) => t.id)));
+    expect(new Set(shown).size).toBe(shown.length);
+    expect(new Set(shown)).toEqual(new Set(BOARDS.flatMap((b) => b.tiles)));
+    // a tile shown under the landing board is on no collection board
+    const landing = gallery.find((b) => b.id === "library");
+    const onCollections = new Set(BOARDS.filter((b) => b.id !== "library").flatMap((b) => b.tiles));
+    for (const s of landing?.sections ?? []) for (const t of s.tiles) expect(onCollections.has(t.id), t.id).toBe(false);
   });
 });

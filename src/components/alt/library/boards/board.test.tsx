@@ -88,4 +88,20 @@ describe("a board section", () => {
     expect(requests.length).toBeGreaterThan(1);
     expect(screen.getByRole("heading", { name: "Rates", level: 3 })).toBeTruthy();
   });
+
+  it("shows only the tiles a search keeps while requesting the whole section", async () => {
+    resetBoardCache();
+    resetReadState();
+    const ids = core("00_universal");
+    const section: BoardLayoutSection = { title: null, tiles: ids.map((id) => ({ id, title: id, form: "line", size: "regular", collection: "00_universal", datasetId: "" })) };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <BoardSection board="00_universal" section={section} only={[ids[1]]} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(articles(container)).toHaveLength(1), { timeout: 4000 });
+    await waitFor(() => expect(new Set(requests.flat())).toEqual(new Set(ids)), { timeout: 4000 });
+    expect(articles(container)).toHaveLength(1);
+  });
 });
