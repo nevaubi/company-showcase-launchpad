@@ -60,7 +60,7 @@ describe("direct OpenAI model ids", () => {
       const { openaiDirectStructured } = await import("@/lib/openai.server");
       const { classify } = await import("@/lib/jobs/failure");
       for (const model of ["google/gemini-3.1-flash-lite", "openai/gpt-6-luna"]) {
-        const e = await openaiDirectStructured({ model, name: "check", instructions: "Read", input: "test", schema: {} }).catch((x: unknown) => x as Error & { kind: string });
+        const e = (await openaiDirectStructured({ model, name: "check", instructions: "Read", input: "test", schema: {} }).then(() => new Error("no error"), (x: unknown) => x)) as Error & { kind: string };
         expect(e).toMatchObject({ kind: "auth" });
         expect(classify({ message: e.message })).toBe("config");
       }
