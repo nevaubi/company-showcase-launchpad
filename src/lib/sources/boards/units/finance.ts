@@ -138,7 +138,7 @@ const cohortStates: RecordsTileSpec = {
   transform: "records",
   headline: "records",
   form: "map",
-  per: { dimension: "geo_code", top: 60 },
+  per: { field: "STALP", top: 60 },
   note: "A fixed cohort of 500 insured institutions chosen by assets on 30 June 2026, one record each, placed by the state of the main office (STALP). Not every bank.",
 };
 
@@ -152,7 +152,7 @@ const creditUnionStates: RecordsTileSpec = {
   transform: "records",
   headline: "records",
   form: "map",
-  per: { dimension: "geo_code", top: 60 },
+  per: { field: "STATE", top: 60 },
   note: "One record per credit union that filed a call report for the quarter ending 30 June 2026, placed by the state of its main office. Includes the credit unions that are not federally insured (CU_TYPE 3), which NCUA's own counts leave out.",
 };
 
@@ -211,14 +211,14 @@ const failuresPerYear: RecordsTileSpec = {
   collection: FIN,
   section: SECTION.failures,
   size: "wide",
-  datasetId: "official_01_financials_data_fdic_failures_and_assistance_1934_latest_6580a92fd4",
-  title: "Failures and assistance transactions of FDIC-insured institutions, by year (FDIC)",
-  subject: "The FDIC failures and assistance file",
+  datasetId: FDIC_FAILURES_DATASET,
+  title: "Failures and assistance transactions of FDIC-insured institutions since 2000, by year (FDIC)",
+  subject: "The FDIC failures and assistance file since 2000",
   transform: "records",
   headline: "records",
   form: "bars",
-  per: { field: "FAILYR", format: "year", by: "year", window: 60 },
-  note: "Each record is one failure or one assistance transaction of an FDIC-insured institution since 1934, counted by the year the FDIC gives it (FAILYR).",
+  per: { field: "FAILYR", format: "year", by: "year" },
+  note: "Each record is one failure or one assistance transaction of an FDIC-insured institution, counted by the year the FDIC gives it (FAILYR). A year without a record has none in the file.",
 };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -346,6 +346,7 @@ const mmfMix: MixTileSpec = {
   measure: "value_native",
   title: "Money market fund investments by asset class (OFR)",
   subject: "U.S. Treasury securities",
+  verb: "were",
   unit: "USD",
   decimals: 2,
   form: "mix",
