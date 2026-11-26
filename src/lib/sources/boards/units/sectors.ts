@@ -64,13 +64,14 @@ const fhfaPlace = (placeId: string, label: string, subject?: string): TileSeries
   ...(subject ? { subject } : {}),
 });
 
-const fhfaDivisions = (spec: { id: string; title: string; lines: readonly TileSeriesSpec[] }): CompareTileSpec => ({
+const fhfaDivisions = (spec: { id: string; title: string; lead: string; lines: readonly TileSeriesSpec[] }): CompareTileSpec => ({
   id: spec.id,
   collection: "11_real_estate",
   datasetId: FHFA_QUARTERLY_DATASET,
   measure: "index_sa",
   title: spec.title,
-  subject: "The FHFA purchase-only index",
+  // the headline is on the first line, named by the tile's subject
+  subject: `The FHFA purchase-only index for ${spec.lead}`,
   unit: FHFA_Q_UNIT,
   decimals: 2,
   form: "compare",
@@ -149,8 +150,9 @@ const HOUSING: TileSpec[] = [
   fhfaDivisions({
     id: "fhfa-divisions-east",
     title: "FHFA purchase-only index, change over four quarters: United States and eastern divisions",
+    lead: "the United States",
     lines: [
-      fhfaPlace("USA", "United States", "The FHFA purchase-only index for the United States"),
+      fhfaPlace("USA", "United States"),
       fhfaPlace("DV_NE", "New England"),
       fhfaPlace("DV_MA", "Middle Atlantic"),
       fhfaPlace("DV_SA", "South Atlantic"),
@@ -160,8 +162,9 @@ const HOUSING: TileSpec[] = [
   fhfaDivisions({
     id: "fhfa-divisions-west",
     title: "FHFA purchase-only index, change over four quarters: central and western divisions",
+    lead: "the Pacific Division",
     lines: [
-      fhfaPlace("DV_PAC", "Pacific", "The FHFA purchase-only index for the Pacific Division"),
+      fhfaPlace("DV_PAC", "Pacific"),
       fhfaPlace("DV_MT", "Mountain"),
       fhfaPlace("DV_WSC", "West South Central"),
       fhfaPlace("DV_WNC", "West North Central"),
