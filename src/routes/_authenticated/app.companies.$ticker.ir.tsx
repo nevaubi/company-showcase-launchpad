@@ -24,7 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getIrData, type IrDocRow } from "@/lib/ir.functions";
-import { checkLateIrPage, checkStatementsOf, irPageKey, loadIrPage, type IrPageData } from "@/lib/ir/client";
+import {
+  checkLateIrPage,
+  checkStatementsOf,
+  irPageKey,
+  loadIrPage,
+  type IrPageData,
+} from "@/lib/ir/client";
 import type { IrPayload } from "@/lib/ir/payload";
 import { companyQuery } from "@/lib/data";
 import { fmtDate } from "@/lib/format";
@@ -64,7 +70,8 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")
       },
       {
         property: "og:description",
-        content: "Statements, segments and KPIs as the company prints them, with click-to-source into stored IR documents.",
+        content:
+          "Statements, segments and KPIs as the company prints them, with click-to-source into stored IR documents.",
       },
     ],
   }),
@@ -87,7 +94,10 @@ function IrPage() {
   const q = useQuery({
     queryKey: irPageKey(ticker),
     // The company's SEC statements (usually already cached by the company header) feed the cross-check.
-    queryFn: () => loadIrPage(ticker, fetchIr, () => qc.fetchQuery(companyQuery(ticker)).then(checkStatementsOf)),
+    queryFn: () =>
+      loadIrPage(ticker, fetchIr, () =>
+        qc.fetchQuery(companyQuery(ticker)).then(checkStatementsOf),
+      ),
     staleTime: 5 * 60_000,
     retry: 3,
     retryDelay: (n) => Math.min(2000 * 2 ** n, 15_000),
@@ -106,7 +116,8 @@ function IrPage() {
       .catch(() => null)
       .then((st) => checkLateIrPage(lateData, st))
       .then((next) => {
-        if (!off && qc.getQueryData(irPageKey(ticker)) === lateData) qc.setQueryData(irPageKey(ticker), next);
+        if (!off && qc.getQueryData(irPageKey(ticker)) === lateData)
+          qc.setQueryData(irPageKey(ticker), next);
       });
     return () => {
       off = true;
@@ -151,7 +162,15 @@ function IrPage() {
         </div>
       </Panel>
     );
-  return <IrPageView ticker={ticker} data={q.data!} store={store.data?.documents} focus={focus} onFocusDone={clearFocus} />;
+  return (
+    <IrPageView
+      ticker={ticker}
+      data={q.data!}
+      store={store.data?.documents}
+      focus={focus}
+      onFocusDone={clearFocus}
+    />
+  );
 }
 
 /**
@@ -159,20 +178,54 @@ function IrPage() {
  * printed table over its history), then the financial map, the filings' XBRL breakdowns and the documents.
  * The audit detail lives in the checks panel opened from the tie-out badge.
  */
-export function IrPageView({ ticker, data, store, focus, onFocusDone }: { ticker: string; data: IrPageData; store?: StoreDoc[]; focus?: IrFocus; onFocusDone?: () => void }) {
+export function IrPageView({
+  ticker,
+  data,
+  store,
+  focus,
+  onFocusDone,
+}: {
+  ticker: string;
+  data: IrPageData;
+  store?: StoreDoc[];
+  focus?: IrFocus;
+  onFocusDone?: () => void;
+}) {
   const hasSeries = !!data.payload && data.payload.series.length > 0;
   const [checks, setChecks] = useState<{ open: boolean; section?: string }>({ open: false });
   const [tie, setTie] = useState<StatementsSummary | null>(null);
   const openChecks = useCallback((section?: string) => setChecks({ open: true, section }), []);
   const [scale] = useUnitScale();
-  const sections = useMemo(() => (data.payload ? assembleStatements(data.payload) : []), [data.payload]);
+  const sections = useMemo(
+    () => (data.payload ? assembleStatements(data.payload) : []),
+    [data.payload],
+  );
   return (
     <div className="grid grid-cols-1 gap-6">
-      <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents} images={data.images ?? 0} builtAt={data.builtAt} tie={tie} onChecks={openChecks} />
+      <IrSummary
+        ticker={ticker}
+        payload={data.payload}
+        pending={data.pending}
+        documents={data.documents}
+        images={data.images ?? 0}
+        builtAt={data.builtAt}
+        tie={tie}
+        onChecks={openChecks}
+      />
       <IrStandardKpis ticker={ticker} />
-      {hasSeries && <IrTopViz ticker={ticker} payload={data.payload!} sections={sections} scale={scale} />}
+      {hasSeries && (
+        <IrTopViz ticker={ticker} payload={data.payload!} sections={sections} scale={scale} />
+      )}
       {hasSeries ? (
-        <IrStatements key={ticker} ticker={ticker} payload={data.payload!} focus={focus} onFocusDone={onFocusDone} onChecks={openChecks} onSummary={setTie} />
+        <IrStatements
+          key={ticker}
+          ticker={ticker}
+          payload={data.payload!}
+          focus={focus}
+          onFocusDone={onFocusDone}
+          onChecks={openChecks}
+          onSummary={setTie}
+        />
       ) : (
         <IrPanel section="IR statements" tour="ir-breakdowns" title="Statements">
           <div className="px-4 py-4 text-[13px]">
@@ -212,13 +265,19 @@ function IrXbrlBreakdowns({ ticker }: { ticker: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (on || !ref.current) return;
-    const io = new IntersectionObserver((es) => es.some((x) => x.isIntersecting) && setOn(true), { rootMargin: "800px 0px" });
+    const io = new IntersectionObserver((es) => es.some((x) => x.isIntersecting) && setOn(true), {
+      rootMargin: "800px 0px",
+    });
     io.observe(ref.current);
     return () => io.disconnect();
   }, [on]);
   return (
     <div ref={ref} data-section="IR XBRL breakdowns" className="min-w-0">
-      <IrPanel section="XBRL breakdowns" title="Breakdowns tagged in the filings" subtitle="Segment, product and geography figures as the 10-K and 10-Q tag them in XBRL, each opening the tagged value in the filing">
+      <IrPanel
+        section="XBRL breakdowns"
+        title="Breakdowns tagged in the filings"
+        subtitle="Segment, product and geography figures as the 10-K and 10-Q tag them in XBRL, each opening the tagged value in the filing"
+      >
         {on ? <FilingDetailView ticker={ticker} /> : <Skeleton className="m-4 h-40" />}
       </IrPanel>
     </div>
@@ -228,12 +287,42 @@ function IrXbrlBreakdowns({ ticker }: { ticker: string }) {
 /** The figures the old summary tiles showed, now at the top of the checks panel. */
 function summaryStats(payload: IrPayload): { label: string; value: string; hint?: string }[] {
   const s = payload.stats;
-  const calculated = payload.series.reduce((n, x) => n + Object.values(x.q).filter((c) => c.f).length + Object.values(x.y).filter((c) => c.f).length, 0);
-  const tie = (c: { ok: number; total: number }) => (c.total ? { value: `${Math.round((c.ok / c.total) * 100)}%`, hint: `${c.ok.toLocaleString()} of ${c.total.toLocaleString()} checks` } : null);
+  const calculated = payload.series.reduce(
+    (n, x) =>
+      n +
+      Object.values(x.q).filter((c) => c.f).length +
+      Object.values(x.y).filter((c) => c.f).length,
+    0,
+  );
+  const tie = (c: { ok: number; total: number }) =>
+    c.total
+      ? {
+          value: `${Math.round((c.ok / c.total) * 100)}%`,
+          hint: `${c.ok.toLocaleString()} of ${c.total.toLocaleString()} checks`,
+        }
+      : null;
   return [
-    { label: "Coverage", value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : DASH, hint: s.firstPeriod && s.lastPeriod ? `${monthYear(s.firstPeriod)} to ${monthYear(s.lastPeriod)}` : undefined },
-    { label: "Lines tracked", value: s.series.toLocaleString(), hint: `in ${s.groups.toLocaleString()} breakdowns` },
-    { label: "Data points", value: s.facts.toLocaleString(), hint: `from ${s.documents.toLocaleString()} documents${calculated ? `, ${calculated.toLocaleString()} calculated` : ""}` },
+    {
+      label: "Coverage",
+      value:
+        s.firstPeriod && s.lastPeriod
+          ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}`
+          : DASH,
+      hint:
+        s.firstPeriod && s.lastPeriod
+          ? `${monthYear(s.firstPeriod)} to ${monthYear(s.lastPeriod)}`
+          : undefined,
+    },
+    {
+      label: "Lines tracked",
+      value: s.series.toLocaleString(),
+      hint: `in ${s.groups.toLocaleString()} breakdowns`,
+    },
+    {
+      label: "Data points",
+      value: s.facts.toLocaleString(),
+      hint: `from ${s.documents.toLocaleString()} documents${calculated ? `, ${calculated.toLocaleString()} calculated` : ""}`,
+    },
     ...(tie(s.checksQ) ? [{ label: "Quarterly totals tie out", ...tie(s.checksQ)! }] : []),
     ...(tie(s.checksFY) ? [{ label: "Annual totals tie out", ...tie(s.checksFY)! }] : []),
   ];
@@ -274,23 +363,41 @@ function IrSummary({
   const s = payload?.stats;
   const filesLine = `${files.toLocaleString()} stored file${files === 1 ? "" : "s"}, ${read.toLocaleString()} read for figures${pending ? `, ${pending.toLocaleString()} waiting to be read` : ""}`;
   const facts = s
-    ? [s.firstPeriod && s.lastPeriod ? `${monthYear(s.firstPeriod)} to ${monthYear(s.lastPeriod)}` : null, `${s.series.toLocaleString()} lines`, `${s.facts.toLocaleString()} figures from ${s.documents.toLocaleString()} documents`].filter(Boolean).join(" · ")
+    ? [
+        s.firstPeriod && s.lastPeriod
+          ? `${monthYear(s.firstPeriod)} to ${monthYear(s.lastPeriod)}`
+          : null,
+        `${s.series.toLocaleString()} lines`,
+        `${s.facts.toLocaleString()} figures from ${s.documents.toLocaleString()} documents`,
+      ]
+        .filter(Boolean)
+        .join(" · ")
     : null;
   return (
     <IrPanel
       section="Investor-relations summary"
       title="Investor-relations data"
-      subtitle={builtAt ? `Built ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · ${filesLine}` : filesLine}
+      subtitle={
+        builtAt
+          ? `Built ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · ${filesLine}`
+          : filesLine
+      }
       actions={
         <>
           {pending > 0 && (
             <Tooltip>
-              <TooltipTrigger className={cn("inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1", IR.caption)}>
+              <TooltipTrigger
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1",
+                  IR.caption,
+                )}
+              >
                 <Clock3 className="size-3.5" />
                 {pending.toLocaleString()} waiting to be read
               </TooltipTrigger>
               <TooltipContent className="max-w-xs text-xs">
-                Stored files are read in the background by scheduled readers. Their figures join the tables below when a read finishes; this page checks again every two minutes.
+                Stored files are read in the background by scheduled readers. Their figures join the
+                tables below when a read finishes; this page checks again every two minutes.
               </TooltipContent>
             </Tooltip>
           )}
@@ -299,12 +406,21 @@ function IrSummary({
               type="button"
               onClick={onChecks}
               data-section="IR tie-out badge"
-              className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", tie && tie.tieN && tie.tieOk < tie.tieN ? "text-foreground" : "text-muted-foreground")}
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                tie && tie.tieN && tie.tieOk < tie.tieN
+                  ? "text-foreground"
+                  : "text-muted-foreground",
+              )}
               title="Open the checks: parts against totals, quarters against the year, the SEC comparison and every figure to review"
             >
               {tie && tie.tieN ? (
                 <>
-                  {tie.tieOk === tie.tieN ? <Check aria-hidden className="size-3.5 text-positive" /> : <CheckDot />}
+                  {tie.tieOk === tie.tieN ? (
+                    <Check aria-hidden className="size-3.5 text-positive" />
+                  ) : (
+                    <CheckDot />
+                  )}
                   <span className="num">
                     {tie.tieOk.toLocaleString()} of {tie.tieN.toLocaleString()}
                   </span>
@@ -326,8 +442,13 @@ function IrSummary({
         <div className="flex items-start gap-2 px-4 py-3 text-[13px]">
           <FileStack className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p>
-            {files.toLocaleString()} stored file{files === 1 ? " is" : "s are"} listed under Source documents.
-            <span className={cn("block", IR.caption)}>{pending ? "Statements are laid out once those files are read." : "None of them has been read for figures yet."}</span>
+            {files.toLocaleString()} stored file{files === 1 ? " is" : "s are"} listed under Source
+            documents.
+            <span className={cn("block", IR.caption)}>
+              {pending
+                ? "Statements are laid out once those files are read."
+                : "None of them has been read for figures yet."}
+            </span>
           </p>
         </div>
       )}

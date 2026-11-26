@@ -300,7 +300,11 @@ function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries, keep = false) {
   }
   if (b.total) a.total = true;
   // Where the absorbed line is printed stays known (statement layout): its positions join the kept line's.
-  if (b.at?.length) a.at = [...(a.at ?? []), ...b.at.filter((x) => !a.at?.some((y) => y[0] === x[0] && y[1] === x[1] && y[2] === x[2]))];
+  if (b.at?.length)
+    a.at = [
+      ...(a.at ?? []),
+      ...b.at.filter((x) => !a.at?.some((y) => y[0] === x[0] && y[1] === x[1] && y[2] === x[2])),
+    ];
   for (const k of [a.parent, b.parent, a.k, b.k]) if (k) c.touched.add(k);
   periodCache.delete(a);
   keyCache.delete(a);

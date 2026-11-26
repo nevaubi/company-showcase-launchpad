@@ -38,18 +38,33 @@ describe("tableCaptions", () => {
 });
 
 describe("sentenceCase", () => {
-  const keep = capitalWords(["CCB average balances", "CIB operating metrics", "TOTAL NET REVENUE", "Non-GAAP net income"]);
+  const keep = capitalWords([
+    "CCB average balances",
+    "CIB operating metrics",
+    "TOTAL NET REVENUE",
+    "Non-GAAP net income",
+  ]);
   it("lowers capitals word by word, keeping the company's own acronyms", () => {
-    expect(sentenceCase("CONSOLIDATED STATEMENTS OF INCOME", keep)).toBe("Consolidated statements of income");
+    expect(sentenceCase("CONSOLIDATED STATEMENTS OF INCOME", keep)).toBe(
+      "Consolidated statements of income",
+    );
     expect(sentenceCase("CCB AVERAGE BALANCES", keep)).toBe("CCB average balances");
     expect(sentenceCase("NON-GAAP FINANCIAL MEASURES", keep)).toBe("Non-GAAP financial measures");
     expect(sentenceCase("U.S. OFFICES", keep)).toBe("U.S. offices");
-    expect(sentenceCase("TOTAL NET REVENUE (fully taxable-equivalent (“FTE”))", keep)).toBe("Total net revenue (fully taxable-equivalent (“FTE”))");
-    expect(sentenceCase("SEGMENT & CORPORATE RESULTS - MANAGED BASIS", keep)).toBe("Segment & corporate results - managed basis");
+    expect(sentenceCase("TOTAL NET REVENUE (fully taxable-equivalent (“FTE”))", keep)).toBe(
+      "Total net revenue (fully taxable-equivalent (“FTE”))",
+    );
+    expect(sentenceCase("SEGMENT & CORPORATE RESULTS - MANAGED BASIS", keep)).toBe(
+      "Segment & corporate results - managed basis",
+    );
   });
   it("lowers Title Case, keeps sentence case as printed", () => {
-    expect(sentenceCase("Consolidated Statement of Cash Flows", keep)).toBe("Consolidated statement of cash flows");
-    expect(sentenceCase("Table 1: Summary of Financial Results", keep)).toBe("Table 1: Summary of financial results");
+    expect(sentenceCase("Consolidated Statement of Cash Flows", keep)).toBe(
+      "Consolidated statement of cash flows",
+    );
+    expect(sentenceCase("Table 1: Summary of Financial Results", keep)).toBe(
+      "Table 1: Summary of financial results",
+    );
     expect(sentenceCase("Revenue by business", keep)).toBe("Revenue by business");
   });
   it("words of shouted line names are not taken as acronyms", () => {

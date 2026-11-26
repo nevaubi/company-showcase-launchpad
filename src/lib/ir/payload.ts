@@ -1,7 +1,17 @@
 // Compact, precomputed IR series payload stored per company (ir_company_series) and sent to the
 // IR data page. Pure: built by the pipeline scripts and by the server after new extractions.
 import { tidyPayload } from "@/lib/ir/tidy";
-import { buildIrSeries, childrenOf, neverTies, scopeName, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
+import {
+  buildIrSeries,
+  childrenOf,
+  neverTies,
+  scopeName,
+  type IrCell,
+  type IrFact,
+  type IrSeries,
+  type LabelMapEntry,
+  type ReconcileCheck,
+} from "@/lib/ir/kpis";
 
 export type PayloadLocator = [number, number, number] | { p: number; b: number[] };
 
@@ -81,7 +91,11 @@ export interface PayloadSeries {
   /** monthly view only: one-month flows and balances at month-ends that don't close a quarter */
   mo?: Record<string, PayloadCell>;
   /** cells held back as suspect, by period kind: shown with their reason, never used in figures */
-  held?: { q?: Record<string, PayloadCell>; y?: Record<string, PayloadCell>; mo?: Record<string, PayloadCell> };
+  held?: {
+    q?: Record<string, PayloadCell>;
+    y?: Record<string, PayloadCell>;
+    mo?: Record<string, PayloadCell>;
+  };
   /** trailing-twelve-month figures of this line taken out of the quarter and year columns (ttm.ts) */
   ttm?: number;
   /**
@@ -183,12 +197,18 @@ export interface IrStats {
 const locOf = (f: IrFact): PayloadLocator | undefined => {
   const l = f.locator as Record<string, unknown>;
   if (typeof l.t === "number") return [l.t as number, l.r as number, l.c as number];
-  if (typeof l.page === "number" && Array.isArray(l.box)) return { p: l.page as number, b: l.box as number[] };
+  if (typeof l.page === "number" && Array.isArray(l.box))
+    return { p: l.page as number, b: l.box as number[] };
   return undefined;
 };
 
 /** Documents that print a line (its cells' facts). */
-const docsOf = (s: IrSeries) => new Set([...Object.values(s.cells), ...Object.values(s.annual)].map((c) => c.fact?.document_id ?? c.fact?.accn).filter(Boolean));
+const docsOf = (s: IrSeries) =>
+  new Set(
+    [...Object.values(s.cells), ...Object.values(s.annual)]
+      .map((c) => c.fact?.document_id ?? c.fact?.accn)
+      .filter(Boolean),
+  );
 
 /**
  * Several lines can carry the label a part names as its parent ("Noninterest income" of one segment
@@ -212,7 +232,11 @@ export function bestParent(kid: IrSeries, candidates: IrSeries[]): IrSeries {
 /** Documents per line whose printing positions the payload keeps (`PayloadSeries.at`). */
 export const PRINTED_DOCS = 2;
 
-export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<string, LabelMapEntry>): IrPayload {
+export function buildPayload(
+  ticker: string,
+  facts: IrFact[],
+  labelMap?: Record<string, LabelMapEntry>,
+): IrPayload {
   // Second pass without hierarchies whose parts never add up to their total in any period.
   let built = buildIrSeries(facts, { labelMap });
   const unlink = neverTies(built.checks);
@@ -231,7 +255,14 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
     return i;
   };
   // A figure read from running text cites its sentence; table and slide figures their printed cell text.
-  const factCell = (f: IrFact) => ({ d: di(f), l: locOf(f), x: (f.locator as { q?: string; text?: string }).q ?? (f.locator as { text?: string }).text, s: f.period_start ?? undefined, e: f.period_end, m: f.months });
+  const factCell = (f: IrFact) => ({
+    d: di(f),
+    l: locOf(f),
+    x: (f.locator as { q?: string; text?: string }).q ?? (f.locator as { text?: string }).text,
+    s: f.period_start ?? undefined,
+    e: f.period_end,
+    m: f.months,
+  });
   const altOf = (a: NonNullable<IrCell["alt"]>): PayloadAlt => {
     const { s: _s, ...rest } = factCell(a.fact);
     return { v: a.v, ...rest, kind: a.kind };
@@ -242,7 +273,14 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
         v: c.v,
         f: {
           formula: c.derived.formula,
-          parts: c.derived.parts.map((p) => ({ label: p.label, v: p.value, sign: p.sign, ...factCell(p.fact), e: p.fact.period_end, m: p.fact.months })),
+          parts: c.derived.parts.map((p) => ({
+            label: p.label,
+            v: p.value,
+            sign: p.sign,
+            ...factCell(p.fact),
+            e: p.fact.period_end,
+            m: p.fact.months,
+          })),
         },
       };
     if (!c.fact) return { v: c.v };
@@ -254,7 +292,8 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
 
   // Parent keys from the (possibly re-parented) hierarchy.
   const claims = new Map<IrSeries, IrSeries[]>();
-  for (const s of series) for (const k of childrenOf(series, s)) claims.set(k, [...(claims.get(k) ?? []), s]);
+  for (const s of series)
+    for (const k of childrenOf(series, s)) claims.set(k, [...(claims.get(k) ?? []), s]);
   const parentOf = new Map<IrSeries, IrSeries>();
   for (const [k, list] of claims) parentOf.set(k, list.length > 1 ? bestParent(k, list) : list[0]);
   const kids = new Map<IrSeries, IrSeries[]>();
@@ -268,7 +307,9 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       const id = f.document_id ?? `${f.accn}/${f.doc}`;
       byDoc.set(id, [...(byDoc.get(id) ?? []), f]);
     }
-    const newest = [...byDoc.values()].sort((a, b) => (b[0].filed ?? "").localeCompare(a[0].filed ?? "")).slice(0, PRINTED_DOCS);
+    const newest = [...byDoc.values()]
+      .sort((a, b) => (b[0].filed ?? "").localeCompare(a[0].filed ?? ""))
+      .slice(0, PRINTED_DOCS);
     const seen = new Set<string>();
     const out: [number, number, number][] = [];
     for (const fs of newest)
@@ -276,15 +317,23 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
         const l = f.locator as { t: number; r: number };
         const at: [number, number, number] = [di(f), l.t, l.r];
         const id = at.join(":");
-        if (!seen.has(id)) seen.add(id), out.push(at);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(at);
       }
     return out;
   };
 
   // Unit slips and other contradicted figures are held back by `holdSuspects` (suspect.ts) in the tidy pass.
-  const cellsMap = (cells: Record<string, IrCell>) => Object.fromEntries(Object.entries(cells).map(([e, c]) => [e, cellOf(c)]));
+  const cellsMap = (cells: Record<string, IrCell>) =>
+    Object.fromEntries(Object.entries(cells).map(([e, c]) => [e, cellOf(c)]));
   const out: PayloadSeries[] = series
-    .filter((s) => Object.keys(s.cells).length || Object.keys(s.annual).length || Object.keys(s.monthly ?? {}).length)
+    .filter(
+      (s) =>
+        Object.keys(s.cells).length ||
+        Object.keys(s.annual).length ||
+        Object.keys(s.monthly ?? {}).length,
+    )
     .map((s) => ({
       k: s.key,
       cat: s.category,
@@ -298,7 +347,9 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       ...(s.pit ? { pit: true } : {}),
       q: cellsMap(s.cells),
       y: cellsMap(s.annual),
-      ...(s.monthly && Object.keys(s.monthly).length ? { mo: Object.fromEntries(Object.entries(s.monthly).map(([e, c]) => [e, cellOf(c)])) } : {}),
+      ...(s.monthly && Object.keys(s.monthly).length
+        ? { mo: Object.fromEntries(Object.entries(s.monthly).map(([e, c]) => [e, cellOf(c)])) }
+        : {}),
       ...(atOf(s) ? { at: atOf(s) } : {}),
     }));
   const kept = new Set(out.map((s) => s.k));
@@ -307,8 +358,16 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   const groups: PayloadGroup[] = [];
   const placed = new Set<IrSeries>();
   const size = (s: IrSeries): number => 1 + (kids.get(s) ?? []).reduce((n, k) => n + size(k), 0);
-  const magnitude = (s: IrSeries) => Math.abs(Object.values(s.cells).at(-1)?.v ?? Object.values(s.annual).at(-1)?.v ?? 0);
-  const roots = series.filter((s) => !parentOf.has(s) && kids.has(s)).sort((a, b) => a.category.localeCompare(b.category) || a.metric.localeCompare(b.metric) || size(b) - size(a));
+  const magnitude = (s: IrSeries) =>
+    Math.abs(Object.values(s.cells).at(-1)?.v ?? Object.values(s.annual).at(-1)?.v ?? 0);
+  const roots = series
+    .filter((s) => !parentOf.has(s) && kids.has(s))
+    .sort(
+      (a, b) =>
+        a.category.localeCompare(b.category) ||
+        a.metric.localeCompare(b.metric) ||
+        size(b) - size(a),
+    );
   for (const root of roots) {
     const rows: { k: string; depth: number }[] = [];
     const walk = (s: IrSeries, depth: number) => {
@@ -318,7 +377,17 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       if (kept.has(s.key)) rows.push({ k: s.key, depth });
     };
     walk(root, 0);
-    if (rows.length) groups.push({ id: root.key, cat: root.category, met: root.metric, unit: root.unit, label: root.label, bd: root.breakdown ?? null, root: root.key, rows });
+    if (rows.length)
+      groups.push({
+        id: root.key,
+        cat: root.category,
+        met: root.metric,
+        unit: root.unit,
+        label: root.label,
+        bd: root.breakdown ?? null,
+        root: root.key,
+        rows,
+      });
   }
   const loose = new Map<string, IrSeries[]>();
   for (const s of series) {
@@ -328,11 +397,32 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   }
   for (const [id, list] of loose) {
     const s0 = list[0];
-    groups.push({ id, cat: s0.category, met: s0.metric, unit: s0.unit, label: "", bd: null, root: null, rows: list.sort((a, b) => magnitude(b) - magnitude(a)).map((s) => ({ k: s.key, depth: 0 })) });
+    groups.push({
+      id,
+      cat: s0.category,
+      met: s0.metric,
+      unit: s0.unit,
+      label: "",
+      bd: null,
+      root: null,
+      rows: list.sort((a, b) => magnitude(b) - magnitude(a)).map((s) => ({ k: s.key, depth: 0 })),
+    });
   }
 
-  const pc = (c: ReconcileCheck): PayloadCheck => ({ k: c.totalKey, e: c.period, kind: c.kind, total: c.total, sum: c.sum, ok: c.ok, n: c.children, ...(c.partial ? { partial: true } : {}), ...(c.subtracted ? { sub: c.subtracted } : {}) });
-  const allPeriods = out.flatMap((s) => [...Object.keys(s.q), ...Object.keys(s.y), ...Object.keys(s.mo ?? {})]).sort();
+  const pc = (c: ReconcileCheck): PayloadCheck => ({
+    k: c.totalKey,
+    e: c.period,
+    kind: c.kind,
+    total: c.total,
+    sum: c.sum,
+    ok: c.ok,
+    n: c.children,
+    ...(c.partial ? { partial: true } : {}),
+    ...(c.subtracted ? { sub: c.subtracted } : {}),
+  });
+  const allPeriods = out
+    .flatMap((s) => [...Object.keys(s.q), ...Object.keys(s.y), ...Object.keys(s.mo ?? {})])
+    .sort();
   const q = checks.filter((c) => c.kind === "q");
   const fy = checks.filter((c) => c.kind === "fy");
   return tidyPayload({
@@ -354,8 +444,16 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       firstPeriod: allPeriods[0] ?? null,
       lastPeriod: allPeriods.at(-1) ?? null,
       // Selected-item lists aren't additive by design: report them apart from real tie-out checks.
-      checksQ: { ok: q.filter((c) => c.ok).length, total: q.filter((c) => !c.partial).length, partial: q.filter((c) => c.partial).length },
-      checksFY: { ok: fy.filter((c) => c.ok).length, total: fy.filter((c) => !c.partial).length, partial: fy.filter((c) => c.partial).length },
+      checksQ: {
+        ok: q.filter((c) => c.ok).length,
+        total: q.filter((c) => !c.partial).length,
+        partial: q.filter((c) => c.partial).length,
+      },
+      checksFY: {
+        ok: fy.filter((c) => c.ok).length,
+        total: fy.filter((c) => !c.partial).length,
+        partial: fy.filter((c) => c.partial).length,
+      },
       unlinked: unlink.size,
     },
   });

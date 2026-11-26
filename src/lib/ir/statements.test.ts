@@ -5,7 +5,21 @@ import hon from "@/lib/ir/fixtures/statements/hon.json";
 import { buildPayload, type IrPayload, type PayloadSeries } from "@/lib/ir/payload";
 import type { IrFact } from "@/lib/ir/kpis";
 import type { TableCaption } from "@/lib/ir/table-captions";
-import { assembleStatements, currentCut, lineLabel, printedDecimals, printedDiv, printedFigure, printedSuffix, rowCells, statementAnchors, visibleRows, withCaptions, type Statement, type StatementRow } from "@/lib/ir/statements";
+import {
+  assembleStatements,
+  currentCut,
+  lineLabel,
+  printedDecimals,
+  printedDiv,
+  printedFigure,
+  printedSuffix,
+  rowCells,
+  statementAnchors,
+  visibleRows,
+  withCaptions,
+  type Statement,
+  type StatementRow,
+} from "@/lib/ir/statements";
 
 interface Fixture {
   ticker: string;
@@ -18,7 +32,8 @@ async function payloadOf(fx: Fixture): Promise<IrPayload> {
   return withCaptions(p, async (d) => fx.captions[p.docs[d].id]);
 }
 
-const lines = (sec: Statement) => sec.rows.filter((r): r is Extract<StatementRow, { kind: "line" }> => r.kind === "line");
+const lines = (sec: Statement) =>
+  sec.rows.filter((r): r is Extract<StatementRow, { kind: "line" }> => r.kind === "line");
 
 /** The section's lines as "label: figure in the newest quarter", printed the way the section prints them. */
 function printedRows(p: IrPayload, sec: Statement, end: string) {
@@ -34,7 +49,10 @@ describe("statement sections from real rows", () => {
   it("JPM: the income statement and segment results as the 3Q26 supplement prints them, named by their printed titles", async () => {
     const p = await payloadOf(jpm as unknown as Fixture);
     const secs = assembleStatements(p);
-    expect(secs.map((s) => s.title).slice(0, 2)).toEqual(["Consolidated statements of income", "Segment & corporate results - managed basis"]);
+    expect(secs.map((s) => s.title).slice(0, 2)).toEqual([
+      "Consolidated statements of income",
+      "Segment & corporate results - managed basis",
+    ]);
     expect(secs[0].titleFrom).toBe("printed");
     expect(secs[0].unitLine).toBe("In millions, except per share and ratio data");
     expect(secs[0].div).toBe(1e6);
@@ -57,7 +75,9 @@ describe("statement sections from real rows", () => {
     // Children indented under their totals; the document's headings and spacer bands kept.
     const ib = lines(secs[0]).find((r) => r.k.includes("investment banking"))!;
     expect(ib.depth).toBe(2);
-    expect(secs[0].rows.some((r) => r.kind === "head" && r.text === "Noninterest expense")).toBe(true);
+    expect(secs[0].rows.some((r) => r.kind === "head" && r.text === "Noninterest expense")).toBe(
+      true,
+    );
     expect(secs[0].rows.some((r) => r.kind === "gap")).toBe(true);
   });
 
@@ -70,10 +90,22 @@ describe("statement sections from real rows", () => {
     const seg = secs[1];
     // "Noninterest expense by segment" was filed under two stored identities (cost in 2026, segment in 2025):
     // one printed row with nine quarters, and the segment table keeps its printed total.
-    const ccb = lines(seg).filter((r) => lineLabel(by.get(r.k)!) === "Consumer & Community Banking");
+    const ccb = lines(seg).filter(
+      (r) => lineLabel(by.get(r.k)!) === "Consumer & Community Banking",
+    );
     expect(ccb).toHaveLength(5);
     const nie = ccb.find((r) => r.ks.some((k) => k.includes("noninterest expense")))!;
-    expect(Object.keys(rowCells(nie.ks, by, "q").cells).sort()).toEqual(["2024-09-30", "2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"]);
+    expect(Object.keys(rowCells(nie.ks, by, "q").cells).sort()).toEqual([
+      "2024-09-30",
+      "2024-12-31",
+      "2025-03-31",
+      "2025-06-30",
+      "2025-09-30",
+      "2025-12-31",
+      "2026-03-31",
+      "2026-06-30",
+      "2026-09-30",
+    ]);
     expect(rowCells(nie.ks, by, "q").cells["2024-09-30"].v).toBe(9586000000);
     expect(rowCells(nie.ks, by, "q").cells["2026-09-30"].v).toBe(11580000000);
     expect(printedRows(p, seg, "2026-09-30")).toContain("*TOTAL NONINTEREST EXPENSE: 27,295");
@@ -86,15 +118,25 @@ describe("statement sections from real rows", () => {
     expect(secs[0].title).toBe("Condensed consolidated statements of operations");
     const rows = printedRows(p, secs[0], "2026-09-26");
     expect(rows.filter((r) => r === "*Total net sales: 114,477")).toHaveLength(3);
-    expect(rows.indexOf("Americas: 48,680")).toBeGreaterThan(rows.indexOf("*Total operating expenses: 19,189"));
+    expect(rows.indexOf("Americas: 48,680")).toBeGreaterThan(
+      rows.indexOf("*Total operating expenses: 19,189"),
+    );
     expect(rows.at(-1)).toBe("*Total net sales: 114,477");
-    expect(secs[0].rows.some((r) => r.kind === "head" && r.text === "Operating expenses")).toBe(true);
+    expect(secs[0].rows.some((r) => r.kind === "head" && r.text === "Operating expenses")).toBe(
+      true,
+    );
   });
 
   it("HON: the release's tables in their printed order and names", async () => {
     const p = await payloadOf(hon as unknown as Fixture);
     const titles = assembleStatements(p).map((s) => s.title);
-    expect(titles.slice(0, 5)).toEqual(["Table 1: Summary of financial results", "Table 2: Summary of segment financial results", "Consolidated statement of operations", "Segment data", "Reconciliation of segment profit to income before taxes"]);
+    expect(titles.slice(0, 5)).toEqual([
+      "Table 1: Summary of financial results",
+      "Table 2: Summary of segment financial results",
+      "Consolidated statement of operations",
+      "Segment data",
+      "Reconciliation of segment profit to income before taxes",
+    ]);
     const ops = assembleStatements(p)[2];
     expect(printedRows(p, ops, "2026-09-30")).toEqual([
       "Product sales: 3,628",
@@ -130,17 +172,31 @@ describe("statement sections from real rows", () => {
     const all = visibleRows(sec, by, {});
     const cur = visibleRows(sec, by, { cut });
     expect(all.hidden).toBe(0);
-    expect(cur.rows.filter((r) => r.kind === "line").length).toBeLessThanOrEqual(all.rows.filter((r) => r.kind === "line").length);
+    expect(cur.rows.filter((r) => r.kind === "line").length).toBeLessThanOrEqual(
+      all.rows.filter((r) => r.kind === "line").length,
+    );
     // A search keeps the matching line and the totals above it, and no heading without a line under it.
     const hit = visibleRows(sec, by, { match: (s) => /card income/i.test(s.label) });
-    const shown = hit.rows.filter((r) => r.kind === "line").map((r) => lineLabel(by.get((r as { k: string }).k)!));
+    const shown = hit.rows
+      .filter((r) => r.kind === "line")
+      .map((r) => lineLabel(by.get((r as { k: string }).k)!));
     expect(shown).toEqual(["Card income", "Noninterest revenue", "TOTAL NET REVENUE"]);
     expect(hit.rows[0].kind).not.toBe("gap");
   });
 });
 
 describe("printed figures", () => {
-  const s = (unit: string, xs: string[]): PayloadSeries => ({ k: "x", cat: "kpi", met: "other", label: "x", parent: null, total: false, unit, q: Object.fromEntries(xs.map((x, i) => [`2026-0${i + 1}-30`, { v: 1, x }])), y: {} });
+  const s = (unit: string, xs: string[]): PayloadSeries => ({
+    k: "x",
+    cat: "kpi",
+    met: "other",
+    label: "x",
+    parent: null,
+    total: false,
+    unit,
+    q: Object.fromEntries(xs.map((x, i) => [`2026-0${i + 1}-30`, { v: 1, x }])),
+    y: {},
+  });
   it("formats in the printed scale, decimals and mark, negatives in parentheses", () => {
     expect(printedFigure(-658e6, 1e6, 0, "")).toBe("(658)");
     expect(printedFigure(50172e6, 1e6, 0, "")).toBe("50,172");

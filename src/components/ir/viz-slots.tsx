@@ -5,7 +5,21 @@
 import { useMemo } from "react";
 import { IrPanel } from "@/components/ir/panel";
 import type { SourceTarget } from "@/components/source/source-context";
-import { BankPanel, BridgeChart, MarginPanel, SectionChart, SummaryStrip, bankFiguresOf, defaultBridge, marginFiguresOf, partsOf, segmentMixOf, seriesOf, summaryTilesOf, type VizSeries } from "@/components/ir/viz";
+import {
+  BankPanel,
+  BridgeChart,
+  MarginPanel,
+  SectionChart,
+  SummaryStrip,
+  bankFiguresOf,
+  defaultBridge,
+  marginFiguresOf,
+  partsOf,
+  segmentMixOf,
+  seriesOf,
+  summaryTilesOf,
+  type VizSeries,
+} from "@/components/ir/viz";
 import type { IrPayload, PayloadCell, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import type { IrPeriodKind } from "@/lib/ir/periods";
 import { rowCells, type Statement } from "@/lib/ir/statements";
@@ -46,7 +60,8 @@ export function sectionParts(lines: VizLine[]): { total: VizLine; parts: VizLine
 }
 
 /** Whether a section has something to chart (its chart toggle is shown only then). */
-export const hasSectionViz = (lines: VizLine[]) => lines.some((l) => l.cells.filter(Boolean).length >= 2);
+export const hasSectionViz = (lines: VizLine[]) =>
+  lines.some((l) => l.cells.filter(Boolean).length >= 2);
 
 /** A section's line with the figures of every stored identity it joins (rowCells), as the charts read it. */
 function mergedLine(l: VizLine, payload: IrPayload, row?: { ks: string[] }): PayloadSeries {
@@ -57,9 +72,20 @@ function mergedLine(l: VizLine, payload: IrPayload, row?: { ks: string[] }): Pay
   return { ...l.s, q, y };
 }
 
-export function IrSectionViz({ ticker, payload, section, lines, cols, freq, scale, onOpen }: IrSectionVizProps) {
+export function IrSectionViz({
+  ticker,
+  payload,
+  section,
+  lines,
+  cols,
+  freq,
+  scale,
+  onOpen,
+}: IrSectionVizProps) {
   const vizData = useMemo(() => {
-    const rowOf = new Map(section.rows.flatMap((r) => (r.kind === "line" ? [[r.k, r] as const] : [])));
+    const rowOf = new Map(
+      section.rows.flatMap((r) => (r.kind === "line" ? [[r.k, r] as const] : [])),
+    );
     const cadence = freq === "y" ? "y" : "q";
     const inView = new Set(cols);
     const series: VizSeries[] = lines
@@ -68,20 +94,56 @@ export function IrSectionViz({ ticker, payload, section, lines, cols, freq, scal
       .filter((v) => v.points.length > 0);
     const pp = sectionParts(lines);
     const group: PayloadGroup | null = pp
-      ? { id: section.id, cat: section.cat, met: pp.total.s.met, unit: pp.total.s.unit, label: section.title, t: section.title, bd: null, root: pp.total.s.k, rows: [...pp.parts, pp.total].map((l) => ({ k: l.s.k, depth: l.depth })) }
+      ? {
+          id: section.id,
+          cat: section.cat,
+          met: pp.total.s.met,
+          unit: pp.total.s.unit,
+          label: section.title,
+          t: section.title,
+          bd: null,
+          root: pp.total.s.k,
+          rows: [...pp.parts, pp.total].map((l) => ({ k: l.s.k, depth: l.depth })),
+        }
       : null;
     const parts = group ? partsOf(payload, ticker, group, cadence) : null;
-    const cut = parts ? { ...parts, total: { ...parts.total, points: parts.total.points.filter((p) => inView.has(p.period)) }, parts: parts.parts.map((x) => ({ ...x, points: x.points.filter((p) => inView.has(p.period)) })), ties: parts.ties.filter((e) => inView.has(e)) } : null;
+    const cut = parts
+      ? {
+          ...parts,
+          total: { ...parts.total, points: parts.total.points.filter((p) => inView.has(p.period)) },
+          parts: parts.parts.map((x) => ({
+            ...x,
+            points: x.points.filter((p) => inView.has(p.period)),
+          })),
+          ties: parts.ties.filter((e) => inView.has(e)),
+        }
+      : null;
     const lead = pp ? [pp.total.s.k, ...pp.parts.map((x) => x.s.k)] : [];
     // The section's total and its parts first, then its other lines; the chart keeps one unit and six lines.
-    const ordered = [...series.filter((v) => lead.includes(v.key)), ...series.filter((v) => !lead.includes(v.key))];
+    const ordered = [
+      ...series.filter((v) => lead.includes(v.key)),
+      ...series.filter((v) => !lead.includes(v.key)),
+    ];
     return { series: ordered, parts: cut, bridge: cut ? defaultBridge(cut) : null };
   }, [payload, ticker, section, lines, cols, freq]);
   if (!vizData.series.length) return null;
   return (
     <div className="grid grid-cols-1 gap-4 px-4 pb-4 pt-1">
-      <SectionChart series={vizData.series} parts={vizData.parts} title={section.title} scale={scale} onOpen={onOpen} />
-      {vizData.parts && vizData.bridge?.bridge && <BridgeChart bridge={vizData.bridge.bridge} reason={vizData.bridge.reason} scale={scale} onOpen={onOpen} />}
+      <SectionChart
+        series={vizData.series}
+        parts={vizData.parts}
+        title={section.title}
+        scale={scale}
+        onOpen={onOpen}
+      />
+      {vizData.parts && vizData.bridge?.bridge && (
+        <BridgeChart
+          bridge={vizData.bridge.bridge}
+          reason={vizData.bridge.reason}
+          scale={scale}
+          onOpen={onOpen}
+        />
+      )}
     </div>
   );
 }
@@ -104,10 +166,20 @@ export function IrTopViz({ ticker, payload, scale }: IrTopVizProps) {
   }, [payload, ticker]);
   if (!v.tiles.length && !v.mix && !v.bank && !v.margin) return null;
   return (
-    <IrPanel section="IR charts" title="At a glance" subtitle="The latest printed figures and how they moved. Click a mark to open its source.">
+    <IrPanel
+      section="IR charts"
+      title="At a glance"
+      subtitle="The latest printed figures and how they moved. Click a mark to open its source."
+    >
       <div className="grid grid-cols-1 gap-6 p-4">
-        {(v.tiles.length > 0 || v.mix) && <SummaryStrip tiles={v.tiles} mix={v.mix} scale={scale} />}
-        {v.bank ? <BankPanel figures={v.bank} scale={scale} /> : v.margin ? <MarginPanel figures={v.margin} scale={scale} /> : null}
+        {(v.tiles.length > 0 || v.mix) && (
+          <SummaryStrip tiles={v.tiles} mix={v.mix} scale={scale} />
+        )}
+        {v.bank ? (
+          <BankPanel figures={v.bank} scale={scale} />
+        ) : v.margin ? (
+          <MarginPanel figures={v.margin} scale={scale} />
+        ) : null}
       </div>
     </IrPanel>
   );

@@ -61,15 +61,25 @@ export const slotKey = (slot: string) => slot.split(REPEAT)[0];
 const isTableLoc = (l: PayloadCell["l"]): l is [number, number, number] => Array.isArray(l);
 
 /** Where a cell was printed: "<doc>:<table>" and its row, or a slide page and the mark's height on it. */
-function placeOf(c: { d?: number; l?: PayloadCell["l"] }): { id: string; d: number; t: string; r: number } | null {
+function placeOf(c: {
+  d?: number;
+  l?: PayloadCell["l"];
+}): { id: string; d: number; t: string; r: number } | null {
   if (c.d == null || !c.l) return null;
   if (isTableLoc(c.l)) return { id: `${c.d}:${c.l[0]}`, d: c.d, t: String(c.l[0]), r: c.l[1] };
-  if (typeof c.l.p === "number") return { id: `${c.d}:p${c.l.p}`, d: c.d, t: `p${c.l.p}`, r: Math.round((c.l.b?.[1] ?? 0) * 1000) };
+  if (typeof c.l.p === "number")
+    return {
+      id: `${c.d}:p${c.l.p}`,
+      d: c.d,
+      t: `p${c.l.p}`,
+      r: Math.round((c.l.b?.[1] ?? 0) * 1000),
+    };
   return null;
 }
 
 function* cellsOf(s: PayloadSeries): Generator<PayloadCell> {
-  for (const m of [s.q, s.y, s.mo ?? {}, s.held?.q ?? {}, s.held?.y ?? {}, s.held?.mo ?? {}]) for (const c of Object.values(m)) yield c;
+  for (const m of [s.q, s.y, s.mo ?? {}, s.held?.q ?? {}, s.held?.y ?? {}, s.held?.mo ?? {}])
+    for (const c of Object.values(m)) yield c;
 }
 
 /** Every printed table of the payload with the lines it prints (from shown, held and alternative printings). */
@@ -105,7 +115,12 @@ const tNum = (t: string) => (t.startsWith("p") ? 10_000 + Number(t.slice(1)) : N
 function docRank(p: IrPayload, tables: Table[]): Map<number, number> {
   const lines = new Map<number, number>();
   for (const t of tables) lines.set(t.d, (lines.get(t.d) ?? 0) + t.rows.size);
-  const ds = [...lines.keys()].sort((a, b) => (p.docs[b]?.filed ?? "").localeCompare(p.docs[a]?.filed ?? "") || (lines.get(b) ?? 0) - (lines.get(a) ?? 0) || b - a);
+  const ds = [...lines.keys()].sort(
+    (a, b) =>
+      (p.docs[b]?.filed ?? "").localeCompare(p.docs[a]?.filed ?? "") ||
+      (lines.get(b) ?? 0) - (lines.get(a) ?? 0) ||
+      b - a,
+  );
   return new Map(ds.map((d, i) => [d, i]));
 }
 
@@ -137,13 +152,29 @@ function drafts(p: IrPayload): Draft[] {
     const rows = [...t.rows.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k);
     // The section sharing most lines with this table, among those with no copy from this document yet.
     const shared = new Map<Draft, number>();
-    for (const k of rows) for (const s of index.get(k) ?? []) if (!s.docs.has(t.d)) shared.set(s, (shared.get(s) ?? 0) + 1);
+    for (const k of rows)
+      for (const s of index.get(k) ?? [])
+        if (!s.docs.has(t.d)) shared.set(s, (shared.get(s) ?? 0) + 1);
     let best: Draft | null = null;
     let n = 0;
-    for (const [s, c] of shared) if (c > n) (best = s), (n = c);
-    const need = Math.max(rows.length === 1 ? 1 : 2, Math.ceil(STITCH_SHARE * Math.min(rows.length, best?.anchor.rows.size ?? rows.length)));
+    for (const [s, c] of shared)
+      if (c > n) {
+        best = s;
+        n = c;
+      }
+    const need = Math.max(
+      rows.length === 1 ? 1 : 2,
+      Math.ceil(STITCH_SHARE * Math.min(rows.length, best?.anchor.rows.size ?? rows.length)),
+    );
     if (!best || n < need) {
-      best = { anchor: t, order: [], set: new Set(), docs: new Set(), places: new Map(), slotR: new Map(t.rows) };
+      best = {
+        anchor: t,
+        order: [],
+        set: new Set(),
+        docs: new Set(),
+        places: new Map(),
+        slotR: new Map(t.rows),
+      };
       out.push(best);
     }
     const isAnchor = best.anchor === t;
@@ -170,7 +201,8 @@ function drafts(p: IrPayload): Draft[] {
       for (const [k, r] of [...t.again].sort((a, b) => a[1] - b[1])) {
         const slot = `${k}${REPEAT}${r}`;
         // One row per printed row: another line already standing for this row keeps it.
-        if ([...best.slotR.entries()].some(([x, rx]) => rx === r && best!.order.includes(x))) continue;
+        if ([...best.slotR.entries()].some(([x, rx]) => rx === r && best!.order.includes(x)))
+          continue;
         let after = -1;
         best.order.forEach((x, i) => {
           const rx = best!.slotR.get(x);
@@ -208,12 +240,20 @@ const mode = <T>(xs: T[]): T | undefined => {
   for (const x of xs) {
     const k = (n.get(x) ?? 0) + 1;
     n.set(x, k);
-    if (k > c) (best = x), (c = k);
+    if (k > c) {
+      best = x;
+      c = k;
+    }
   }
   return best;
 };
 
-const SCALE_WORD: Record<number, string> = { 1: "", 1e3: "in thousands", 1e6: "in millions", 1e9: "in billions" };
+const SCALE_WORD: Record<number, string> = {
+  1: "",
+  1e3: "in thousands",
+  1e6: "in millions",
+  1e9: "in billions",
+};
 
 /** Divisor a line's figures were printed at, by the cells' own printed text (money and counts only). */
 export function lineDiv(s: PayloadSeries): number {
@@ -230,21 +270,30 @@ export function lineDiv(s: PayloadSeries): number {
 export function lastEnd(s: PayloadSeries): string {
   let m = "";
   for (const c of cellsOf(s)) if (c.e && c.e > m) m = c.e;
-  for (const e of [...Object.keys(s.q), ...Object.keys(s.y), ...Object.keys(s.mo ?? {})]) if (e > m) m = e;
+  for (const e of [...Object.keys(s.q), ...Object.keys(s.y), ...Object.keys(s.mo ?? {})])
+    if (e > m) m = e;
   return m;
 }
 
 function firstEnd(s: PayloadSeries): string {
   let m = "9999";
-  for (const e of [...Object.keys(s.q), ...Object.keys(s.y), ...Object.keys(s.mo ?? {})]) if (e < m) m = e;
+  for (const e of [...Object.keys(s.q), ...Object.keys(s.y), ...Object.keys(s.mo ?? {})])
+    if (e < m) m = e;
   return m;
 }
 
-const norm = (x: string | undefined) => (x ?? "").toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
+const norm = (x: string | undefined) =>
+  (x ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9%]+/g, " ")
+    .trim();
 
 /** Two lines never print different figures for the same period (within 0.5 percent). */
 function agree(a: PayloadSeries, b: PayloadSeries) {
-  for (const [x, y] of [[a.q, b.q], [a.y, b.y]] as const)
+  for (const [x, y] of [
+    [a.q, b.q],
+    [a.y, b.y],
+  ] as const)
     for (const [e, c] of Object.entries(x)) {
       const o = y[e];
       if (o && Math.abs(o.v - c.v) > 0.005 * Math.max(Math.abs(o.v), Math.abs(c.v))) return false;
@@ -257,7 +306,11 @@ function agree(a: PayloadSeries, b: PayloadSeries) {
  * name under the same total, in the same unit, with no period where their figures differ. Groups keep the
  * section order; the first line of a group (printed in the newest copy) is the one shown.
  */
-export function sameRows(keys: string[], byKey: Map<string, PayloadSeries>, places: Map<string, Set<string>>): string[][] {
+export function sameRows(
+  keys: string[],
+  byKey: Map<string, PayloadSeries>,
+  places: Map<string, Set<string>>,
+): string[][] {
   const groups: { ks: string[]; at: Set<string> }[] = [];
   const pl = (s: PayloadSeries) => {
     const par = s.parent ? byKey.get(s.parent) : undefined;
@@ -265,16 +318,26 @@ export function sameRows(keys: string[], byKey: Map<string, PayloadSeries>, plac
   };
   // The same name, unit and role, under the same total; or in the same named table when one lost its total.
   const same = (a: PayloadSeries, b: PayloadSeries) =>
-    norm(a.label) === norm(b.label) && a.unit === b.unit && !!a.total === !!b.total && (pl(a) === pl(b) || ((!a.parent || !b.parent) && !!a.bd && norm(a.bd) === norm(b.bd ?? "")));
+    norm(a.label) === norm(b.label) &&
+    a.unit === b.unit &&
+    !!a.total === !!b.total &&
+    (pl(a) === pl(b) || ((!a.parent || !b.parent) && !!a.bd && norm(a.bd) === norm(b.bd ?? "")));
   const docsIn = (at: Set<string>) => new Set([...at].map((x) => x.split(":")[0]));
   for (const k of keys) {
     const s = byKey.get(k)!;
     const at = places.get(k) ?? new Set<string>();
     const mine = docsIn(at);
     const hit =
-      groups.find((g) => [...at].some((x) => g.at.has(x)) && g.ks.every((o) => agree(byKey.get(o)!, s))) ??
+      groups.find(
+        (g) => [...at].some((x) => g.at.has(x)) && g.ks.every((o) => agree(byKey.get(o)!, s)),
+      ) ??
       // By name only across documents: two rows of one document are two printed rows.
-      groups.find((g) => same(byKey.get(g.ks[0])!, s) && ![...docsIn(g.at)].some((d) => mine.has(d)) && g.ks.every((o) => agree(byKey.get(o)!, s)));
+      groups.find(
+        (g) =>
+          same(byKey.get(g.ks[0])!, s) &&
+          ![...docsIn(g.at)].some((d) => mine.has(d)) &&
+          g.ks.every((o) => agree(byKey.get(o)!, s)),
+      );
     if (hit) {
       hit.ks.push(k);
       for (const x of at) hit.at.add(x);
@@ -324,7 +387,13 @@ export function assembleStatements(p: IrPayload): Statement[] {
     // Second printings stay rows of their own; the other lines are grouped into printed rows.
     const grouped = sameRows(keys, byKey, dr.places);
     const groupOf = new Map(grouped.map((g) => [g[0], g]));
-    const groups: { slot: string; ks: string[] }[] = slots.flatMap((x) => (x.includes(REPEAT) ? [{ slot: x, ks: [slotKey(x)] }] : groupOf.has(x) ? [{ slot: x, ks: groupOf.get(x)! }] : []));
+    const groups: { slot: string; ks: string[] }[] = slots.flatMap((x) =>
+      x.includes(REPEAT)
+        ? [{ slot: x, ks: [slotKey(x)] }]
+        : groupOf.has(x)
+          ? [{ slot: x, ks: groupOf.get(x)! }]
+          : [],
+    );
     const depthOf = (k: string) => {
       let d = 0;
       let s = byKey.get(k);
@@ -356,15 +425,25 @@ export function assembleStatements(p: IrPayload): Statement[] {
         }
         if (between.length) {
           if (gap || rows.at(-1)?.kind === "line") rows.push({ kind: "gap" });
-          for (const h of between) rows.push({ ...h, depth: Math.max(0, depth - 1) } as StatementRow);
+          for (const h of between)
+            rows.push({ ...h, depth: Math.max(0, depth - 1) } as StatementRow);
         } else if (gap) rows.push({ kind: "gap" });
       } else if (r != null && prevR == null && cap) {
         const before = [...heads.entries()].filter(([i]) => i < r && i >= r - 2);
-        for (const [, h] of before) rows.push({ kind: "head", text: sentenceCase(h, keep), depth: Math.max(0, depth - 1) });
+        for (const [, h] of before)
+          rows.push({ kind: "head", text: sentenceCase(h, keep), depth: Math.max(0, depth - 1) });
       }
       if (r != null) prevR = r;
       // Bold with a rule only where the section prints parts of it; a total of parts printed elsewhere reads as a line.
-      rows.push({ kind: "line", k, ks, depth, total: ks.some((x) => !!byKey.get(x)!.total) && keys.some((o) => ks.includes(byKey.get(o)!.parent ?? "")) });
+      rows.push({
+        kind: "line",
+        k,
+        ks,
+        depth,
+        total:
+          ks.some((x) => !!byKey.get(x)!.total) &&
+          keys.some((o) => ks.includes(byKey.get(o)!.parent ?? "")),
+      });
     }
     const lines = keys.map((k) => byKey.get(k)!);
     const money = lines.filter((s) => s.unit === "usd");
@@ -378,7 +457,13 @@ export function assembleStatements(p: IrPayload): Statement[] {
       id: dr.anchor.id,
       title: printed || bd || CATEGORY_LABEL[cat] || cat,
       titleFrom: printed ? "printed" : bd ? "breakdown" : "category",
-      unitLine: unitText ? unitText.charAt(0).toUpperCase() + unitText.slice(1) : money.length ? (div === 1 ? "Dollars" : `Dollars ${SCALE_WORD[div]}`) : "",
+      unitLine: unitText
+        ? unitText.charAt(0).toUpperCase() + unitText.slice(1)
+        : money.length
+          ? div === 1
+            ? "Dollars"
+            : `Dollars ${SCALE_WORD[div]}`
+          : "",
       div,
       rows,
       keys,
@@ -394,15 +479,31 @@ export function assembleStatements(p: IrPayload): Statement[] {
 }
 
 /** One row's figures for a period kind: the first line of the row that prints a period wins (newest copy first). */
-export function rowCells(ks: string[], byKey: Map<string, PayloadSeries>, freq: IrPeriodKind): { cells: Record<string, PayloadCell>; held: Record<string, PayloadCell>; from: Record<string, string> } {
+export function rowCells(
+  ks: string[],
+  byKey: Map<string, PayloadSeries>,
+  freq: IrPeriodKind,
+): {
+  cells: Record<string, PayloadCell>;
+  held: Record<string, PayloadCell>;
+  from: Record<string, string>;
+} {
   const cells: Record<string, PayloadCell> = {};
   const held: Record<string, PayloadCell> = {};
   const from: Record<string, string> = {};
   for (const k of ks) {
     const s = byKey.get(k);
     if (!s) continue;
-    for (const [e, c] of Object.entries(cellsFor(s, freq))) if (!cells[e] && !held[e]) (cells[e] = c), (from[e] = k);
-    for (const [e, c] of Object.entries(heldFor(s, freq))) if (!cells[e] && !held[e]) (held[e] = c), (from[e] = k);
+    for (const [e, c] of Object.entries(cellsFor(s, freq)))
+      if (!cells[e] && !held[e]) {
+        cells[e] = c;
+        from[e] = k;
+      }
+    for (const [e, c] of Object.entries(heldFor(s, freq)))
+      if (!cells[e] && !held[e]) {
+        held[e] = c;
+        from[e] = k;
+      }
   }
   return { cells, held, from };
 }
@@ -419,9 +520,12 @@ export const CURRENT_DAYS = 455;
 
 /** The cut-off for "current": fifteen months before the payload's newest period. */
 export function currentCut(p: IrPayload): string {
-  const last = p.stats.lastPeriod ?? p.series.reduce((m, s) => (lastEnd(s) > m ? lastEnd(s) : m), "");
+  const last =
+    p.stats.lastPeriod ?? p.series.reduce((m, s) => (lastEnd(s) > m ? lastEnd(s) : m), "");
   if (!last) return "";
-  return new Date(Date.parse(`${last.slice(0, 10)}T00:00:00Z`) - CURRENT_DAYS * DAY).toISOString().slice(0, 10);
+  return new Date(Date.parse(`${last.slice(0, 10)}T00:00:00Z`) - CURRENT_DAYS * DAY)
+    .toISOString()
+    .slice(0, 10);
 }
 
 /**
@@ -429,8 +533,18 @@ export function currentCut(p: IrPayload): string {
  * stays while one of its parts is current), headings without a line under them and doubled spacers go.
  * Returns the rows and how many lines were left out.
  */
-export function visibleRows(sec: Statement, byKey: Map<string, PayloadSeries>, opts: { cut?: string; has?: (s: PayloadSeries) => boolean; match?: (s: PayloadSeries) => boolean }): { rows: StatementRow[]; hidden: number } {
-  const lineRows = sec.rows.filter((r): r is Extract<StatementRow, { kind: "line" }> => r.kind === "line");
+export function visibleRows(
+  sec: Statement,
+  byKey: Map<string, PayloadSeries>,
+  opts: {
+    cut?: string;
+    has?: (s: PayloadSeries) => boolean;
+    match?: (s: PayloadSeries) => boolean;
+  },
+): { rows: StatementRow[]; hidden: number } {
+  const lineRows = sec.rows.filter(
+    (r): r is Extract<StatementRow, { kind: "line" }> => r.kind === "line",
+  );
   const rowOf = new Map<string, string>();
   for (const r of lineRows) for (const k of r.ks) rowOf.set(k, r.k);
   const keepK = new Set<string>();
@@ -439,7 +553,8 @@ export function visibleRows(sec: Statement, byKey: Map<string, PayloadSeries>, o
     const ss = r.ks.map((k) => byKey.get(k)).filter((x): x is PayloadSeries => !!x);
     const current = !opts.cut || ss.some((s) => lastEnd(s) >= opts.cut!);
     if (!current) hidden++;
-    if (current && (!opts.has || ss.some(opts.has)) && (!opts.match || ss.some(opts.match))) keepK.add(r.k);
+    if (current && (!opts.has || ss.some(opts.has)) && (!opts.match || ss.some(opts.match)))
+      keepK.add(r.k);
   }
   // A total stays when one of its parts is shown.
   for (const k of [...keepK]) {
@@ -490,14 +605,17 @@ export function printedSuffix(s: PayloadSeries): string {
   for (const c of cellsOf(s)) {
     if (!c.x) continue;
     const m = c.x.match(/\d\)?\s*(%|x|×|bps|bp)\s*$/i);
-    xs.push(m ? (m[1] === "%" ? "%" : m[1].toLowerCase() === "x" || m[1] === "×" ? "×" : " bps") : "");
+    xs.push(
+      m ? (m[1] === "%" ? "%" : m[1].toLowerCase() === "x" || m[1] === "×" ? "×" : " bps") : "",
+    );
   }
   const s0 = mode(xs) ?? "";
   if (!s0 && s.unit === "pct") return "%";
   return s0;
 }
 
-const fmtN = (n: number, dec: number) => n.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const fmtN = (n: number, dec: number) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 /**
  * A figure as the document prints it: in the line's printed scale, with its printed decimals and mark,
@@ -512,7 +630,8 @@ export function printedFigure(v: number, div: number, dec: number, suffix: strin
 
 /** The scale a line is printed at when it differs from its section's ("in billions"), for a quiet note at the label. */
 export function scaleNote(lineDivisor: number, s: PayloadSeries, sectionDiv: number): string {
-  if (s.unit === "usd") return lineDivisor !== sectionDiv ? SCALE_WORD[lineDivisor] || "in dollars" : "";
+  if (s.unit === "usd")
+    return lineDivisor !== sectionDiv ? SCALE_WORD[lineDivisor] || "in dollars" : "";
   if (s.unit === "count") return lineDivisor > 1 ? SCALE_WORD[lineDivisor] : "";
   return "";
 }
@@ -522,7 +641,10 @@ export function scaleNote(lineDivisor: number, s: PayloadSeries, sectionDiv: num
  * of one stored document (table-captions.ts), or nothing when the document can't be read. Only anchor
  * tables are kept, so the payload grows by a few kilobytes. Pure; the build reads the documents.
  */
-export async function withCaptions(p: IrPayload, captionsOf: (d: number) => Promise<TableCaption[] | null | undefined>): Promise<IrPayload> {
+export async function withCaptions(
+  p: IrPayload,
+  captionsOf: (d: number) => Promise<TableCaption[] | null | undefined>,
+): Promise<IrPayload> {
   const anchors = statementAnchors(p);
   const docs = [...new Set(anchors.map((a) => a.d))];
   const tables: Record<string, PayloadTable> = {};
@@ -535,7 +657,8 @@ export async function withCaptions(p: IrPayload, captionsOf: (d: number) => Prom
       const c = byT.get(a.t);
       if (!c) continue;
       const { t: _t, ...rest } = c;
-      if (rest.title || rest.unit || rest.heads?.length || rest.blank?.length) tables[`${a.d}:${a.t}`] = rest;
+      if (rest.title || rest.unit || rest.heads?.length || rest.blank?.length)
+        tables[`${a.d}:${a.t}`] = rest;
     }
   }
   return Object.keys(tables).length ? { ...p, tables } : p;

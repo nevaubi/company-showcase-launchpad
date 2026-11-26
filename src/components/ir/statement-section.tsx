@@ -7,7 +7,12 @@ import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Check, Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AltMark, CheckDot, HeldMark } from "@/components/ir/marks";
 import { DASH, IR, indentStyle } from "@/components/ir/typography";
@@ -113,19 +118,30 @@ export const StatementSection = memo(function StatementSection({
       ))}
     </colgroup>
   );
-  const span = cols.length ? (cols.length === 1 ? heads[0].short : `${heads[0].short} to ${heads[heads.length - 1].short}`) : "";
+  const span = cols.length
+    ? cols.length === 1
+      ? heads[0].short
+      : `${heads[0].short} to ${heads[heads.length - 1].short}`
+    : "";
   const issues = view.failing + view.flagged + view.held;
 
   return (
-    <section aria-labelledby={titleId} data-statement={sec.id} className={cn("min-w-0 scroll-mt-28 pt-5", FIRST)}>
+    <section
+      aria-labelledby={titleId}
+      data-statement={sec.id}
+      className={cn("min-w-0 scroll-mt-28 pt-5", FIRST)}
+    >
       <header className="flex flex-col gap-x-3 gap-y-2 px-4 pb-3 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className={IR.group}>
             {sec.title}
           </h3>
           <p className={IR.caption}>
-            {[sec.unitLine, span, sec.docs > 1 ? `${sec.docs} documents` : "1 document"].filter(Boolean).join(" · ")}
-            {view.hidden > 0 && ` · ${view.hidden} older line${view.hidden === 1 ? "" : "s"} hidden`}
+            {[sec.unitLine, span, sec.docs > 1 ? `${sec.docs} documents` : "1 document"]
+              .filter(Boolean)
+              .join(" · ")}
+            {view.hidden > 0 &&
+              ` · ${view.hidden} older line${view.hidden === 1 ? "" : "s"} hidden`}
           </p>
         </div>
         <div data-agent-controls className="flex flex-wrap items-center gap-1.5">
@@ -133,10 +149,17 @@ export const StatementSection = memo(function StatementSection({
             <button
               type="button"
               onClick={() => onChecks(sec.id)}
-              className={cn("inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", view.tieOk === view.tieN ? "text-muted-foreground" : "text-foreground")}
+              className={cn(
+                "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                view.tieOk === view.tieN ? "text-muted-foreground" : "text-foreground",
+              )}
               title="Periods in view whose parts add up to the printed total. Open the checks for this section."
             >
-              {view.tieOk === view.tieN ? <Check aria-hidden className="size-3 text-positive" /> : <CheckDot />}
+              {view.tieOk === view.tieN ? (
+                <Check aria-hidden className="size-3 text-positive" />
+              ) : (
+                <CheckDot />
+              )}
               <span className="num">
                 {view.tieOk} of {view.tieN}
               </span>
@@ -144,7 +167,11 @@ export const StatementSection = memo(function StatementSection({
             </button>
           )}
           {issues > 0 && view.tieN === 0 && (
-            <button type="button" onClick={() => onChecks(sec.id)} className="inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button
+              type="button"
+              onClick={() => onChecks(sec.id)}
+              className="inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <CheckDot /> {issues} to review
             </button>
           )}
@@ -164,7 +191,12 @@ export const StatementSection = memo(function StatementSection({
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon-sm" variant="ghost" aria-label={`Download ${sec.title}`} aria-busy={exporting}>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={`Download ${sec.title}`}
+                    aria-busy={exporting}
+                  >
                     {exporting ? <Loader2 className="animate-spin" /> : <Download />}
                   </Button>
                 </DropdownMenuTrigger>
@@ -172,18 +204,29 @@ export const StatementSection = memo(function StatementSection({
               <TooltipContent>Download this section</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem onSelect={() => onExcel(sec)} disabled={exporting} className="items-start gap-2.5 py-2">
+              <DropdownMenuItem
+                onSelect={() => onExcel(sec)}
+                disabled={exporting}
+                className="items-start gap-2.5 py-2"
+              >
                 <FileSpreadsheet className="mt-0.5" />
                 <span>
                   <span className="block text-sm font-medium">Excel workbook</span>
-                  <span className="block text-xs text-muted-foreground">Styled, with formulas, checks and sources</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Styled, with formulas, checks and sources
+                  </span>
                 </span>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onCsv(sec, cols)} className="items-start gap-2.5 py-2">
+              <DropdownMenuItem
+                onSelect={() => onCsv(sec, cols)}
+                className="items-start gap-2.5 py-2"
+              >
                 <FileText className="mt-0.5" />
                 <span>
                   <span className="block text-sm font-medium">CSV</span>
-                  <span className="block text-xs text-muted-foreground">Plain values in full units</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Plain values in full units
+                  </span>
                 </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -192,27 +235,60 @@ export const StatementSection = memo(function StatementSection({
       </header>
 
       {mode === "chart" && chartable ? (
-        <IrSectionViz ticker={ticker} payload={payload} section={sec} lines={view.lines} cols={cols} heads={heads.map((h) => h.short)} freq={freq} scale={scale} openCell={openCell} />
+        <IrSectionViz
+          ticker={ticker}
+          payload={payload}
+          section={sec}
+          lines={view.lines}
+          cols={cols}
+          heads={heads.map((h) => h.short)}
+          freq={freq}
+          scale={scale}
+          openCell={openCell}
+        />
       ) : (
         <div className="relative">
-          <div ref={head} aria-hidden className="sticky top-[var(--sticky-top,3.5rem)] z-20 overflow-hidden border-y bg-card">
-            <table className={cn("w-full table-fixed border-separate border-spacing-0", IR.row)} style={{ minWidth }}>
+          <div
+            ref={head}
+            aria-hidden
+            className="sticky top-[var(--sticky-top,3.5rem)] z-20 overflow-hidden border-y bg-card"
+          >
+            <table
+              className={cn("w-full table-fixed border-separate border-spacing-0", IR.row)}
+              style={{ minWidth }}
+            >
               {colgroup}
               <thead>
                 <tr>
                   <th className="sticky left-0 z-10 bg-card py-1.5 pl-4 pr-3 text-left align-bottom font-normal" />
                   {heads.map((h, i) => (
-                    <th key={cols[i]} className="whitespace-nowrap px-3 py-1.5 text-right align-bottom font-normal" title={periodLong(cols[i], freq)}>
-                      <span className="num block text-[11px] font-medium text-foreground">{h.main}</span>
-                      {h.sub && <span className="num block text-[11px] text-muted-foreground">{h.sub}</span>}
+                    <th
+                      key={cols[i]}
+                      className="whitespace-nowrap px-3 py-1.5 text-right align-bottom font-normal"
+                      title={periodLong(cols[i], freq)}
+                    >
+                      <span className="num block text-[11px] font-medium text-foreground">
+                        {h.main}
+                      </span>
+                      {h.sub && (
+                        <span className="num block text-[11px] text-muted-foreground">{h.sub}</span>
+                      )}
                     </th>
                   ))}
                 </tr>
               </thead>
             </table>
           </div>
-          <div ref={body} onScroll={sync} className="relative overflow-x-auto overscroll-x-contain scrollbar-thin">
-            <table aria-labelledby={titleId} className={cn("w-full table-fixed border-separate border-spacing-0", IR.row)} style={{ minWidth }}>
+          <div
+            ref={body}
+            onScroll={sync}
+            className="relative overflow-x-auto overscroll-x-contain scrollbar-thin"
+          >
+            <table
+              aria-labelledby={titleId}
+              className={cn("w-full table-fixed border-separate border-spacing-0", IR.row)}
+              style={{ minWidth }}
+            >
               {colgroup}
               <thead className="sr-only">
                 <tr>
@@ -235,7 +311,12 @@ export const StatementSection = memo(function StatementSection({
                   if (r.kind === "head")
                     return (
                       <tr key={r.id}>
-                        <th scope="rowgroup" colSpan={1} className="sticky left-0 z-[1] bg-card pb-0.5 pr-3 pt-1.5 text-left text-[12px] font-medium text-muted-foreground" style={indentStyle(r.depth)}>
+                        <th
+                          scope="rowgroup"
+                          colSpan={1}
+                          className="sticky left-0 z-[1] bg-card pb-0.5 pr-3 pt-1.5 text-left text-[12px] font-medium text-muted-foreground"
+                          style={indentStyle(r.depth)}
+                        >
                           {r.text}
                         </th>
                         <td colSpan={cols.length} />
@@ -246,31 +327,76 @@ export const StatementSection = memo(function StatementSection({
                     <tr key={r.id} className="group">
                       <th
                         scope="row"
-                        className={cn("sticky left-0 z-[1] truncate bg-card py-1 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary", r.total && IR.total, rule, r.match && "bg-highlight-soft")}
+                        className={cn(
+                          "sticky left-0 z-[1] truncate bg-card py-1 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary",
+                          r.total && IR.total,
+                          rule,
+                          r.match && "bg-highlight-soft",
+                        )}
                         style={indentStyle(r.depth)}
                         title={r.note ? `${r.label} (${r.note})` : r.label}
                       >
                         {r.label}
-                        {r.note && <span className={cn("ml-1 font-normal", IR.caption)}>{r.note}</span>}
+                        {r.note && (
+                          <span className={cn("ml-1 font-normal", IR.caption)}>{r.note}</span>
+                        )}
                       </th>
                       {r.cells.map((x, i) => {
                         const e = cols[i];
                         if (!x)
                           return (
-                            <td key={e} className={cn("px-3 py-1 transition-colors duration-150 group-hover:bg-secondary/60", IR.num, IR.missing, rule)}>
+                            <td
+                              key={e}
+                              className={cn(
+                                "px-3 py-1 transition-colors duration-150 group-hover:bg-secondary/60",
+                                IR.num,
+                                IR.missing,
+                                rule,
+                              )}
+                            >
                               {DASH}
                             </td>
                           );
                         const off = x.check && !x.check.ok && !x.check.partial;
                         const tied = x.check?.ok && !x.check.partial;
                         return (
-                          <td key={e} className={cn("p-0 transition-colors duration-150 group-hover:bg-secondary/60", rule)}>
-                            <button type="button" onClick={() => openCell(x.s, e, x.c)} title={x.title} className={cn(IR.cellButton, IR.num, "pr-[18px]", r.total && IR.total, x.held && "text-muted-foreground")}>
+                          <td
+                            key={e}
+                            className={cn(
+                              "p-0 transition-colors duration-150 group-hover:bg-secondary/60",
+                              rule,
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => openCell(x.s, e, x.c)}
+                              title={x.title}
+                              className={cn(
+                                IR.cellButton,
+                                IR.num,
+                                "pr-[18px]",
+                                r.total && IR.total,
+                                x.held && "text-muted-foreground",
+                              )}
+                            >
                               <span className={cn(x.c.f && IR.derived)}>{x.text}</span>
-                              <span aria-hidden className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center">
-                                {x.held ? <HeldMark /> : off || x.c.flags?.length ? <CheckDot /> : x.c.alt ? <AltMark /> : tied ? <Check className="size-3 text-positive/80" strokeWidth={2.5} /> : null}
+                              <span
+                                aria-hidden
+                                className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center"
+                              >
+                                {x.held ? (
+                                  <HeldMark />
+                                ) : off || x.c.flags?.length ? (
+                                  <CheckDot />
+                                ) : x.c.alt ? (
+                                  <AltMark />
+                                ) : tied ? (
+                                  <Check className="size-3 text-positive/80" strokeWidth={2.5} />
+                                ) : null}
                               </span>
-                              {(off || x.held || x.c.flags?.length) && <span className="sr-only"> (see the checks)</span>}
+                              {(off || x.held || x.c.flags?.length) && (
+                                <span className="sr-only"> (see the checks)</span>
+                              )}
                               {tied && <span className="sr-only"> (parts add up)</span>}
                             </button>
                           </td>
