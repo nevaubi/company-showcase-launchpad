@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseDecimal, type Decimal } from "./decimal";
 import { SCALE_UNITS, axisLabel, readerFigure, scaleUnitOf } from "./scale";
+import { isClassicSpec } from "./compute";
 import { TILES } from "./specs";
 
 const d = (text: string): Decimal => {
@@ -64,7 +65,7 @@ describe("whitelist entries on the figures the tiles print", () => {
   });
 
   it("holds only units that a level or a ranking tile uses", () => {
-    const used = new Set(TILES.filter((t) => t.transform === "level" || t.transform === "rank").map((t) => t.unit));
+    const used = new Set(TILES.flatMap((t) => (isClassicSpec(t) && (t.transform === "level" || t.transform === "rank") ? [t.unit] : [])));
     for (const entry of SCALE_UNITS) expect(used.has(entry.unit), entry.unit).toBe(true);
   });
 });

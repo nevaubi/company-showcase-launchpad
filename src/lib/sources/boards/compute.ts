@@ -38,7 +38,23 @@ import type {
   TileGaps,
   TilePoint,
   TileResult,
+  TileSpec,
 } from "./types";
+
+/** A tile of round 4 (one series, a share of two, a ranking), drawn with a line, columns or ranked bars. */
+export function isClassicSpec(spec: TileSpec): spec is SeriesTileSpec | ShareTileSpec | RankTileSpec {
+  return spec.transform !== "records" && (spec.form === "line" || spec.form === "bars" || spec.form === "ranked-bars");
+}
+
+/** A tile of one series over time: its level or its change over a year. */
+export function isSeriesSpec(spec: TileSpec): spec is SeriesTileSpec {
+  return isClassicSpec(spec) && spec.transform !== "share" && spec.transform !== "rank";
+}
+
+/** A tile ranking entities or places at one period. */
+export function isRankSpec(spec: TileSpec): spec is RankTileSpec {
+  return spec.transform === "rank";
+}
 
 /** One stored record of a series, as the reads return it and the caller shapes it. */
 export type CellInput = {
