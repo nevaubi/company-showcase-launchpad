@@ -1621,5 +1621,378 @@
     ]
    }
   }
+ },
+ "ncua": {
+  "datasetId": "official_01_financials_data_ncua_all_credit_unions_2026q2_core_c7e2229231",
+  "snapshotId": "5ee8aa51cfa3f5cbad5feb9ceccec44c8eff299a7c992f6d904b474691b386d2",
+  "rows": 4299,
+  "retrievedAt": "2026-11-24T10:14:39Z",
+  "publisher": {
+   "url": "https://ncua.gov/files/publications/analysis/call-report-data-2026-06.zip",
+   "lastModified": "Mon, 14 Sep 2026 17:34:19 GMT",
+   "sha256": "9b67a6cf2ccc550a99db007fab157c23df4a66896c19c8cb71d15d9609d04cc3"
+  },
+  "amounts": {
+   "storedMd5": "e264d0581e1a279267edae538c3da2b1",
+   "publisherMd5": "e264d0581e1a279267edae538c3da2b1",
+   "equal": true
+  },
+  "names": {
+   "storedMd5": "73ee0c08e5b9863415b52c9854a2a7b1",
+   "publisherMd5": "73ee0c08e5b9863415b52c9854a2a7b1",
+   "equal": true
+  },
+  "byType": {
+   "1": 2649,
+   "2": 1565,
+   "3": 85
+  },
+  "summary": {
+   "url": "https://ncua.gov/files/publications/analysis/quarterly-data-summary-2026-Q2.pdf",
+   "says": [
+    "there were 4,214 federally insured credit unions with 146.1 million members",
+    "Total assets in federally insured credit unions rose by $120 billion, or 5.0 percent, over the year ending in 2026Q2, to $2.50 trillion."
+   ],
+   "federallyInsured": 4214,
+   "membersOfFederallyInsured": 146107877,
+   "assetsOfFederallyInsured": 2498852640655
+  },
+  "largestByAssets": [
+   [
+    "5536",
+    "NAVY FEDERAL CREDIT UNION",
+    "204364276193"
+   ],
+   [
+    "66310",
+    "STATE EMPLOYEES'",
+    "59971279455"
+   ],
+   [
+    "24212",
+    "SCHOOLSFIRST",
+    "37231194377"
+   ],
+   [
+    "62604",
+    "BOEING EMPLOYEES",
+    "29622756789"
+   ],
+   [
+    "227",
+    "PENTAGON",
+    "29196092863"
+   ],
+   [
+    "23521",
+    "FIRST TECHNOLOGY",
+    "27875912054"
+   ],
+   [
+    "24694",
+    "AMERICA FIRST",
+    "25985751122"
+   ],
+   [
+    "24692",
+    "MOUNTAIN AMERICA",
+    "22854430381"
+   ],
+   [
+    "61650",
+    "THE GOLDEN 1",
+    "22150941430"
+   ],
+   [
+    "68645",
+    "SUNCOAST",
+    "20779030012"
+   ]
+  ]
+ },
+ "fdicFailures": {
+  "datasetId": "official_01_financials_data_fdic_failures_and_assistance_since_2000_dffd8efb1d",
+  "snapshotId": "2be03758fb6e3e0dd3621b3aea9ad66a8d19fc224ae0ab4bc871bb9f3d867867",
+  "rows": 594,
+  "apiTotal": 594,
+  "withoutCost": 13,
+  "distinctCerts": 594,
+  "publisher": {
+   "url": "https://api.fdic.gov/banks/failures?filters=FAILYR:[2000 TO 2026]&sort_by=COST&sort_order=DESC&limit=14",
+   "fields": "https://api.fdic.gov/banks/docs/failure_properties.yaml",
+   "units": {
+    "COST": "Thousands of US Dollars",
+    "QBFASSET": "Thousands of US Dollars",
+    "QBFDEP": "Thousands of US Dollars"
+   }
+  },
+  "largestByCost": [
+   {
+    "stored": [
+     "24735.0",
+     "SILICON VALLEY BANK",
+     "3/10/2023",
+     "18744254.463",
+     "209026000.0",
+     "175378000.0"
+    ],
+    "api": [
+     24735,
+     "SILICON VALLEY BANK",
+     "3/10/2023",
+     18744254.463,
+     209026000,
+     175378000
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "59017.0",
+     "FIRST REPUBLIC BANK",
+     "5/1/2023",
+     "15495761.533",
+     "212638872.0",
+     "176436706.0"
+    ],
+    "api": [
+     59017,
+     "FIRST REPUBLIC BANK",
+     "5/1/2023",
+     15495761.533,
+     212638872,
+     176436706
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "29730.0",
+     "INDYMAC BANK F.S.B",
+     "7/11/2008",
+     "11979120.801",
+     "30698512.0",
+     "18941727.0"
+    ],
+    "api": [
+     29730,
+     "INDYMAC BANK F.S.B",
+     "7/11/2008",
+     11979120.801,
+     30698512,
+     18941727
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "32247.0",
+     "BANKUNITED, FSB",
+     "5/21/2009",
+     "5228684.226",
+     "13111463.0",
+     "8775985.0"
+    ],
+    "api": [
+     32247,
+     "BANKUNITED, FSB",
+     "5/21/2009",
+     5228684.226,
+     13111463,
+     8775985
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "9609.0",
+     "COLONIAL BANK",
+     "8/14/2009",
+     "2366269.245",
+     "25455112.0",
+     "20072099.0"
+    ],
+    "api": [
+     9609,
+     "COLONIAL BANK",
+     "8/14/2009",
+     2366269.245,
+     25455112,
+     20072099
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "31027.0",
+     "WESTERNBANK PUERTO RICO",
+     "4/30/2010",
+     "2173621.233",
+     "10797345.0",
+     "8420357.0"
+    ],
+    "api": [
+     31027,
+     "WESTERNBANK PUERTO RICO",
+     "4/30/2010",
+     2173621.233,
+     10797345,
+     8420357
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "29776.0",
+     "AMTRUST BANK",
+     "12/4/2009",
+     "1687530.375",
+     "11438990.0",
+     "8558609.0"
+    ],
+    "api": [
+     29776,
+     "AMTRUST BANK",
+     "12/4/2009",
+     1687530.375,
+     11438990,
+     8558609
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "33901.0",
+     "ANB FINANCIAL NATIONAL ASSOCIATION",
+     "5/9/2008",
+     "1025204.119",
+     "1895545.0",
+     "1815691.0"
+    ],
+    "api": [
+     33901,
+     "ANB FINANCIAL NATIONAL ASSOCIATION",
+     "5/9/2008",
+     1025204.119,
+     1895545,
+     1815691
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "32185.0",
+     "R-G PREMIER BANK OF PUERTO RICO",
+     "4/30/2010",
+     "978074.626",
+     "5681177.0",
+     "4220108.0"
+    ],
+    "api": [
+     32185,
+     "R-G PREMIER BANK OF PUERTO RICO",
+     "4/30/2010",
+     978074.626,
+     5681177,
+     4220108
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "57151.0",
+     "GEORGIAN BANK",
+     "9/25/2009",
+     "960819.804",
+     "2230230.0",
+     "1960123.0"
+    ],
+    "api": [
+     57151,
+     "GEORGIAN BANK",
+     "9/25/2009",
+     960819.804,
+     2230230,
+     1960123
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "34881.0",
+     "NEW FRONTIER BANK",
+     "4/10/2009",
+     "913431.679",
+     "1774588.0",
+     "1496347.0"
+    ],
+    "api": [
+     34881,
+     "NEW FRONTIER BANK",
+     "4/10/2009",
+     913431.679,
+     1774588,
+     1496347
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "18659.0",
+     "MUTUAL BANK",
+     "7/31/2009",
+     "793841.215",
+     "1595657.0",
+     "1546525.0"
+    ],
+    "api": [
+     18659,
+     "MUTUAL BANK",
+     "7/31/2009",
+     793841.215,
+     1595657,
+     1546525
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "10100.0",
+     "IRWIN UNION BANK AND TRUST COMPANY",
+     "9/18/2009",
+     "755961.772",
+     "2839747.0",
+     "2254025.0"
+    ],
+    "api": [
+     10100,
+     "IRWIN UNION BANK AND TRUST COMPANY",
+     "9/18/2009",
+     755961.772,
+     2839747,
+     2254025
+    ],
+    "equal": true
+   },
+   {
+    "stored": [
+     "58302.0",
+     "FIRST NBC BANK",
+     "4/28/2017",
+     "722104.917",
+     "3325870.0",
+     "3032208.0"
+    ],
+    "api": [
+     58302,
+     "FIRST NBC BANK",
+     "4/28/2017",
+     722104.917,
+     3325870,
+     3032208
+    ],
+    "equal": true
+   }
+  ]
  }
 }

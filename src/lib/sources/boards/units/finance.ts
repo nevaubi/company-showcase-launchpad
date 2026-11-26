@@ -2,6 +2,7 @@ import type { UnitSpecs } from "../compose";
 import type {
   CompareTileSpec,
   MixTileSpec,
+  RankTileSpec,
   RecordsTileSpec,
   SeriesTileSpec,
   StatTileSpec,
@@ -9,7 +10,9 @@ import type {
   TileSpec,
 } from "../types";
 import {
+  FDIC_FAILURES_DATASET,
   H8_MONTHLY_DATASET,
+  NCUA_CORE_DATASET,
   H8_MONTHLY_SERIES,
   H8_UNIT,
   OFR_MMF_DATASET,
@@ -103,7 +106,7 @@ const bankLoanGrowth: CompareTileSpec = {
 const bankDeposits: StatTileSpec = {
   id: "banks-deposits",
   collection: FIN,
-  section: SECTION.banks,
+  section: SECTION.deposits,
   datasetId: H8_MONTHLY_DATASET,
   measure: "value_native",
   title: "Deposits, all commercial banks (H.8)",
@@ -143,14 +146,64 @@ const creditUnionStates: RecordsTileSpec = {
   id: "credit-unions-by-state",
   collection: FIN,
   section: SECTION.creditUnions,
-  datasetId: "official_01_financials_data_ncua_all_credit_unions_2026q2_core_c7e2229231",
+  datasetId: NCUA_CORE_DATASET,
   title: "Credit unions by state, call reports for June 2026 (NCUA)",
   subject: "The NCUA call report file for June 2026",
   transform: "records",
   headline: "records",
   form: "map",
   per: { dimension: "geo_code", top: 60 },
-  note: "One record per federally insured credit union that filed a call report for the quarter ending 30 June 2026, placed by the state of its main office.",
+  note: "One record per credit union that filed a call report for the quarter ending 30 June 2026, placed by the state of its main office. Includes the credit unions that are not federally insured (CU_TYPE 3), which NCUA's own counts leave out.",
+};
+
+const largestCreditUnions: RankTileSpec = {
+  id: "largest-credit-unions",
+  collection: FIN,
+  section: SECTION.creditUnions,
+  datasetId: NCUA_CORE_DATASET,
+  measure: "assets_USD",
+  title: "Largest credit unions by total assets, June 2026 (NCUA)",
+  subject: "total assets",
+  entities: "credit unions that filed call reports for June 2026",
+  unit: "USD",
+  decimals: 0,
+  form: "ranked-bars",
+  transform: "rank",
+  headline: "rank",
+  across: { by: "entity_id", period: "table", top: 10 },
+  note: "Total assets (account 010) as each credit union reported them for the quarter ending 30 June 2026, in dollars.",
+};
+
+const mmfCategories: RecordsTileSpec = {
+  id: "mmf-fund-categories",
+  collection: FIN,
+  section: SECTION.funds,
+  datasetId: "official_01_financials_data_sec_nmfp_october2026_series_core_09a9c73b6e",
+  title: "Money market fund reports by fund category, filed 8 October to 6 November 2026 (SEC N-MFP)",
+  subject: "The SEC's N-MFP data set for filings of 8 October to 6 November 2026",
+  transform: "records",
+  headline: "records",
+  form: "ranked-bars",
+  per: { field: "MONEYMARKETFUNDCATEGORY", top: 6 },
+  note: "Each record is one fund's N-MFP report, amendments included, counted by the category the fund reports.",
+};
+
+const costliestFailures: RankTileSpec = {
+  id: "costliest-bank-failures",
+  collection: FIN,
+  section: SECTION.failures,
+  datasetId: FDIC_FAILURES_DATASET,
+  measure: "COST",
+  title: "Failures since 2000 with the largest estimated loss to the Deposit Insurance Fund (FDIC)",
+  subject: "estimated loss",
+  entities: "failed or assisted institutions since 2000",
+  unit: "USD thousands",
+  decimals: 0,
+  form: "ranked-bars",
+  transform: "rank",
+  headline: "rank",
+  across: { by: "entity_id", period: "table", top: 10 },
+  note: "The FDIC's estimate: what the Deposit Insurance Fund paid out for insured deposits less what it expects to recover from the receivership. Estimates change as receiverships wind down.",
 };
 
 const failuresPerYear: RecordsTileSpec = {
@@ -338,13 +391,16 @@ const TILES: readonly TileSpec[] = [
   bankDeposits,
   cohortStates,
   creditUnionAssets,
+  largestCreditUnions,
   creditUnionStates,
   mmfMix,
   mmfRepoYield,
+  mmfCategories,
   householdNetWorth,
   debtBySector,
   debtGrowth,
   failuresPerYear,
+  costliestFailures,
 ];
 
 /** The tiles this unit puts on the Banks and funds board, in board order (sections follow their first tile). */
@@ -354,12 +410,15 @@ export const FINANCE_BOARD_TILES: readonly string[] = [
   "banks-deposits",
   "cohort-institutions-by-state",
   "credit-unions-financial-assets",
+  "largest-credit-unions",
   "credit-unions-by-state",
   "mmf-investments-mix",
   "mmf-repo-yield",
+  "mmf-fund-categories",
   "household-net-worth",
   "debt-by-sector",
   "bank-failures-per-year",
+  "costliest-bank-failures",
 ];
 
 /** Tiles and boards added by round 6 unit `finance`. Pure data: no network; no shared list is edited. */

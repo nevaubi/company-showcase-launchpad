@@ -5,6 +5,9 @@ import { addressRefusal, profileFor, profileStatus, unitOf } from "../index";
 import type { ProfileDataset } from "../types";
 import {
   ENTRIES,
+  FDIC_FAILURES_DATASET,
+  FDIC_FAILURES_ENTRY,
+  FDIC_FAILURES_SNAPSHOT,
   FED_H8_ENTRY,
   FED_Z1_SECTORS_ENTRY,
   FED_Z1_TABLE_ENTRY,
@@ -13,6 +16,9 @@ import {
   H8_MONTHLY_SERIES,
   H8_MONTHLY_SNAPSHOT,
   H8_UNIT,
+  NCUA_CALL_ENTRY,
+  NCUA_CORE_DATASET,
+  NCUA_CORE_SNAPSHOT,
   OFR_MMF_DATASET,
   OFR_MMF_ENTRY,
   OFR_MMF_SNAPSHOT,
@@ -33,6 +39,16 @@ const FACTS = JSON.parse(readFileSync("src/lib/sources/profiles/units/finance.ch
   z1Sectors: { datasetId: string; snapshotId: string; rows: number; series: Record<string, Check & { description: string; unitAndBasis: string }> };
   z1Tables: Record<string, { records: number; storedMd5: string; publisherMd5: string; equal: boolean; series: Record<string, { description: string; unitAndBasis: string }> }>;
   ofr: { datasetId: string; snapshotId: string; rows: number; totalChildren: string[]; monthsPartsEqualTotal: number; months: number; series: Record<string, Check & { unit: { name: string; magnitude: number } }> };
+  ncua: {
+    datasetId: string;
+    snapshotId: string;
+    rows: number;
+    amounts: { storedMd5: string; publisherMd5: string };
+    names: { storedMd5: string; publisherMd5: string };
+    byType: Record<string, number>;
+    summary: { federallyInsured: number; membersOfFederallyInsured: number; assetsOfFederallyInsured: number };
+  };
+  fdicFailures: { datasetId: string; snapshotId: string; rows: number; apiTotal: number; distinctCerts: number; publisher: { units: Record<string, string> }; largestByCost: { equal: boolean }[] };
 };
 
 /** A dictionary as production stores it: positional keys, the publisher's headers as labels, every type "string". */
@@ -185,5 +201,62 @@ describe("OFR money market fund monthly data", () => {
     expect(FACTS.ofr.totalChildren).toEqual(["MMF-MMF_T_TOT-M", "MMF-MMF_AG_TOT-M", "MMF-MMF_BRA_TOT-M", "MMF-MMF_RP_TOT-M", "MMF-MMF_OA_TOT-M"]);
     expect(FACTS.ofr.monthsPartsEqualTotal).toBe(FACTS.ofr.months);
     expect(profile.defaultSeries?.(ofr)).toEqual(ofrSeries("MMF-MMF_TOT-M"));
+  });
+});
+
+const NCUA_COLUMNS = columns(
+  "asset_rank_in_package", "CU_NUMBER", "CU_NAME", "CYCLE_DATE", "JOIN_NUMBER", "RSSD", "CU_TYPE", "CITY", "STATE", "YEAR_OPENED",
+  "assets_USD", "shares_and_deposits_USD", "loans_and_leases_USD", "loan_and_lease_count", "loans_granted_YTD_USD", "members",
+  "noninterest_expense_YTD_USD", "liabilities_shares_equity_USD", "interest_income_YTD_USD", "net_income_YTD_USD", "net_worth_USD", "net_worth_ratio_native",
+).map((c) => (c.label.endsWith("_USD") ? { ...c, unit: "USD" } : c));
+
+describe("NCUA call reports, June 2026", () => {
+  const dataset = { id: NCUA_CORE_DATASET, source_id: "NCUA_CALL" };
+  const profile = NCUA_CALL_ENTRY.profile(dataset);
+
+  it("is the snapshot that was checked, every record equal to NCUA's call report package", () => {
+    expect(profile.proof).toMatchObject({ datasetId: FACTS.ncua.datasetId, snapshotId: NCUA_CORE_SNAPSHOT });
+    expect(NCUA_CORE_SNAPSHOT).toBe(FACTS.ncua.snapshotId);
+    expect(FACTS.ncua.amounts.storedMd5).toBe(FACTS.ncua.amounts.publisherMd5);
+    expect(FACTS.ncua.names.storedMd5).toBe(FACTS.ncua.names.publisherMd5);
+    expect(Object.values(FACTS.ncua.byType).reduce((a, b) => a + b, 0)).toBe(FACTS.ncua.rows);
+  });
+
+  it("states dollars: the federally insured credit unions of the file add up to NCUA's own summary", () => {
+    // NCUA's 2026Q2 summary: 4,214 federally insured credit unions, 146.1 million members, total assets $2.50 trillion
+    expect(FACTS.ncua.summary.federallyInsured).toBe(4214);
+    expect(Math.round(FACTS.ncua.summary.membersOfFederallyInsured / 100_000) / 10).toBe(146.1);
+    expect(Math.round(FACTS.ncua.summary.assetsOfFederallyInsured / 1e10) / 100).toBe(2.5);
+    for (const m of profile.measures) expect(unitOf(m, NCUA_COLUMNS)).toEqual({ ok: true, text: "USD" });
+    expect(profileFor(dataset, NCUA_COLUMNS)?.family).toBe("ncua-call");
+  });
+
+  it("turns off when the dictionary states another unit for a measure", () => {
+    const other = NCUA_COLUMNS.map((c) => (c.label === "assets_USD" ? { ...c, unit: "USD thousands" } : c));
+    expect(unitOf(profile.measures[0], other).ok).toBe(false);
+  });
+});
+
+describe("FDIC failures and assistance transactions since 2000", () => {
+  const dataset = { id: FDIC_FAILURES_DATASET, source_id: "FDIC_FAILURES" };
+  const profile = FDIC_FAILURES_ENTRY.profile(dataset);
+  const fields = columns("CERT", "NAME", "CITY", "PSTALP", "FAILDATE", "FAILYR", "RESTYPE", "RESTYPE1", "QBFASSET", "QBFDEP", "COST", "BIDNAME", "BIDSTATE", "FIN").map((c) =>
+    ["QBFASSET", "QBFDEP", "COST"].includes(c.label) ? { ...c, unit: "USD thousands" } : c,
+  );
+
+  it("is the snapshot that was checked, the largest losses equal to the FDIC API", () => {
+    expect(profile.proof).toMatchObject({ datasetId: FACTS.fdicFailures.datasetId, snapshotId: FDIC_FAILURES_SNAPSHOT });
+    expect(FACTS.fdicFailures.rows).toBe(FACTS.fdicFailures.apiTotal);
+    expect(FACTS.fdicFailures.distinctCerts).toBe(FACTS.fdicFailures.rows);
+    expect(FACTS.fdicFailures.largestByCost.length).toBeGreaterThanOrEqual(12);
+    for (const c of FACTS.fdicFailures.largestByCost) expect(c.equal).toBe(true);
+  });
+
+  it("states thousands of dollars for every measure, as the FDIC's field definitions do", () => {
+    for (const m of profile.measures) {
+      expect(FACTS.fdicFailures.publisher.units[m.field]).toBe("Thousands of US Dollars");
+      expect(unitOf(m, fields)).toEqual({ ok: true, text: "USD thousands" });
+    }
+    expect(profileFor(dataset, fields)?.family).toBe("fdic-failures");
   });
 });

@@ -317,5 +317,120 @@ function ofrProfile(): Profile {
 
 export const OFR_MMF_ENTRY: ProfileEntry = { family: "ofr-mmf", claims: ofrClaims, profile: ofrProfile };
 
+// ---------------------------------------------------------------------------------------------------------------
+// NCUA 5300 call reports, June 2026: one record per credit union
+// ---------------------------------------------------------------------------------------------------------------
+
+export const NCUA_CORE_DATASET = "official_01_financials_data_ncua_all_credit_unions_2026q2_core_c7e2229231";
+export const NCUA_CORE_SNAPSHOT = "5ee8aa51cfa3f5cbad5feb9ceccec44c8eff299a7c992f6d904b474691b386d2";
+export const NCUA_PACKAGE = "https://ncua.gov/files/publications/analysis/call-report-data-2026-06.zip";
+export const NCUA_SUMMARY = "https://ncua.gov/files/publications/analysis/quarterly-data-summary-2026-Q2.pdf";
+
+/**
+ * NCUA 2026Q2 credit-union financials: one record per credit union that filed a 5300 call report for the quarter
+ * ending 30 June 2026 (`CU_NUMBER` the indexed entity, `CU_NAME` the entity name, `STATE` the indexed place), with
+ * accounts of NCUA's FS220 file under the store's names: `assets_USD` (Acct_010 TOTAL ASSETS), `shares_and_deposits_USD`
+ * (Acct_018), `loans_and_leases_USD` (Acct_025B). The dictionary states "USD" for each; NCUA's quarterly data summary
+ * for 2026Q2 states the industry's total assets in dollars ($2.50 trillion), which Acct_010 of the federally insured
+ * credit unions in the file adds up to ($2,498,852,640,655), so a figure is in dollars. The file also holds 85 credit
+ * unions that are not federally insured (`CU_TYPE` 3), which NCUA's own counts leave out. The table has no period
+ * dimension; `CYCLE_DATE` ("6/30/2026 0:00:00") is not a period form the reads parse, so it is kept as text and a
+ * ranking reads the whole table (4,299 records).
+ * Checked on 26 Nov 2026: all 4,299 records (CU_NUMBER, the three amounts and members; name, type and state) equal
+ * NCUA's call report package for June 2026 (FS220.txt and FOICU.txt).
+ */
+const ncuaClaims = (d: ProfileDataset) => d.source_id === "NCUA_CALL" && d.id === NCUA_CORE_DATASET;
+
+function ncuaProfile(): Profile {
+  const usd = { from: "dictionary", text: "USD" } as const;
+  return defineProfile(ncuaClaims, {
+    family: "ncua-call",
+    entityNoun: { one: "credit union", many: "credit unions" },
+    period: { from: "field", field: "CYCLE_DATE", format: "text" },
+    measures: [
+      { field: "assets_USD", label: "Total assets", unit: usd, grouping: "none" },
+      { field: "shares_and_deposits_USD", label: "Total amount of shares and deposits", unit: usd, grouping: "none" },
+      { field: "loans_and_leases_USD", label: "Total amount of loans and leases", unit: usd, grouping: "none" },
+    ],
+    extraFields: ["CU_NUMBER", "CU_NAME", "CU_TYPE", "STATE"],
+    addressing: {
+      by: "entity_id",
+      where: [],
+      scan: "key",
+      rowsScanned: 1,
+      note: "One record per credit union: a credit union is one CU_NUMBER through the entity index; a ranking reads the whole table (4,299 records).",
+    },
+    defaultSeries: () => null,
+    firstLook: "ranking",
+    proof: {
+      snapshotId: NCUA_CORE_SNAPSHOT,
+      datasetId: NCUA_CORE_DATASET,
+      checked: FINANCE_CHECKED,
+      documentation: [NCUA_PACKAGE, NCUA_SUMMARY, "https://ncua.gov/analysis/credit-union-corporate-call-report-data"],
+    },
+  });
+}
+
+export const NCUA_CALL_ENTRY: ProfileEntry = { family: "ncua-call", claims: ncuaClaims, profile: ncuaProfile };
+
+// ---------------------------------------------------------------------------------------------------------------
+// FDIC failures and assistance transactions since 2000
+// ---------------------------------------------------------------------------------------------------------------
+
+export const FDIC_FAILURES_DATASET = "official_01_financials_data_fdic_failures_and_assistance_since_2000_dffd8efb1d";
+export const FDIC_FAILURES_SNAPSHOT = "2be03758fb6e3e0dd3621b3aea9ad66a8d19fc224ae0ab4bc871bb9f3d867867";
+export const FDIC_FAILURE_FIELDS = "https://api.fdic.gov/banks/docs/failure_properties.yaml";
+
+/**
+ * FDIC failures and assistance transactions since 2000 (BankFind failures): one record per failed or assisted
+ * institution, `CERT` the indexed entity and `NAME` the entity name, `FAILYR` the year it ceased to exist as a
+ * privately held going concern, `COST` the estimated loss to the Deposit Insurance Fund, `QBFASSET` and `QBFDEP` its
+ * total assets and deposits at the last report before failure. The dictionary states "USD thousands" for the three,
+ * and the FDIC's field definitions state "Thousands of US Dollars" (x-number-unit) for each. No CERT repeats.
+ * Checked on 26 Nov 2026: 594 records, as the FDIC API counts them; the 14 largest by COST equal the FDIC API (CERT,
+ * name, failure date, COST, QBFASSET, QBFDEP); 13 records have no COST (a gap, never a zero).
+ */
+const failuresClaims = (d: ProfileDataset) => d.source_id === "FDIC_FAILURES" && d.id === FDIC_FAILURES_DATASET;
+
+function failuresProfile(): Profile {
+  const thousands = { from: "dictionary", text: "USD thousands" } as const;
+  return defineProfile(failuresClaims, {
+    family: "fdic-failures",
+    entityNoun: { one: "failed or assisted institution", many: "failed or assisted institutions" },
+    period: { from: "field", field: "FAILYR", format: "year" },
+    cadence: "year",
+    measures: [
+      { field: "COST", label: "Estimated loss", unit: thousands, grouping: "none" },
+      { field: "QBFASSET", label: "Total assets", unit: thousands, grouping: "none" },
+      { field: "QBFDEP", label: "Total deposits", unit: thousands, grouping: "none" },
+    ],
+    extraFields: ["CERT", "NAME", "FAILDATE", "RESTYPE"],
+    addressing: {
+      by: "entity_id",
+      where: [],
+      scan: "key",
+      rowsScanned: 1,
+      note: "One record per institution: an institution is one CERT through the entity index; a ranking reads the whole table (594 records).",
+    },
+    defaultSeries: () => null,
+    firstLook: "ranking",
+    proof: {
+      snapshotId: FDIC_FAILURES_SNAPSHOT,
+      datasetId: FDIC_FAILURES_DATASET,
+      checked: FINANCE_CHECKED,
+      documentation: ["https://api.fdic.gov/banks/failures", FDIC_FAILURE_FIELDS],
+    },
+  });
+}
+
+export const FDIC_FAILURES_ENTRY: ProfileEntry = { family: "fdic-failures", claims: failuresClaims, profile: failuresProfile };
+
 /** Profile families of round 6 unit `finance`, each with its proof (see ../registry.ts for the rule). */
-export const ENTRIES: readonly ProfileEntry[] = [FED_H8_ENTRY, FED_Z1_SECTORS_ENTRY, FED_Z1_TABLE_ENTRY, OFR_MMF_ENTRY];
+export const ENTRIES: readonly ProfileEntry[] = [
+  FED_H8_ENTRY,
+  FED_Z1_SECTORS_ENTRY,
+  FED_Z1_TABLE_ENTRY,
+  OFR_MMF_ENTRY,
+  NCUA_CALL_ENTRY,
+  FDIC_FAILURES_ENTRY,
+];

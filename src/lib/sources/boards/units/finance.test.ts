@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { SourceColumn } from "../../schema";
 import { measureOf, profileFor } from "../../profiles/index";
 import type { Profile } from "../../profiles/types";
-import { H8_MONTHLY_DATASET, OFR_MMF_DATASET, Z1_SECTORS_DATASET, Z1_TABLES } from "../../profiles/units/finance";
+import { FDIC_FAILURES_DATASET, H8_MONTHLY_DATASET, NCUA_CORE_DATASET, OFR_MMF_DATASET, Z1_SECTORS_DATASET, Z1_TABLES } from "../../profiles/units/finance";
 import { computeSeriesTile, isSeriesSpec, type CellInput, type TileContext } from "../compute";
 import { boardSpec, tileSpec } from "../specs";
 import type { SeriesTileSpec, TileSeriesSpec, TileSpec } from "../types";
 import { FINANCE_BOARD_TILES, SPECS } from "./finance";
 
 const columns = (...labels: string[]): SourceColumn[] => labels.map((label, i) => ({ key: `col${String(i + 1).padStart(4, "0")}`, label, type: "string" }));
+/** A dictionary whose listed fields state a unit, as production's do for the NCUA and FDIC tables. */
+const withUnits = (fields: SourceColumn[], unit: string, labels: readonly string[]) => fields.map((c) => (labels.includes(c.label) ? { ...c, unit } : c));
 
 /** The production dictionaries of the tables the tiles read (labels as stored, every type "string"). */
 const DICTIONARIES: Record<string, { sourceId: string; fields: SourceColumn[] }> = {
@@ -16,6 +18,22 @@ const DICTIONARIES: Record<string, { sourceId: string; fields: SourceColumn[] }>
   [Z1_SECTORS_DATASET]: { sourceId: "FED_Z1", fields: columns("table", "series_id", "description", "period", "value_native", "source_value_or_flag", "unit_and_basis") },
   [OFR_MMF_DATASET]: { sourceId: "OFR_STFM", fields: columns("mnemonic", "date", "value_native", "unit") },
   ...Object.fromEntries(Z1_TABLES.map((t) => [t.datasetId, { sourceId: "FED_Z1", fields: columns("date", ...t.series.map((s) => s.code)) }])),
+  [NCUA_CORE_DATASET]: {
+    sourceId: "NCUA_CALL",
+    fields: withUnits(
+      columns("asset_rank_in_package", "CU_NUMBER", "CU_NAME", "CYCLE_DATE", "JOIN_NUMBER", "RSSD", "CU_TYPE", "CITY", "STATE", "YEAR_OPENED", "assets_USD", "shares_and_deposits_USD", "loans_and_leases_USD", "members"),
+      "USD",
+      ["assets_USD", "shares_and_deposits_USD", "loans_and_leases_USD"],
+    ),
+  },
+  [FDIC_FAILURES_DATASET]: {
+    sourceId: "FDIC_FAILURES",
+    fields: withUnits(
+      columns("CERT", "NAME", "CITY", "PSTALP", "FAILDATE", "FAILYR", "RESTYPE", "RESTYPE1", "QBFASSET", "QBFDEP", "COST", "BIDNAME", "BIDSTATE", "FIN"),
+      "USD thousands",
+      ["QBFASSET", "QBFDEP", "COST"],
+    ),
+  },
 };
 
 function profileOf(datasetId: string): Profile {
