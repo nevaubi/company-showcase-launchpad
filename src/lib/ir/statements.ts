@@ -363,7 +363,8 @@ export function assembleStatements(p: IrPayload): Statement[] {
         for (const [, h] of before) rows.push({ kind: "head", text: sentenceCase(h, keep), depth: Math.max(0, depth - 1) });
       }
       if (r != null) prevR = r;
-      rows.push({ kind: "line", k, ks, depth, total: ks.some((x) => !!byKey.get(x)!.total) });
+      // Bold with a rule only where the section prints parts of it; a total of parts printed elsewhere reads as a line.
+      rows.push({ kind: "line", k, ks, depth, total: ks.some((x) => !!byKey.get(x)!.total) && keys.some((o) => ks.includes(byKey.get(o)!.parent ?? "")) });
     }
     const lines = keys.map((k) => byKey.get(k)!);
     const money = lines.filter((s) => s.unit === "usd");

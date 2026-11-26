@@ -44,6 +44,8 @@ describe("sentenceCase", () => {
     expect(sentenceCase("CCB AVERAGE BALANCES", keep)).toBe("CCB average balances");
     expect(sentenceCase("NON-GAAP FINANCIAL MEASURES", keep)).toBe("Non-GAAP financial measures");
     expect(sentenceCase("U.S. OFFICES", keep)).toBe("U.S. offices");
+    expect(sentenceCase("TOTAL NET REVENUE (fully taxable-equivalent (“FTE”))", keep)).toBe("Total net revenue (fully taxable-equivalent (“FTE”))");
+    expect(sentenceCase("SEGMENT & CORPORATE RESULTS - MANAGED BASIS", keep)).toBe("Segment & corporate results - managed basis");
   });
   it("lowers Title Case, keeps sentence case as printed", () => {
     expect(sentenceCase("Consolidated Statement of Cash Flows", keep)).toBe("Consolidated statement of cash flows");

@@ -122,24 +122,40 @@ export function tableCaptions(html: string, company?: string): TableCaption[] {
  */
 export function sentenceCase(title: string, keep: Set<string> = new Set()): string {
   const t = title.replace(/\s+/g, " ").trim();
-  if (/[a-z]/.test(t)) {
-    // Title Case ("Consolidated Statement of Operations") is lowered the same way; words in capitals stay.
-    const ws = t.split(" ");
-    const caps = ws.filter((w) => /^[A-Z][a-z]/.test(w)).length;
-    if (caps < Math.max(2, ws.filter((w) => /^[a-z]/i.test(w) && w.length > 3).length * 0.6)) return t.charAt(0).toUpperCase() + t.slice(1);
-    return ws
-      .map((w, i) => (i === 0 || /:$/.test(ws[i - 1] ?? "") ? w.charAt(0).toUpperCase() + w.slice(1) : /^[A-Z][a-z]/.test(w) && !keep.has(w) ? w.toLowerCase() : w))
-      .join(" ");
-  }
-  const words = t.split(" ").map((w, i) => {
-    const core = w.replace(/^[("']+|[)"',:;]+$/g, "");
-    if (keep.has(core) || /^[A-Z]\.([A-Z]\.)+$/.test(core) || /\d/.test(core)) return w;
-    // "NON-GAAP" → "non-GAAP": each hyphenated part on its own.
-    const lower = w.split("-").map((part) => (keep.has(part.replace(/[)"',:;]+$/g, "")) ? part : part.toLowerCase())).join("-");
-    return i === 0 ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
-  });
-  return words.join(" ");
+  const ws = t.split(" ");
+  const strip = (w: string) => w.replace(/^[("'“‘]+|[)"',:;”’]+$/g, "");
+  // A word in capitals is lowered unless it is the company's own acronym, holds a digit or dots, or is a short
+  // capital word that is not a plain English one ("FTE", "CIB" stay; "NET", "AND", "TOTAL" go).
+  const shouted = (core: string) => /^[A-Z][A-Z&'-]*$/.test(core) && core.length >= 2;
+  const lowerCaps = (w: string) => {
+    const core = strip(w);
+    if (keep.has(core) || /\d/.test(core) || /^[A-Z]\.([A-Z]\.)+$/.test(core)) return w;
+    if (!shouted(core)) return w;
+    return w
+      .split("-")
+      .map((part) => {
+        const c = strip(part);
+        if (keep.has(c) || (c.length <= 3 && !COMMON.has(c))) return part;
+        return part.toLowerCase();
+      })
+      .join("-");
+  };
+  const caps = ws.filter((w) => shouted(strip(w))).length;
+  const titled = ws.filter((w) => /^[A-Z][a-z]/.test(w)).length;
+  const longWords = ws.filter((w) => /^[a-z]/i.test(w) && w.length > 3).length;
+  let out: string[];
+  if (caps >= 2 || (caps === 1 && !/[a-z]/.test(t))) out = ws.map(lowerCaps);
+  else if (titled >= Math.max(2, longWords * 0.6))
+    // Title Case ("Consolidated Statement of Operations") is lowered too; words in capitals stay.
+    out = ws.map((w, i) => (i > 0 && /^[A-Z][a-z]/.test(w) && !keep.has(strip(w)) && !/:$/.test(ws[i - 1] ?? "") ? w.toLowerCase() : w));
+  else out = ws;
+  const first = out[0] ?? "";
+  out[0] = first.charAt(0).toUpperCase() + first.slice(1);
+  return out.map((w, i) => (i > 0 && /:$/.test(out[i - 1]) ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(" ");
 }
+
+/** Plain English words of three letters or fewer, lowered even when printed in capitals. */
+const COMMON = new Set(["A", "AN", "AND", "ARE", "AS", "AT", "BY", "FOR", "IN", "OF", "ON", "OR", "THE", "TO", "NET", "NEW", "PER", "ALL", "NON", "OUT", "OFF", "DUE", "ITS", "NOT", "NO"]);
 
 /** Words a company writes in capitals inside mixed-case line names ("CCB average balances" → CCB). */
 export function capitalWords(labels: Iterable<string>): Set<string> {

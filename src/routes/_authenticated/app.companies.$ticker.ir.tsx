@@ -4,14 +4,21 @@ import { storeIndexQuery, type StoreDoc } from "@/lib/ir/store";
 import { friendlyError } from "@/lib/errors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
-import { Clock3, FileStack, Loader2, TriangleAlert } from "lucide-react";
+import { Check, Clock3, FileStack, Loader2, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
-import { IrBreakdowns, type IrFocus } from "@/components/ir/breakdowns";
+import type { IrFocus } from "@/components/ir/breakdowns";
+import { IrChecksDrawer } from "@/components/ir/checks-drawer";
 import { IrFinancialMap } from "@/components/ir/financial-map";
-import { IrKeyMetrics } from "@/components/ir/key-metrics";
+import { CheckDot } from "@/components/ir/marks";
 import { IrPanel } from "@/components/ir/panel";
+import { IrStandardKpis } from "@/components/ir/standard-kpis";
+import { IrStatements, type StatementsSummary } from "@/components/ir/statements";
+import { IrTopViz } from "@/components/ir/viz-slots";
+import { FilingDetailView } from "@/components/financials/filing-detail";
+import { useUnitScale } from "@/hooks/use-preference";
+import { assembleStatements } from "@/lib/ir/statements";
 import { DASH, IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +27,6 @@ import { getIrData, type IrDocRow } from "@/lib/ir.functions";
 import { checkLateIrPage, checkStatementsOf, irPageKey, loadIrPage, type IrPageData } from "@/lib/ir/client";
 import type { IrPayload } from "@/lib/ir/payload";
 import { companyQuery } from "@/lib/data";
-import { IrChecksLine } from "@/components/ir/checks";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -148,31 +154,89 @@ function IrPage() {
   return <IrPageView ticker={ticker} data={q.data!} store={store.data?.documents} focus={focus} onFocusDone={clearFocus} />;
 }
 
-/** The loaded IR page (summary, key metrics, map, breakdowns, documents); the route only fetches. */
+/**
+ * The loaded IR page; the route only fetches. Standardized KPIs, the chart strip, the statements (every
+ * printed table over its history), then the financial map, the filings' XBRL breakdowns and the documents.
+ * The audit detail lives in the checks panel opened from the tie-out badge.
+ */
 export function IrPageView({ ticker, data, store, focus, onFocusDone }: { ticker: string; data: IrPageData; store?: StoreDoc[]; focus?: IrFocus; onFocusDone?: () => void }) {
   const hasSeries = !!data.payload && data.payload.series.length > 0;
+  const [checks, setChecks] = useState<{ open: boolean; section?: string }>({ open: false });
+  const [tie, setTie] = useState<StatementsSummary | null>(null);
+  const openChecks = useCallback((section?: string) => setChecks({ open: true, section }), []);
+  const [scale] = useUnitScale();
+  const sections = useMemo(() => (data.payload ? assembleStatements(data.payload) : []), [data.payload]);
   return (
     <div className="grid grid-cols-1 gap-6">
-      <IrSummary ticker={ticker} data={data} payload={data.payload} pending={data.pending} documents={data.documents} images={data.images ?? 0} builtAt={data.builtAt} />
-      {hasSeries && <IrKeyMetrics ticker={ticker} payload={data.payload!} />}
-      {hasSeries && <IrFinancialMap ticker={ticker} payload={data.payload!} />}
+      <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents} images={data.images ?? 0} builtAt={data.builtAt} tie={tie} onChecks={openChecks} />
+      <IrStandardKpis ticker={ticker} />
+      {hasSeries && <IrTopViz ticker={ticker} payload={data.payload!} sections={sections} scale={scale} />}
       {hasSeries ? (
-        <IrBreakdowns key={ticker} ticker={ticker} payload={data.payload!} focus={focus} onFocusDone={onFocusDone} />
+        <IrStatements key={ticker} ticker={ticker} payload={data.payload!} focus={focus} onFocusDone={onFocusDone} onChecks={openChecks} onSummary={setTie} />
       ) : (
-        <IrPanel section="Segment and KPI breakdowns" tour="ir-breakdowns" title="Segment and KPI breakdowns">
+        <IrPanel section="IR statements" tour="ir-breakdowns" title="Statements">
           <div className="px-4 py-4 text-[13px]">
             <p>No figures have been read from this company's documents yet.</p>
             <p className={cn("mt-1", IR.caption)}>
               {data.pending
-                ? `Breakdowns appear here once the ${data.pending.toLocaleString()} stored ${data.pending === 1 ? "file that is" : "files that are"} waiting have been read. Reading runs in the background; the stored files below can be opened now.`
+                ? `Statements appear here once the ${data.pending.toLocaleString()} stored ${data.pending === 1 ? "file that is" : "files that are"} waiting have been read. Reading runs in the background; the stored files below can be opened now.`
                 : "The stored files below can be opened now; this company's releases have no tables the readers use."}
             </p>
           </div>
         </IrPanel>
       )}
+      {hasSeries && <IrFinancialMap ticker={ticker} payload={data.payload!} />}
+      <IrXbrlBreakdowns ticker={ticker} />
       <IrDocuments ticker={ticker} documents={data.documents} images={data.images} store={store} />
+      {data.payload && (
+        <IrChecksDrawer
+          open={checks.open}
+          onOpenChange={(open) => setChecks((c) => ({ ...c, open }))}
+          ticker={ticker}
+          payload={data.payload}
+          section={checks.section}
+          check={data.secCheck}
+          consistency={data.consistency}
+          late={data.secCheckLate}
+          timings={data.timings}
+          stats={summaryStats(data.payload)}
+        />
+      )}
     </div>
   );
+}
+
+/** The filings' own segment and geography breakdowns (10-K/10-Q dimensional XBRL), mounted when scrolled near. */
+function IrXbrlBreakdowns({ ticker }: { ticker: string }) {
+  const [on, setOn] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (on || !ref.current) return;
+    const io = new IntersectionObserver((es) => es.some((x) => x.isIntersecting) && setOn(true), { rootMargin: "800px 0px" });
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [on]);
+  return (
+    <div ref={ref} data-section="IR XBRL breakdowns" className="min-w-0">
+      <IrPanel section="XBRL breakdowns" title="Breakdowns tagged in the filings" subtitle="Segment, product and geography figures as the 10-K and 10-Q tag them in XBRL, each opening the tagged value in the filing">
+        {on ? <FilingDetailView ticker={ticker} /> : <Skeleton className="m-4 h-40" />}
+      </IrPanel>
+    </div>
+  );
+}
+
+/** The figures the old summary tiles showed, now at the top of the checks panel. */
+function summaryStats(payload: IrPayload): { label: string; value: string; hint?: string }[] {
+  const s = payload.stats;
+  const calculated = payload.series.reduce((n, x) => n + Object.values(x.q).filter((c) => c.f).length + Object.values(x.y).filter((c) => c.f).length, 0);
+  const tie = (c: { ok: number; total: number }) => (c.total ? { value: `${Math.round((c.ok / c.total) * 100)}%`, hint: `${c.ok.toLocaleString()} of ${c.total.toLocaleString()} checks` } : null);
+  return [
+    { label: "Coverage", value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : DASH, hint: s.firstPeriod && s.lastPeriod ? `${monthYear(s.firstPeriod)} to ${monthYear(s.lastPeriod)}` : undefined },
+    { label: "Lines tracked", value: s.series.toLocaleString(), hint: `in ${s.groups.toLocaleString()} breakdowns` },
+    { label: "Data points", value: s.facts.toLocaleString(), hint: `from ${s.documents.toLocaleString()} documents${calculated ? `, ${calculated.toLocaleString()} calculated` : ""}` },
+    ...(tie(s.checksQ) ? [{ label: "Quarterly totals tie out", ...tie(s.checksQ)! }] : []),
+    ...(tie(s.checksFY) ? [{ label: "Annual totals tie out", ...tie(s.checksFY)! }] : []),
+  ];
 }
 
 /** True once `active` has stayed true for `ms`. */
@@ -188,88 +252,85 @@ function useSlow(active: boolean, ms: number) {
 
 function IrSummary({
   ticker,
-  data,
   payload,
   pending,
   documents,
   images,
   builtAt,
+  tie,
+  onChecks,
 }: {
   ticker: string;
-  data: IrPageData;
   payload: IrPayload | null;
   pending: number;
   documents: IrDocRow[];
   images: number;
   builtAt: string | null;
+  tie: StatementsSummary | null;
+  onChecks: () => void;
 }) {
   const files = documents.length + images;
   const read = documents.filter((d) => d.extract_status?.startsWith("ok")).length;
   const s = payload?.stats;
-  // Values filled by calculation (fourth quarters, year-to-date differences, summed years).
-  const calculated = useMemo(() => (payload ? payload.series.reduce((n, x) => n + Object.values(x.q).filter((c) => c.f).length + Object.values(x.y).filter((c) => c.f).length, 0) : 0), [payload]);
-
-  const tie = (c: { ok: number; total: number }) => (c.total ? { value: `${Math.round((c.ok / c.total) * 100)}%`, hint: `${c.ok.toLocaleString()} of ${c.total.toLocaleString()} checks` } : null);
-  const stats: { label: string; value: string; hint?: string }[] = s
-    ? [
-        {
-          label: "Coverage",
-          value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : DASH,
-          hint: s.firstPeriod && s.lastPeriod ? `${monthYear(s.firstPeriod)} to ${monthYear(s.lastPeriod)}` : undefined,
-        },
-        { label: "Lines tracked", value: s.series.toLocaleString(), hint: `in ${s.groups.toLocaleString()} breakdowns` },
-        { label: "Data points", value: s.facts.toLocaleString(), hint: `from ${s.documents.toLocaleString()} documents${calculated ? `, ${calculated.toLocaleString()} calculated` : ""}` },
-        ...(tie(s.checksQ) ? [{ label: "Quarterly totals tie out", ...tie(s.checksQ)! }] : []),
-        ...(tie(s.checksFY) ? [{ label: "Annual totals tie out", ...tie(s.checksFY)! }] : []),
-      ]
-    : [];
-
   const filesLine = `${files.toLocaleString()} stored file${files === 1 ? "" : "s"}, ${read.toLocaleString()} read for figures${pending ? `, ${pending.toLocaleString()} waiting to be read` : ""}`;
+  const facts = s
+    ? [s.firstPeriod && s.lastPeriod ? `${monthYear(s.firstPeriod)} to ${monthYear(s.lastPeriod)}` : null, `${s.series.toLocaleString()} lines`, `${s.facts.toLocaleString()} figures from ${s.documents.toLocaleString()} documents`].filter(Boolean).join(" · ")
+    : null;
   return (
     <IrPanel
       section="Investor-relations summary"
       title="Investor-relations data"
       subtitle={builtAt ? `Built ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · ${filesLine}` : filesLine}
       actions={
-        pending > 0 ? (
-          <Tooltip>
-            <TooltipTrigger className={cn("inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1", IR.caption)}>
-              <Clock3 className="size-3.5" />
-              {pending.toLocaleString()} waiting to be read
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">
-              Stored files are read in the background by scheduled readers. Their figures join the tables below when a read finishes; this page checks again every two minutes.
-            </TooltipContent>
-          </Tooltip>
-        ) : undefined
+        <>
+          {pending > 0 && (
+            <Tooltip>
+              <TooltipTrigger className={cn("inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1", IR.caption)}>
+                <Clock3 className="size-3.5" />
+                {pending.toLocaleString()} waiting to be read
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-xs">
+                Stored files are read in the background by scheduled readers. Their figures join the tables below when a read finishes; this page checks again every two minutes.
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {payload && (
+            <button
+              type="button"
+              onClick={onChecks}
+              data-section="IR tie-out badge"
+              className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", tie && tie.tieN && tie.tieOk < tie.tieN ? "text-foreground" : "text-muted-foreground")}
+              title="Open the checks: parts against totals, quarters against the year, the SEC comparison and every figure to review"
+            >
+              {tie && tie.tieN ? (
+                <>
+                  {tie.tieOk === tie.tieN ? <Check aria-hidden className="size-3.5 text-positive" /> : <CheckDot />}
+                  <span className="num">
+                    {tie.tieOk.toLocaleString()} of {tie.tieN.toLocaleString()}
+                  </span>
+                  period totals tie out
+                </>
+              ) : (
+                "Checks"
+              )}
+            </button>
+          )}
+        </>
       }
     >
-      {s ? (
-        <dl className={cn("grid grid-cols-2 gap-px bg-border", stats.length >= 5 ? "sm:grid-cols-3 lg:grid-cols-5" : stats.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
-          {stats.map((x, i) => (
-            // An odd last tile spans the row on phones (2 columns) so no empty cell shows.
-            <div key={x.label} className={cn("min-w-0 bg-card px-4 py-3", i === stats.length - 1 && stats.length % 2 === 1 && "col-span-2 sm:col-span-1", i === stats.length - 1 && stats.length === 5 && "sm:col-span-2 lg:col-span-1")}>
-              <dt className={IR.eyebrow}>{x.label}</dt>
-              <dd className={cn("mt-1", IR.stat)}>{x.value}</dd>
-              {x.hint && <dd className={cn("num truncate", IR.caption)}>{x.hint}</dd>}
-            </div>
-          ))}
-        </dl>
+      {facts ? (
+        <p className={cn("px-4 py-2.5", IR.caption)} data-ticker={ticker}>
+          {facts}
+        </p>
       ) : (
         <div className="flex items-start gap-2 px-4 py-3 text-[13px]">
           <FileStack className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p>
             {files.toLocaleString()} stored file{files === 1 ? " is" : "s are"} listed under Source documents.
-            <span className={cn("block", IR.caption)}>{pending ? "Key metrics, the financial map and breakdowns are built once those files are read." : "None of them has been read for figures yet."}</span>
+            <span className={cn("block", IR.caption)}>{pending ? "Statements are laid out once those files are read." : "None of them has been read for figures yet."}</span>
           </p>
         </div>
       )}
-      {payload && <IrChecksLine ticker={ticker} payload={payload} check={data.secCheck} consistency={data.consistency} timings={data.timings} late={data.secCheckLate} />}
-      {s?.ttm ? (
-        <p className={cn("border-t px-4 py-2", IR.caption)} data-section="IR trailing twelve months">
-          {s.ttm.toLocaleString()} trailing-twelve-month figure{s.ttm === 1 ? "" : "s"} (twelve months that end off the fiscal year, or printed as TTM or LTM) {s.ttm === 1 ? "is" : "are"} left out of the year and quarter columns, so none is read as a fiscal year or a quarter.
-        </p>
-      ) : null}
     </IrPanel>
   );
 }
