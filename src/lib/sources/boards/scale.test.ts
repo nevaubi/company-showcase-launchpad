@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseDecimal, type Decimal } from "./decimal";
-import { SCALE_UNITS, axisLabel, readerFigure, scaleUnitOf } from "./scale";
+import { CORE_SCALE_UNITS, SCALE_UNITS, axisLabel, readerFigure, scaleConflicts, scaleUnitOf } from "./scale";
 import { isClassicSpec } from "./compute";
 import { TILES } from "./specs";
 
@@ -73,6 +73,22 @@ describe("whitelist entries on the figures the tiles print", () => {
     });
   });
 
+  it("writes FR Y-9C and SOD thousands of dollars in a reader's scale", () => {
+    expect(readerFigure("USD thousands", d("4561447000"), "4,561,447,000")).toMatchObject({
+      figure: "$4.561 trillion",
+      filed: "4,561,447,000 USD thousands as filed",
+      axis: { title: "USD trillions", shift: 9 },
+    });
+  });
+
+  it("lists no unit string twice with another exponent or base, the units' entries included", () => {
+    expect(scaleConflicts()).toEqual([]);
+    expect(SCALE_UNITS.slice(0, CORE_SCALE_UNITS.length)).toEqual(CORE_SCALE_UNITS);
+    const clash = { ...CORE_SCALE_UNITS[0], exponent: CORE_SCALE_UNITS[0].exponent + 3 };
+    expect(scaleConflicts([...CORE_SCALE_UNITS, clash])).toEqual([CORE_SCALE_UNITS[0].unit]);
+    expect(scaleConflicts([...CORE_SCALE_UNITS, { ...CORE_SCALE_UNITS[0] }])).toEqual([]);
+  });
+
   it("holds only units that a level or a ranking tile uses", () => {
     const used = new Set(TILES.flatMap((t) => (isClassicSpec(t) && (t.transform === "level" || t.transform === "rank") ? [t.unit] : [])));
     for (const entry of SCALE_UNITS) if (!entry.requested) expect(used.has(entry.unit), entry.unit).toBe(true);
@@ -116,7 +132,7 @@ describe("rounding at the edges", () => {
 
 describe("units off the whitelist stay as filed", () => {
   it("matches the stored unit exactly", () => {
-    for (const unit of ["Millions of Units", "Billion Kilowatthours", "Quadrillion Btu", "Percent", "Number", "Dollars", "USD thousands", "usd thousands (monetary measures)"])
+    for (const unit of ["Millions of Units", "Billion Kilowatthours", "Quadrillion Btu", "Percent", "Number", "Dollars", "USD Thousands", "USD thousands ", "usd thousands (monetary measures)"])
       expect(readerFigure(unit, d("13761"), "13,761")).toBeNull();
     expect(scaleUnitOf(FDIC)?.exponent).toBe(3);
   });

@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeSourceDb } from "../read.fake";
 import { resetReadState } from "../read.server";
 import { BOARD_READ_BUDGET, crossRead, latestParsedPeriod, readBoard, readTiles, resetBoardCache } from "./board.server";
-import { boardFixtureTables, fixtureTables } from "./fixtures";
+import { boardFixtureTables, facetsAnswer, fixtureTables } from "./fixtures";
 import { BOARDS, CORE_BOARDS, CORE_TILES, TILES } from "./specs";
-import type { Board, CompareTileSpec, TileSpec } from "./types";
+import type { Board, CompareTileSpec, RecordsTileSpec, TileSpec } from "./types";
 
 /** Every board computed through the real read layer, on a fake member client that holds the fixture rows. */
 
@@ -188,6 +188,8 @@ describe("every board with every unit's tiles, on the core and unit fixtures", (
       resetBoardCache();
       resetReadState();
       const db = new FakeSourceDb(all);
+      // count tiles read the store's facet counts: the unit fixtures answer them as production did
+      db.rpcAnswer = facetsAnswer(all);
       const { board: b, requests } = await wholeBoard(db, spec.id, now);
       expect(b.refused, spec.id).toEqual([]);
       expect(new Set(b.tiles.map((t) => t.id)), spec.id).toEqual(new Set(spec.tiles));
@@ -356,5 +358,40 @@ describe("cross-sections", () => {
     const read = await crossRead(new FakeSourceDb(tables as never), flat as never, { by: "geo_code", period: "table" }, [2], null);
     expect(read).toMatchObject({ table: true, period: null });
     expect(read.cells).toHaveLength(4);
+  });
+});
+
+describe("count tiles on the store's facet counts", () => {
+  const FDIC = "official_fdic_2026q2_cohort500_native_current_quarter";
+  const spec: RecordsTileSpec = {
+    id: "t-counts",
+    collection: "01_financials",
+    datasetId: FDIC,
+    title: "Records by institution",
+    subject: "The current-quarter table",
+    transform: "records",
+    headline: "records",
+    form: "ranked-bars",
+    per: { dimension: "entity_id", top: 3 },
+    noun: "institutions",
+  };
+  it("pages the counts by value and ranks them, exact counts only", async () => {
+    const all = fixtureTables();
+    const values = Array.from({ length: 2500 }, (_, i) => ({ value: `C${String(i).padStart(5, "0")}`, label: null, rows: i === 7 ? 9 : 1, exact: true }));
+    const db = new FakeSourceDb(all);
+    db.rpcAnswer = facetsAnswer({ ...all, facets: { [`${FDIC}|entity_id`]: { dimension: "entity_id", complete: true, values } } });
+    const b = await readTiles(db, [spec as TileSpec], Date.UTC(2026, 10, 26, 6));
+    expect(b.refused).toEqual([]);
+    const r = b.tiles[0].result;
+    expect(r.ok && r.headline).toBe("The current-quarter table holds 2,508 records as retrieved on 25 Nov 2026; C00007 has the most, 9, of 2,500 institutions.");
+    expect(db.rpcs.map((c) => c.args?._after ?? null)).toEqual([null, "C00999", "C01999"]);
+  });
+
+  it("refuses counts that are a floor", async () => {
+    const all = fixtureTables();
+    const db = new FakeSourceDb(all);
+    db.rpcAnswer = facetsAnswer({ ...all, facets: { [`${FDIC}|entity_id`]: { dimension: "entity_id", complete: true, values: [{ value: "C1", label: null, rows: 250000, exact: false }] } } });
+    const b = await readTiles(db, [spec as TileSpec], Date.UTC(2026, 10, 26, 6));
+    expect(b.refused[0]?.reason).toBe("The count of C1 is a floor, not exact; counts this large need a precomputed summary.");
   });
 });
