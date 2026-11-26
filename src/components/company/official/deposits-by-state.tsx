@@ -46,7 +46,7 @@ export function DepositsByStateView({ data }: { data: DepositsByState }) {
             reader={v.reader}
             cell={data.totals?.deposits ?? null}
             unit={unit}
-            period={null}
+            period={year && /^\d{4}$/.test(year) ? `${year}-06-30` : null}
             at={v.totalsRef ? { ...v.totalsRef, field: data.fields.deposits } : null}
           />
           {(branches || states) && (

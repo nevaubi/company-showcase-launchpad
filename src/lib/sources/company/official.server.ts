@@ -10,7 +10,7 @@ import { readNative } from "../numbers";
 import type { SourceColumn } from "../schema";
 import { ALL_BANKS_FIELDS, ALL_BANKS_LABELS, FDIC_ALL_BANKS, FDIC_CURRENT, FDIC_HISTORY, FDIC_IDS, FDIC_LINES, fdicInstitutionUrl, QUANTITY_UNITS, TREND_FIELDS } from "./fdic-fields";
 import { absSponsors, provenBanks, registrantLink } from "./links.server";
-import { SOD_BY_STATE, SOD_MAX_STATES, SOD_STATE_FIELDS, SOD_TOTAL_FIELDS, SOD_TOTALS, SOD_UNIT } from "./sod-fields";
+import { SOD_BY_STATE, SOD_MAX_STATES, SOD_STATE_FIELDS, SOD_TOTAL_FIELDS, SOD_TOTALS, SOD_UNIT, sodUnit } from "./sod-fields";
 import type { BankHistory, BankLine, CompanyLink, CompanyOfficial, CompanyOfficialResult, DepositsByState, DepositsState, FigureRef, HistoryPoint, OfficialBank, OfficialCell, OfficialSource, Y9cLine, Y9cPointer, Y9cQuarter, Y9cReport } from "./types";
 import { Y9C_FIELDS, Y9C_KEYS, Y9C_VARIABLES } from "./y9c-fields";
 
@@ -281,14 +281,14 @@ async function readTrends(db: OfficialClient, certs: string[], current: { source
 
 /**
  * One charter's 2026 Summary of Deposits by branch state, and its totals, read by certificate. Each row's CERT cell
- * must equal the certificate; the deposits are shown only while the dictionary states `SOD_UNIT` for them.
+ * must equal the certificate; the deposits are shown in `SOD_UNIT` unless a dictionary states another unit for them.
  */
 async function readDeposits(db: OfficialClient, cert: string): Promise<{ deposits: DepositsByState | null; note: string | null }> {
   const source = await sourceOf(db, SOD_BY_STATE);
   const f = SOD_STATE_FIELDS;
   const fields = await fieldsOf(db, source.snapshot, Object.values(f));
   if (!fields.has(f.cert.label) || !fields.has(f.state.label) || !fields.has(f.deposits.label)) return { deposits: null, note: "The stored Summary of Deposits table lacks the certificate, state or deposits field." };
-  if (fields.get(f.deposits.label)!.column.unit !== SOD_UNIT) return { deposits: null, note: "The Summary of Deposits dictionary does not state the deposits unit." };
+  if (!sodUnit(fields.get(f.deposits.label)!.column.unit)) return { deposits: null, note: "The Summary of Deposits dictionary states another unit for the deposits." };
   const cols = projection(fields, Object.values(f).map(x => x.label));
   const rows = await select(db.from("source_records").select(`row_number,entity_id,${cols}`).eq("snapshot_id", source.snapshot).eq("entity_id", cert).limit(SOD_MAX_STATES));
   const own = rows.filter(r => text(cellAt(r, f.cert.label))?.trim() === cert && text(r.entity_id) === cert);
@@ -303,7 +303,7 @@ async function readDeposits(db: OfficialClient, cert: string): Promise<{ deposit
     totalsSource = await sourceOf(db, SOD_TOTALS);
     const t = SOD_TOTAL_FIELDS;
     const tf = await fieldsOf(db, totalsSource.snapshot, Object.values(t));
-    if (tf.has(t.cert.label) && tf.get(t.deposits.label)?.column.unit === SOD_UNIT) {
+    if (tf.has(t.cert.label) && tf.has(t.deposits.label) && sodUnit(tf.get(t.deposits.label)!.column.unit)) {
       const tr = await select(db.from("source_records").select(`row_number,entity_id,${projection(tf, Object.values(t).map(x => x.label))}`).eq("snapshot_id", totalsSource.snapshot).eq("entity_id", cert).limit(2));
       const r = tr.find(x => text(cellAt(x, t.cert.label))?.trim() === cert);
       if (r) totals = { row: Number(r.row_number), deposits: cellOf(cellAt(r, t.deposits.label)), branches: cellOf(cellAt(r, t.branches.label)), states: cellOf(cellAt(r, t.states.label)), surveyYear: text(cellAt(r, t.year.label))?.trim() || null };

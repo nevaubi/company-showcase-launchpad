@@ -243,7 +243,7 @@ export interface DepositsByState {
   cert: string;
   /** NAMEFULL as stored. */
   name: string | null;
-  /** The unit the dictionary states for the deposits sums. */
+  /** The unit of the deposits sums: as the totals table's dictionary and the FDIC's instructions state it (sod-fields.ts). */
   unit: string;
   states: DepositsState[];
   totals: DepositsTotals | null;
