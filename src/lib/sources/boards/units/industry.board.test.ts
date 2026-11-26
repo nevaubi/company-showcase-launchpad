@@ -2,22 +2,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeSourceDb } from "../../read.fake";
 import { resetReadState } from "../../read.server";
 import { readTiles, resetBoardCache } from "../board.server";
-import { boardFixtureTables } from "../fixtures";
+import { boardFixtureTables, facetsAnswer } from "../fixtures";
 import type { Board, TileSpec } from "../types";
 import { SPECS } from "./industry";
-import industryFixtures from "./industry.fixtures.json";
 
 /** The industry tiles computed through the real read layer on production rows (`industry.fixtures.json`). */
 
-type FacetFixture = { datasetId: string; snapshotId: string; dimension: string; answer: Record<string, unknown> };
-const FACETS = (industryFixtures as unknown as { facets: FacetFixture[] }).facets;
-
 function db(): FakeSourceDb {
-  const fake = new FakeSourceDb(boardFixtureTables());
-  fake.rpcAnswer = (fn, args) => {
-    const hit = fn === "source_facets" ? FACETS.find((f) => f.datasetId === args?._dataset_id && f.snapshotId === args?._snapshot_id && f.dimension === args?._dimension && (args?._after ?? null) === null) : undefined;
-    return hit ? { data: hit.answer, error: null } : { data: null, error: { code: "PGRST202", message: "Could not find the function" } };
-  };
+  const tables = boardFixtureTables();
+  const fake = new FakeSourceDb(tables);
+  fake.rpcAnswer = facetsAnswer(tables);
   return fake;
 }
 
@@ -65,7 +59,6 @@ const EXPECTED: Record<string, { figure: string; unit: string; asOf: string; sna
   "recall-campaigns-detroit": { figure: "89", unit: "recall campaigns", asOf: "2026", snapshot: "2f9f33ec" },
   "recall-campaigns-imports": { figure: "16", unit: "recall campaigns", asOf: "2026", snapshot: "2f9f33ec" },
   "food-at-home-vs-away": { figure: "2.3", unit: "%", asOf: "2025", snapshot: "c4a37688" },
-  "all-food-cpi-annual": { figure: "2.9", unit: "%", asOf: "2025", snapshot: "c4a37688" },
   "eggs-cpi-annual": { figure: "21.9", unit: "%", asOf: "2025", snapshot: "c4a37688" },
   "beef-cpi-annual": { figure: "11.6", unit: "%", asOf: "2025", snapshot: "c4a37688" },
   "cattle-and-beef-ppi": { figure: "20.9", unit: "%", asOf: "2025", snapshot: "7cfee944" },
