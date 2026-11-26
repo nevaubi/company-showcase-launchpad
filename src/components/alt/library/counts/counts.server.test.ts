@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("readCategoryCounts", () => {
-  it("counts every record of a small snapshot in at most five selects of 1,000 rows", async () => {
+  it("counts every record of a small snapshot in at most five selects of 1,000 rows, one path per field", async () => {
     const r = await readCategoryCounts(db, { datasetId: "ob", snapshotId: SMALL, fields: [1, 2, 3] });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -48,7 +48,7 @@ describe("readCategoryCounts", () => {
     const reads = db.calls.filter((c) => c.table === "source_records");
     expect(reads).toHaveLength(3);
     expect(reads.every((c) => (c.limit ?? 0) <= 1000 && c.filters.some((f) => f.startsWith("snapshot_id")))).toBe(true);
-    expect(reads[0].columns).toBe("row_number,period,c0:values->>1,c1:values->>2,c2:values->>3");
+    expect(reads[0].columns).toBe("row_number,c0:values->>1,c1:values->>2,c2:values->>3");
     expect(r.data.snapshot).toMatchObject({ snapshotId: SMALL, rows: 2462, fields: 4 });
   });
 

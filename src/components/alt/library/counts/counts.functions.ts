@@ -20,7 +20,7 @@ const categoryInput = z
   })
   .strict();
 
-/** Values of up to eight fields counted over every record of a snapshot of at most 5,000 rows. */
+/** Values of up to 24 fields counted over every record of a snapshot of at most 5,000 rows. */
 export const getCategoryCounts = createServerFn({ method: "POST" })
   .middleware([requireAppAccess])
   .inputValidator(categoryInput)

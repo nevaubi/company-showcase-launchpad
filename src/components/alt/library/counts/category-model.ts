@@ -11,8 +11,8 @@ import type { SourceColumn, SourceIngest } from "@/lib/sources/schema";
 
 /** Snapshots of at most this many rows are counted: five selects of 1,000 rows read every record. */
 export const CATEGORY_READ_ROWS = 5000;
-/** Fields one read takes (the series read of several fields reads at most eight). */
-export const CATEGORY_FIELDS_MAX = 8;
+/** Fields one read takes: each is one `values->>N` path on the same five selects. */
+export const CATEGORY_FIELDS_MAX = 24;
 /** Charts drawn at most. */
 export const CATEGORY_CHARTS_MAX = 6;
 /** Values named in a chart; the rest are one bar. */
@@ -33,7 +33,7 @@ export const CATEGORY_RULE = {
 /**
  * The fields worth one read, from the dictionary alone: not a declared dimension or a part of a composed period,
  * not a quantity, identifier or date, filled in at least `minFilled` records when the snapshot stores blank counts.
- * Fields filled in at least half the records come first, each group in dictionary order; at most eight.
+ * Fields filled in at least half the records come first, each group in dictionary order; at most 24.
  */
 export function categoryCandidates(
   columns: readonly SourceColumn[],
