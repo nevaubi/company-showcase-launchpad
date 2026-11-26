@@ -1,0 +1,804 @@
+{
+ "checked": "2026-11-26",
+ "about": "Production reads of 26 Nov 2026 03:35 to 04:20 UTC. series: every stored record of each MER series (month, value, description and unit, in row order) hashed with md5 on production and equal to the same hash of EIA's CSV of the table fetched 26 Nov 2026 03:35 UTC; row numbers equal file positions. states: stored cells compared value by value with EPA's eGRID2023 rev2 workbook (sheet ST23) and EIA's Net_Metering_2025.xlsx (sheet States- State Level). tiles: each tile computed once by energy-replay.ts on fixture rows equal to those production rows, as board.server.ts computes it (rankings with the cadence it passes, day).",
+ "series": [
+  {
+   "table": "T01.01",
+   "snapshotId": "9a953a8c60285f8aeef9c451850a3cbf362cef7d6550e35fde21315788d74f32",
+   "msn": "TEEXBUS",
+   "records": 721,
+   "md5": "e2b20b3bd316f9906c5bcc15728eb562"
+  },
+  {
+   "table": "T01.01",
+   "snapshotId": "9a953a8c60285f8aeef9c451850a3cbf362cef7d6550e35fde21315788d74f32",
+   "msn": "TEIMBUS",
+   "records": 721,
+   "md5": "2203184eb525645418631c2b6b96871d"
+  },
+  {
+   "table": "T01.01",
+   "snapshotId": "9a953a8c60285f8aeef9c451850a3cbf362cef7d6550e35fde21315788d74f32",
+   "msn": "TENIBUS",
+   "records": 721,
+   "md5": "1d4eae882b3e36d595619009463e3241"
+  },
+  {
+   "table": "T01.01",
+   "snapshotId": "9a953a8c60285f8aeef9c451850a3cbf362cef7d6550e35fde21315788d74f32",
+   "msn": "TETCBUS",
+   "records": 721,
+   "md5": "fc4177ce5d2354c312cc71a4d321373f"
+  },
+  {
+   "table": "T02.01A",
+   "snapshotId": "2a2e885b1317d12ad9f58f1e76d61c5ee83ae266bc9e681acc2a95d86294a2ab",
+   "msn": "TECCBUS",
+   "records": 721,
+   "md5": "6a488a4a5826d065fbf243ad90961e1d"
+  },
+  {
+   "table": "T02.01A",
+   "snapshotId": "2a2e885b1317d12ad9f58f1e76d61c5ee83ae266bc9e681acc2a95d86294a2ab",
+   "msn": "TEICBUS",
+   "records": 721,
+   "md5": "b3746dc1f6a16f9be9f220168c642e43"
+  },
+  {
+   "table": "T02.01A",
+   "snapshotId": "2a2e885b1317d12ad9f58f1e76d61c5ee83ae266bc9e681acc2a95d86294a2ab",
+   "msn": "TERCBUS",
+   "records": 721,
+   "md5": "f7faa09b2063803c991512c1e9cc2b7f"
+  },
+  {
+   "table": "T02.01B",
+   "snapshotId": "f092aa04760623f9ce35c5026eddc90edd87582626219eb895e01bec585dc20f",
+   "msn": "TEACBUS",
+   "records": 721,
+   "md5": "c7ef802769a378bc3546408c7d11d232"
+  },
+  {
+   "table": "T03.01",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "msn": "PAEXPUS",
+   "records": 723,
+   "md5": "0045d2ae4510cab4185fb01a2e3cefac"
+  },
+  {
+   "table": "T03.01",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "msn": "PAIMPUS",
+   "records": 723,
+   "md5": "83be8c2492474945f41ce4018e1369c6"
+  },
+  {
+   "table": "T03.01",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "msn": "PANIPUS",
+   "records": 723,
+   "md5": "064808077083ec035b107b084725920f"
+  },
+  {
+   "table": "T03.01",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "msn": "PAPRPUS",
+   "records": 723,
+   "md5": "ce748ee46f9a672db999e2161f5d2daa"
+  },
+  {
+   "table": "T03.01",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "msn": "PATCPUS",
+   "records": 723,
+   "md5": "bad44c2359487d2c5a08f10bd1df7ffe"
+  },
+  {
+   "table": "T03.03B",
+   "snapshotId": "c6658449c26aa658aa19e4563ad95ef3dac8dfe03df2ce2773552b77464e0b6f",
+   "msn": "COIMPUS",
+   "records": 723,
+   "md5": "8497a830fb03ec795383691062a621a5"
+  },
+  {
+   "table": "T03.04",
+   "snapshotId": "d40c00a1884dfe6f03784be49ac7a6d25bd9efb26cdef04d9feafede80b38984",
+   "msn": "COPSPUS",
+   "records": 723,
+   "md5": "b85fdf18ae6d271ea4b2970817f3098e"
+  },
+  {
+   "table": "T03.04",
+   "snapshotId": "d40c00a1884dfe6f03784be49ac7a6d25bd9efb26cdef04d9feafede80b38984",
+   "msn": "COSQPUS",
+   "records": 723,
+   "md5": "6b6bc1db57cc46d1e62a9a4233e2c35c"
+  },
+  {
+   "table": "T03.04",
+   "snapshotId": "d40c00a1884dfe6f03784be49ac7a6d25bd9efb26cdef04d9feafede80b38984",
+   "msn": "COSXPUS",
+   "records": 723,
+   "md5": "f8999e94eb9cd773897bfe35fbb4b1a0"
+  },
+  {
+   "table": "T04.01",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "msn": "NGEXPUS",
+   "records": 721,
+   "md5": "3c8bf2b0dbecfb493191d14ee2fcfebb"
+  },
+  {
+   "table": "T04.01",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "msn": "NGIMPUS",
+   "records": 721,
+   "md5": "c135d9ca7c085c9f24215aa70a3a85a8"
+  },
+  {
+   "table": "T04.01",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "msn": "NGNIPUS",
+   "records": 721,
+   "md5": "70dfdbf9b31328fbb168116964f00eda"
+  },
+  {
+   "table": "T04.01",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "msn": "NGPRPUS",
+   "records": 721,
+   "md5": "2c8b646ef40278bbcc6df482f0fb3f3d"
+  },
+  {
+   "table": "T04.01",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "msn": "NGTCPUS",
+   "records": 721,
+   "md5": "3f3b0f0fa3dacd320ca68b9490589036"
+  },
+  {
+   "table": "T06.01",
+   "snapshotId": "c91842d576524681297c6bb782fdade3f719145d0b515c991961be957dd2f872",
+   "msn": "CLEXPUS",
+   "records": 723,
+   "md5": "ace5e8561e97b7e44120eaab5e5b1690"
+  },
+  {
+   "table": "T06.01",
+   "snapshotId": "c91842d576524681297c6bb782fdade3f719145d0b515c991961be957dd2f872",
+   "msn": "CLPRPUS",
+   "records": 723,
+   "md5": "179bf007b6d26b8884a63cf7b9a83fb6"
+  },
+  {
+   "table": "T07.01",
+   "snapshotId": "25443a33313c049273a65fff020dc6dca1049ee91e87cca352b07df05b7ce095",
+   "msn": "ELETPUS",
+   "records": 721,
+   "md5": "62b27b4428548521806954d3e5cdceb5"
+  },
+  {
+   "table": "T01.02",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "msn": "CLPRBUS",
+   "records": 721,
+   "md5": "f7f1fba885906822a1c21abe23bb8a85"
+  },
+  {
+   "table": "T01.02",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "msn": "FFPRBUS",
+   "records": 721,
+   "md5": "f270c689179bbb7c314b2902836c25d9"
+  },
+  {
+   "table": "T01.02",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "msn": "NGPRBUS",
+   "records": 721,
+   "md5": "1f27a3698e03752db75d32e4e452869a"
+  },
+  {
+   "table": "T01.02",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "msn": "NLPRBUS",
+   "records": 721,
+   "md5": "bb459c9de222ea4a1215a4feb094980e"
+  },
+  {
+   "table": "T01.02",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "msn": "NUETBUS",
+   "records": 721,
+   "md5": "3d8b5f8c5aca1f080f53b68e4b90656c"
+  },
+  {
+   "table": "T01.02",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "msn": "PAPRBUS",
+   "records": 721,
+   "md5": "0c1ec2e48a0eef743ff3beb2c3ae09a1"
+  },
+  {
+   "table": "T01.02",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "msn": "REPRBUS",
+   "records": 721,
+   "md5": "1df9877a2c8b72e87655b2deea102907"
+  },
+  {
+   "table": "T01.02",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "msn": "TEPRBUS",
+   "records": 721,
+   "md5": "85d4badf2e8dcfcd87c2cd60d716d085"
+  },
+  {
+   "table": "T07.02A",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "msn": "CLETPUS",
+   "records": 721,
+   "md5": "25483b1a8f0b23ad84061d1aa271ba89"
+  },
+  {
+   "table": "T07.02A",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "msn": "ELETPUS",
+   "records": 721,
+   "md5": "d2dcea0129de4260fb662753655a4ded"
+  },
+  {
+   "table": "T07.02A",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "msn": "HVETPUS",
+   "records": 721,
+   "md5": "fe7de0598fabac5e20db629cdb0db5f7"
+  },
+  {
+   "table": "T07.02A",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "msn": "NGETPUS",
+   "records": 721,
+   "md5": "25bb1b11eb10a2ec01ef7f86855c5d25"
+  },
+  {
+   "table": "T07.02A",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "msn": "NUETPUS",
+   "records": 721,
+   "md5": "4c1ed9342d67bab97ba9ea1e9e83accb"
+  },
+  {
+   "table": "T07.02A",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "msn": "SOETPUS",
+   "records": 721,
+   "md5": "aa92ba3492fdf058333af8b49f8e1080"
+  },
+  {
+   "table": "T07.02A",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "msn": "WYETPUS",
+   "records": 721,
+   "md5": "a63be6b53a6c9812b0f20897e3d681b0"
+  },
+  {
+   "table": "T07.06",
+   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
+   "msn": "ESCCPUS",
+   "records": 721,
+   "md5": "0f6180967d90efe42ec1dc298853190e"
+  },
+  {
+   "table": "T07.06",
+   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
+   "msn": "ESICPUS",
+   "records": 721,
+   "md5": "65bc4ac8588239e1f863485e92eb6485"
+  },
+  {
+   "table": "T07.06",
+   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
+   "msn": "ESRCPUS",
+   "records": 721,
+   "md5": "d3e9317f91b518666485fe952f3cee2c"
+  },
+  {
+   "table": "T07.06",
+   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
+   "msn": "ESTCPUS",
+   "records": 721,
+   "md5": "49dceb5d5f3e89f5558b54459c77d803"
+  },
+  {
+   "table": "T09.01",
+   "snapshotId": "a2b3d0bcb55d048dd9cdfb2c8e7d1a973bf0322a79ee691e490febc0f8500ef4",
+   "msn": "RACPUUS",
+   "records": 722,
+   "md5": "c14d54b284550b9c452e042deab29bd3"
+  },
+  {
+   "table": "T09.01",
+   "snapshotId": "a2b3d0bcb55d048dd9cdfb2c8e7d1a973bf0322a79ee691e490febc0f8500ef4",
+   "msn": "RADMUUS",
+   "records": 722,
+   "md5": "5a8e6da1de331217b464cde98fce9a55"
+  },
+  {
+   "table": "T09.01",
+   "snapshotId": "a2b3d0bcb55d048dd9cdfb2c8e7d1a973bf0322a79ee691e490febc0f8500ef4",
+   "msn": "RAIMUUS",
+   "records": 722,
+   "md5": "69f518ef5a507009059e4a1fc3fdde77"
+  },
+  {
+   "table": "T09.04",
+   "snapshotId": "c8ab3731e9224b8ac07a597fc6b47421f39b2d8243a6f716a793bb36b24ec788",
+   "msn": "RMRTUUS",
+   "records": 723,
+   "md5": "cc7fdd2f44e30057011991591de0d492"
+  },
+  {
+   "table": "T09.08",
+   "snapshotId": "369eaa82d2bbf715cfe6252b8056556a83a6a662a4d271d15b8c587aaac987a0",
+   "msn": "ESCMUUS",
+   "records": 674,
+   "md5": "5887dd7a0910534faa16ef8753cd583c"
+  },
+  {
+   "table": "T09.08",
+   "snapshotId": "369eaa82d2bbf715cfe6252b8056556a83a6a662a4d271d15b8c587aaac987a0",
+   "msn": "ESICUUS",
+   "records": 674,
+   "md5": "f2061200c5f558a8b0c96be70a2b1983"
+  },
+  {
+   "table": "T09.08",
+   "snapshotId": "369eaa82d2bbf715cfe6252b8056556a83a6a662a4d271d15b8c587aaac987a0",
+   "msn": "ESRCUUS",
+   "records": 674,
+   "md5": "39c8c9b14a813eb85645cc322c363a94"
+  },
+  {
+   "table": "T09.08",
+   "snapshotId": "369eaa82d2bbf715cfe6252b8056556a83a6a662a4d271d15b8c587aaac987a0",
+   "msn": "ESTCUUS",
+   "records": 674,
+   "md5": "f8b334c5ccacb3879d216e0445edeba3"
+  },
+  {
+   "table": "T09.10",
+   "snapshotId": "297bc1594fcf659fd68be32f113898cf333c56d9df176b9ae4868876c9d25ced",
+   "msn": "NGCGUUS",
+   "records": 685,
+   "md5": "7efb87b6c23c48c01fbe5ded2a493e58"
+  },
+  {
+   "table": "T09.10",
+   "snapshotId": "297bc1594fcf659fd68be32f113898cf333c56d9df176b9ae4868876c9d25ced",
+   "msn": "NGEIUUS",
+   "records": 685,
+   "md5": "66e55e0ac74178565613759c7a77b85e"
+  },
+  {
+   "table": "T09.10",
+   "snapshotId": "297bc1594fcf659fd68be32f113898cf333c56d9df176b9ae4868876c9d25ced",
+   "msn": "NGRCUUS",
+   "records": 685,
+   "md5": "4818bf6dee48e60875ffdd54fa8cee65"
+  },
+  {
+   "table": "T11.01",
+   "snapshotId": "f9c56a655e596a479dc04e018203964be50795595bec0b20e09a92d2eb71a51f",
+   "msn": "CKTCEUS",
+   "records": 697,
+   "md5": "8595bc22d166030bfe310f024a45c82a"
+  },
+  {
+   "table": "T11.01",
+   "snapshotId": "f9c56a655e596a479dc04e018203964be50795595bec0b20e09a92d2eb71a51f",
+   "msn": "NNTCEUS",
+   "records": 697,
+   "md5": "e5002700e165e3fe8da869f88b3709c4"
+  },
+  {
+   "table": "T11.01",
+   "snapshotId": "f9c56a655e596a479dc04e018203964be50795595bec0b20e09a92d2eb71a51f",
+   "msn": "PMTCEUS",
+   "records": 697,
+   "md5": "516466d4bb34df159ace86c1959106fb"
+  },
+  {
+   "table": "T11.01",
+   "snapshotId": "f9c56a655e596a479dc04e018203964be50795595bec0b20e09a92d2eb71a51f",
+   "msn": "TETCEUS",
+   "records": 697,
+   "md5": "152579fda2b7818fa4d1ff51fa0d9d9a"
+  },
+  {
+   "table": "T11.06",
+   "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
+   "msn": "CLEIEUS",
+   "records": 697,
+   "md5": "febf71b77302ff76305546f361c9d196"
+  },
+  {
+   "table": "T11.06",
+   "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
+   "msn": "NNEIEUS",
+   "records": 697,
+   "md5": "0546b702a960d81b81cbd672c5163141"
+  },
+  {
+   "table": "T11.06",
+   "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
+   "msn": "PAEIEUS",
+   "records": 697,
+   "md5": "5af4b6194b97275ed024822685cfcf1e"
+  },
+  {
+   "table": "T11.06",
+   "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
+   "msn": "TXEIEUS",
+   "records": 697,
+   "md5": "6e27e847c3dbb9f71b3209ed2bbc0213"
+  }
+ ],
+ "states": {
+  "epa-egrid-state": {
+   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
+   "places": 52,
+   "fields": [
+    "STNAMEPCAP",
+    "STNGENAN",
+    "STCO2AN",
+    "STCO2RTA",
+    "STGENATR",
+    "STGENACL",
+    "STGENAGS",
+    "STGENANC",
+    "STGENAWI",
+    "STGENASO"
+   ],
+   "compared": 520,
+   "equal": 520
+  },
+  "eia861-net-metering-state": {
+   "snapshotId": "aed6f50aaeb4a6795e3f9858afdb55b0b3fddf68fc34a9ef8e360cf5e112eb82",
+   "places": 51,
+   "fields": [
+    "Photovoltaic | Capacity MW | Residential",
+    "Photovoltaic | Capacity MW | Commercial",
+    "Photovoltaic | Capacity MW | Industrial",
+    "Photovoltaic | Capacity MW | Transportation",
+    "Photovoltaic | Capacity MW | Total",
+    "Photovoltaic | Installations | Total",
+    "Photovoltaic | Energy Sold Back MWh | Total"
+   ],
+   "compared": 357,
+   "equal": 357
+  }
+ },
+ "tiles": {
+  "energy-production": {
+   "datasetId": "official_04_energy_raw_mer_t01_02_815b85125f",
+   "snapshotId": "e80a02a39f899689ce74b1b58d0e5909afa79e6d92b0fa9f739a12c82268e6cf",
+   "asOf": "Aug 2026",
+   "figure": "9.564",
+   "figureUnit": "Quadrillion Btu",
+   "headline": "U.S. total primary energy production was 9.564 Quadrillion Btu in Aug 2026, 3.3% above Aug 2025.",
+   "rows": [
+    9373,
+    9360
+   ]
+  },
+  "natural-gas-production": {
+   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "asOf": "Aug 2026",
+   "figure": "3,591",
+   "figureUnit": "Billion Cubic Feet",
+   "headline": "U.S. dry natural gas production was 3,591 Billion Cubic Feet in Aug 2026, 6.6% above Aug 2025.",
+   "rows": [
+    2884,
+    2871
+   ]
+  },
+  "coal-production": {
+   "datasetId": "official_04_energy_raw_mer_t06_01_4cca84cba3",
+   "snapshotId": "c91842d576524681297c6bb782fdade3f719145d0b515c991961be957dd2f872",
+   "asOf": "Oct 2026",
+   "figure": "44,440",
+   "figureUnit": "Thousand Short Tons",
+   "headline": "U.S. coal production was 44,440 Thousand Short Tons in Oct 2026, 0.4% below Oct 2025.",
+   "rows": [
+    723,
+    710
+   ]
+  },
+  "petroleum-products-supplied": {
+   "datasetId": "official_04_energy_raw_mer_t03_01_7b9fc216c5",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "asOf": "Oct 2026",
+   "figure": "21,073",
+   "figureUnit": "Thousand Barrels per Day",
+   "headline": "U.S. petroleum products supplied were 21,073 Thousand Barrels per Day in Oct 2026, 0.5% above Oct 2025.",
+   "rows": [
+    9399,
+    9386
+   ]
+  },
+  "natural-gas-consumption": {
+   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "asOf": "Aug 2026",
+   "figure": "2,810",
+   "figureUnit": "Billion Cubic Feet",
+   "headline": "U.S. natural gas consumption was 2,810 Billion Cubic Feet in Aug 2026, 6.4% above Aug 2025.",
+   "rows": [
+    7931,
+    7918
+   ]
+  },
+  "petroleum-net-imports": {
+   "datasetId": "official_04_energy_raw_mer_t03_01_7b9fc216c5",
+   "snapshotId": "cbe503a56a344134baf016e98033448bc782134f02cb5cf000047eaffc3dc311",
+   "asOf": "Oct 2026",
+   "figure": "−3,965",
+   "figureUnit": "Thousand Barrels per Day",
+   "headline": "U.S. petroleum net imports were −3,965 Thousand Barrels per Day in Oct 2026, 393 Thousand Barrels per Day below Oct 2025.",
+   "rows": [
+    7230,
+    7217
+   ]
+  },
+  "crude-oil-imports": {
+   "datasetId": "official_04_energy_raw_mer_t03_03b_831b447d52",
+   "snapshotId": "c6658449c26aa658aa19e4563ad95ef3dac8dfe03df2ce2773552b77464e0b6f",
+   "asOf": "Oct 2026",
+   "figure": "6,197",
+   "figureUnit": "Thousand Barrels per Day",
+   "headline": "U.S. crude oil imports were 6,197 Thousand Barrels per Day in Oct 2026, 5.1% above Oct 2025.",
+   "rows": [
+    1446,
+    1433
+   ]
+  },
+  "natural-gas-net-imports": {
+   "datasetId": "official_04_energy_raw_mer_t04_01_7a83bcb610",
+   "snapshotId": "e94f0afc37d1dc92ecdc9fd7a6be87b186aa14d79fcf79c2ba0dfd505473a69e",
+   "asOf": "Aug 2026",
+   "figure": "−607",
+   "figureUnit": "Billion Cubic Feet",
+   "headline": "U.S. natural gas net imports were −607 Billion Cubic Feet in Aug 2026, 83 Billion Cubic Feet below Aug 2025.",
+   "rows": [
+    5768,
+    5755
+   ]
+  },
+  "crude-oil-stocks-spr": {
+   "datasetId": "official_04_energy_raw_mer_t03_04_137ab74873",
+   "snapshotId": "d40c00a1884dfe6f03784be49ac7a6d25bd9efb26cdef04d9feafede80b38984",
+   "asOf": "Oct 2026",
+   "figure": "281.4",
+   "figureUnit": "Million Barrels",
+   "headline": "Crude oil stocks in the Strategic Petroleum Reserve were 281.4 Million Barrels in Oct 2026, 31.3% below Oct 2025.",
+   "rows": [
+    723,
+    710
+   ]
+  },
+  "crude-oil-price": {
+   "datasetId": "official_04_energy_raw_mer_t09_01_4ba4b3d233",
+   "snapshotId": "a2b3d0bcb55d048dd9cdfb2c8e7d1a973bf0322a79ee691e490febc0f8500ef4",
+   "asOf": "Sep 2026",
+   "figure": "94.93",
+   "figureUnit": "Dollars per Barrel",
+   "headline": "The composite refiner acquisition cost of crude oil was 94.93 Dollars per Barrel in Sep 2026, 44.6% above Sep 2025.",
+   "rows": [
+    4332,
+    4319
+   ]
+  },
+  "natural-gas-citygate-price": {
+   "datasetId": "official_04_energy_raw_mer_t09_10_5eab229ba3",
+   "snapshotId": "297bc1594fcf659fd68be32f113898cf333c56d9df176b9ae4868876c9d25ced",
+   "asOf": "Aug 2026",
+   "figure": "5.03",
+   "figureUnit": "Dollars per Thousand Cubic Feet",
+   "headline": "The citygate price of natural gas was 5.03 Dollars per Thousand Cubic Feet in Aug 2026, 2.5% below Aug 2025.",
+   "rows": [
+    1370,
+    1357
+   ]
+  },
+  "co2-emissions": {
+   "datasetId": "official_04_energy_raw_mer_t11_01_bb7ae7b424",
+   "snapshotId": "f9c56a655e596a479dc04e018203964be50795595bec0b20e09a92d2eb71a51f",
+   "asOf": "Aug 2026",
+   "figure": "418.8",
+   "figureUnit": "Million Metric Tons of Carbon Dioxide",
+   "headline": "U.S. energy-related carbon dioxide emissions were 418.8 Million Metric Tons of Carbon Dioxide in Aug 2026, 1.0% above Aug 2025.",
+   "rows": [
+    9758,
+    9745
+   ]
+  },
+  "generation-natural-gas": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "209,843",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from natural gas was 209,843 Million Kilowatthours in Aug 2026, 8.8% above Aug 2025.",
+   "rows": [
+    2163,
+    2150
+   ]
+  },
+  "generation-coal": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "70,937",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from coal was 70,937 Million Kilowatthours in Aug 2026, 1.7% above Aug 2025.",
+   "rows": [
+    721,
+    708
+   ]
+  },
+  "generation-nuclear": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "70,661",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from nuclear electric power was 70,661 Million Kilowatthours in Aug 2026, 0.1% below Aug 2025.",
+   "rows": [
+    3605,
+    3592
+   ]
+  },
+  "generation-wind": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "33,317",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from wind was 33,317 Million Kilowatthours in Aug 2026, 22.0% above Aug 2025.",
+   "rows": [
+    8652,
+    8639
+   ]
+  },
+  "generation-solar": {
+   "datasetId": "official_04_energy_raw_mer_t07_02a_4593887b01",
+   "snapshotId": "2587b2e5e671b121fbd676b511b294d209b3a0856571ee9ec07f381a39be92fd",
+   "asOf": "Aug 2026",
+   "figure": "38,819",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Net generation from solar was 38,819 Million Kilowatthours in Aug 2026, 22.0% above Aug 2025.",
+   "rows": [
+    7931,
+    7918
+   ]
+  },
+  "electricity-retail-sales": {
+   "datasetId": "official_04_energy_raw_mer_t07_06_73b49f9b83",
+   "snapshotId": "3127fde7884e0efda1fd4e9c25805005585fb715fa86158bb01a3531b383fed5",
+   "asOf": "Aug 2026",
+   "figure": "412,568",
+   "figureUnit": "Million Kilowatthours",
+   "headline": "Electricity sales to ultimate customers were 412,568 Million Kilowatthours in Aug 2026, 5.1% above Aug 2025.",
+   "rows": [
+    3605,
+    3592
+   ]
+  },
+  "electricity-price-residential": {
+   "datasetId": "official_04_energy_raw_mer_t09_08_7f4fef2763",
+   "snapshotId": "369eaa82d2bbf715cfe6252b8056556a83a6a662a4d271d15b8c587aaac987a0",
+   "asOf": "Aug 2026",
+   "figure": "18.16",
+   "figureUnit": "Cents per Kilowatthour,  Including Taxes",
+   "headline": "The average residential price of electricity was 18.16 Cents per Kilowatthour,  Including Taxes in Aug 2026, 3.1% above Aug 2025.",
+   "rows": [
+    674,
+    661
+   ]
+  },
+  "power-sector-co2": {
+   "datasetId": "official_04_energy_raw_mer_t11_06_aa6ddc226e",
+   "snapshotId": "4ae7822ef097a21491944cf85343290427e2dbb29f892ee0a701317e659c20a3",
+   "asOf": "Aug 2026",
+   "figure": "158.9",
+   "figureUnit": "Million Metric Tons of Carbon Dioxide",
+   "headline": "Carbon dioxide emissions of the electric power sector were 158.9 Million Metric Tons of Carbon Dioxide in Aug 2026, 5.7% above Aug 2025.",
+   "rows": [
+    6273,
+    6260
+   ]
+  },
+  "egrid-state-generation": {
+   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
+   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
+   "asOf": "2023",
+   "figure": "544,038,647",
+   "figureUnit": "MWh",
+   "headline": "48 had the largest state annual net generation of 52 places (the 50 states, DC and Puerto Rico) on 2023.",
+   "rows": [
+    45,
+    10,
+    39,
+    5,
+    15,
+    2,
+    36,
+    11,
+    28,
+    35
+   ]
+  },
+  "egrid-state-co2-rate": {
+   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
+   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
+   "asOf": "2023",
+   "figure": "1,954.4",
+   "figureUnit": "lb/MWh",
+   "headline": "54 had the largest state annual CO2 total output emission rate of 52 places (the 50 states, DC and Puerto Rico) on 2023.",
+   "rows": [
+    51,
+    52,
+    18,
+    40,
+    16,
+    25,
+    46,
+    12,
+    29,
+    50
+   ]
+  },
+  "egrid-state-renewables": {
+   "datasetId": "official_05_utilities_csv_egrid2023_st23_full_3993eec81f",
+   "snapshotId": "35539c70582926f0f0bc5ade4e5f6ba30393bc0b3bf9b2d0d0476dee94dac859",
+   "asOf": "2023",
+   "figure": "148,843,208",
+   "figureUnit": "MWh",
+   "headline": "48 had the largest state annual total renewables net generation of 52 places (the 50 states, DC and Puerto Rico) on 2023.",
+   "rows": [
+    45,
+    5,
+    49,
+    13,
+    37,
+    38,
+    35,
+    17,
+    15,
+    6
+   ]
+  },
+  "net-metered-solar-capacity": {
+   "datasetId": "official_05_utilities_csv_eia861_net_metering_2025_states_state_level_662ef5df39",
+   "snapshotId": "aed6f50aaeb4a6795e3f9858afdb55b0b3fddf68fc34a9ef8e360cf5e112eb82",
+   "asOf": "2025",
+   "figure": "20,041.1",
+   "figureUnit": "MW",
+   "headline": "CA had the largest net metered photovoltaic capacity of 51 places (the 50 states and DC) on 2025.",
+   "rows": [
+    5,
+    35,
+    4,
+    10,
+    32,
+    20,
+    15,
+    7,
+    21,
+    6
+   ]
+  }
+ }
+}
