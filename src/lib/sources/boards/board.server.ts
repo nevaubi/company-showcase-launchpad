@@ -200,6 +200,7 @@ function contextFor(profile: Profile, measure: MeasureSpec, meta: DatasetMeta, c
     cadence,
     markers: measure.markers,
     grouping: measure.grouping,
+    padding: measure.padding,
   };
 }
 
@@ -264,6 +265,8 @@ async function lineCells(
       check: check ? cellAt(position(columns, check.field)) : undefined,
     });
   }
+  if (series.points.length > 0 && cells.length === 0 && local.length)
+    stop(`None of the ${series.points.length.toLocaleString("en-US")} records read has ${addressMatches(address).map((m) => `${m.field} "${m.value}"`).join(" and ")}.`);
   return cells;
 }
 

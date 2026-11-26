@@ -142,6 +142,7 @@ export function tileContext(
       cadence: cadenceOf(profile),
       markers: measure.markers,
       grouping: measure.grouping,
+      padding: measure.padding,
     },
   };
 }
