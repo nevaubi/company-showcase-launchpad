@@ -351,6 +351,15 @@ describe("cross-sections", () => {
     expect(before.cells.map((c) => c.text)).toEqual(["2025.2", "2025.2"]);
   });
 
+  it("write the field a tile names after each record's name, to tell repeated names apart", async () => {
+    const records = ["MO", "IA"].map((st, i) => ({ snapshot_id: "s3", row_number: i + 1, period: "2025", geo_code: `c${i}`, geo_name: "Harrison", values: ["2025", st, String(i)] }));
+    const columns = ["Year", "State", "Value"].map((label, i) => ({ key: `col${i}`, label, type: "string" }));
+    const meta = { snapshotId: "s3", rows: 2, columns, ingest: { dimensions: { period: 0, geo_code: 1 } } };
+    const db = new FakeSourceDb({ source_datasets: [], source_snapshots: [{ id: "s3", dataset_id: "d3", status: "ready", columns }], source_records: records } as never);
+    const read = await crossRead(db, meta as never, { by: "geo_code", period: "2025", labelWith: "State" }, [2], "year");
+    expect(read.cells.map((c) => c.name)).toEqual(["Harrison, MO", "Harrison, IA"]);
+  });
+
   it("read a whole small table only when it has no period dimension", async () => {
     const { tables, meta } = stateTable({ years: ["2025"], perYear: 4 });
     await expect(crossRead(new FakeSourceDb(tables as never), meta as never, { by: "geo_code", period: "table" }, [2], "year")).rejects.toThrow("The table has periods");

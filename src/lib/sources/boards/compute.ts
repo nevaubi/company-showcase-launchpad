@@ -110,6 +110,14 @@ function minusDays(iso: string, days: number): string {
   return new Date(t).toISOString().slice(0, 10);
 }
 
+/** The first day of the period a day falls in, under a cadence (the day itself for a day or a week). */
+export function periodStart(start: string, cadence: Cadence): string {
+  if (cadence === "month") return `${start.slice(0, 7)}-01`;
+  if (cadence === "quarter") return `${start.slice(0, 4)}-${String((quarterOf(start) - 1) * 3 + 1).padStart(2, "0")}-01`;
+  if (cadence === "year") return `${start.slice(0, 4)}-01-01`;
+  return start;
+}
+
 /** The identity of a period under a cadence: two records with one identity are the same period. */
 export function periodId(start: string, cadence: Cadence): string {
   if (cadence === "month") return start.slice(0, 7);
@@ -527,8 +535,10 @@ export function crossValues(
     period = cells[0].period;
     const parsed = period == null ? null : parsePeriod(period, context.format);
     if (!parsed) return { ok: false, reason: `The period "${period ?? ""}" is not of the declared format (${context.format}).` };
-    label = periodLabel(parsed, context.cadence);
-    when = at(context.cadence, label);
+    // a cross-section dated by a day that does not open its period (a report date, "20260930") names the day
+    const cadence = context.cadence !== "day" && context.cadence !== "week" && parsed.start !== periodStart(parsed.start, context.cadence) ? "day" : context.cadence;
+    label = periodLabel(parsed, cadence);
+    when = at(cadence, label);
   }
   const gaps = emptyGaps();
   const keys = new Set<string>();
@@ -566,6 +576,13 @@ export function computeRankTile(
   const states = cells.some((c) => !c.name) ? stateRule(cells.map((c) => c.key)) : null;
   const nameOf = (cell: RankCellInput) => placeName(cell, states).name;
   const namedFrom = states && top.some(({ cell }) => placeName(cell, states).fromCode) ? namedFromCodes(states.kind) : null;
+  const labels = new Map<string, RankCellInput>();
+  for (const { cell } of top) {
+    const name = nameOf(cell);
+    const prior = labels.get(name);
+    if (prior) return refuse(`Two bars would both read "${name}" (rows ${prior.row} and ${cell.row}); the tile must name a field that tells them apart (labelWith).`);
+    labels.set(name, cell);
+  }
   const leader = top[0];
   const figure = formatDecimal(leader.value, { decimals: spec.decimals });
   const reader = readerFigure(spec.unit, leader.value, figure);

@@ -110,6 +110,11 @@ export type CrossSpec = {
    * that they are applied after the read, to the records of the period read in its five pages.
    */
   where?: readonly FieldMatch[];
+  /**
+   * A dictionary label whose cell is read beside the measure and written after each record's name ("Harrison, MO"),
+   * where names repeat across places. A rank whose bars would still carry one label twice is refused.
+   */
+  labelWith?: string;
 };
 
 /** Entities or places ranked by the measure at one period. */

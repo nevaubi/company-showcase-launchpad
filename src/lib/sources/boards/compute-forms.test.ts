@@ -262,7 +262,8 @@ describe("distribution", () => {
   it("marks the median and quartiles of the cohort and counts every figure in a bin", () => {
     const r = ok(computeDistributionTile(spec, c, fdicCrossSection("ASSET")));
     expect(r.headline).toBe(
-      "The median total assets of 496 institutions in the FDIC cohort was 6,115,843 USD thousands (monetary measures) in Q3 2026; the middle half were between 3,564,855 and 15,901,271.",
+      // a report date that does not open its quarter names the day, as the cohort's ranking does
+      "The median total assets of 496 institutions in the FDIC cohort was 6,115,843 USD thousands (monetary measures) on Sep 30, 2026; the middle half were between 3,564,855 and 15,901,271.",
     );
     if (r.shape?.kind !== "distribution") throw new Error("shape");
     expect(r.shape.count).toBe(496);
@@ -419,5 +420,38 @@ describe("records", () => {
     if (r.shape?.kind !== "map") throw new Error("shape");
     expect(r.shape.missing).toEqual([]);
     expect(r.headline).toBe("The enforcement report holds 1,326 records as retrieved on 24 Nov 2026; Florida has the most, 51, of 51 states and territories.");
+  });
+});
+
+describe("rank wording by the profile's cadence", () => {
+  const spec = {
+    ...base,
+    id: "r",
+    datasetId: "d",
+    measure: "v",
+    subject: "figure",
+    verb: "had" as const,
+    unit: "Number",
+    decimals: 0,
+    form: "ranked-bars" as const,
+    transform: "rank" as const,
+    headline: "rank" as const,
+    entities: "places",
+    across: { by: "entity_id" as const, period: "latest", top: 2 },
+  };
+  const cells = (period: string, names = ["A", "B", "C"]): RankCellInput[] => names.map((name, i) => ({ row: i + 1, key: `k${i}`, name, period, text: String(10 - i) }));
+  const at = (period: string, format: PeriodFormat, cadence: Cadence) => ok(computeRankTile(spec as RankTileSpec, ctx("d", "v", "Number", format, cadence), cells(period))).headline;
+
+  it("names a year, a month, a quarter, and the day of a report date that does not open its period", () => {
+    expect(at("2025", "year", "year")).toBe("A had the largest figure of 3 places in 2025.");
+    expect(at("2026-10", "yyyy-mm", "month")).toBe("A had the largest figure of 3 places in Oct 2026.");
+    expect(at("2026-10-01", "iso-date", "month")).toBe("A had the largest figure of 3 places in Oct 2026.");
+    expect(at("2026Q3", "quarter", "quarter")).toBe("A had the largest figure of 3 places in Q3 2026.");
+    expect(at("20260930", "yyyymmdd", "quarter")).toBe("A had the largest figure of 3 places on Sep 30, 2026.");
+  });
+
+  it("refuses bars that would carry one label twice", () => {
+    const r = computeRankTile(spec as RankTileSpec, ctx("d", "v", "Number", "year", "year"), cells("2025", ["Harrison", "Harrison", "Polk"]));
+    expect(r).toEqual({ ok: false, reason: 'Two bars would both read "Harrison" (rows 1 and 2); the tile must name a field that tells them apart (labelWith).' });
   });
 });
