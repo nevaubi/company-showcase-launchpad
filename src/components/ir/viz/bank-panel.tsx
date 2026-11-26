@@ -3,7 +3,7 @@
 // its own axis (never two units on one chart). Shown only when the company's figures include them.
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { decimalsOf, fmtChange, fmtValue } from "./format";
+import { decimalsOf, fmtChange, fmtReader } from "./format";
 import { statOf } from "./model";
 import { VizNote } from "./parts";
 import { SectionChart } from "./section-chart";
@@ -29,11 +29,11 @@ function Block({
   );
 }
 
-/** "27,036 · +12.8% YoY": the latest figure of a line in its title row. */
-function headline(s: VizSeries, scale: BankPanelProps["scale"]) {
+/** "Sep ’26: $27.0 billion, +12.8% YoY": the latest figure of a line in its title row, in a reader figure. */
+function headline(s: VizSeries) {
   const st = statOf(s);
   if (!st) return "";
-  return `${st.latest.short}: ${fmtValue(st.latest.value, s.unit, scale, s.printedUnit, decimalsOf(st.latest))}${st.yoy ? `, ${fmtChange(st.yoy)} YoY` : ""}`;
+  return `${st.latest.short}: ${fmtReader(st.latest.value, s.unit, s.printedUnit, decimalsOf(st.latest))}${st.yoy ? `, ${fmtChange(st.yoy)} YoY` : ""}`;
 }
 
 function One({
@@ -50,7 +50,7 @@ function One({
   return (
     <div className="min-w-0">
       <p className="text-[12px] leading-4 text-foreground">{s.label}</p>
-      <p className="num mb-1 text-[11px] leading-4 text-muted-foreground">{headline(s, scale)}</p>
+      <p className="num mb-1 text-[11px] leading-4 text-muted-foreground">{headline(s)}</p>
       <SectionChart title={s.label} series={[s]} scale={scale} onOpen={onOpen} height={height} />
     </div>
   );

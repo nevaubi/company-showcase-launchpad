@@ -325,7 +325,30 @@ const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * em dash reaches a label. Any other text stays as stored.
  */
 export function shownLabel(label: string) {
-  return label.replace(/\s+—\s+/g, ": ");
+  if (!label.includes("—")) return label;
+  const parts = label
+    .split(/\s*—\s*/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!parts.length) return label.replace(/—/g, "").trim();
+  return parts.reduce((out, next) => `${out}: ${sentenceTail(out, next)}`);
+}
+
+/** Words of a name past its first: sentence case when none of them is capitalized ("Net revenue"). */
+const sentenceCased = (s: string) =>
+  s
+    .split(/\s+/)
+    .slice(1)
+    .every((w) => !/^[A-Z][a-z]/.test(w));
+/**
+ * The part after the separator in the head's own casing: a stored "Managed basis" under "Net revenue"
+ * prints "managed basis"; a single word ("Compute", "Americas") or a name with capitals of its own
+ * ("Consumer & Community Banking") stays as stored.
+ */
+function sentenceTail(head: string, tail: string) {
+  const words = tail.split(/\s+/);
+  if (words.length < 2 || !/^[A-Z][a-z]/.test(words[0]) || !sentenceCased(tail)) return tail;
+  return sentenceCased(head) ? tail[0].toLowerCase() + tail.slice(1) : tail;
 }
 
 /** Inside a "U.S." or "International" breakdown (or a list titled by the lines' lead-in), rows don't repeat it. */

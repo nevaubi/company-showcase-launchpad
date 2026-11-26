@@ -87,6 +87,17 @@ describe("p5-ir4: composed labels carry no em dash", () => {
     expect(rowLabel("Vyalev: U.S.", "Neuroscience: U.S.")).toBe("Vyalev");
     expect(shownLabel("Revenue 2024–2025")).toBe("Revenue 2024–2025");
   });
+  // irpolish: JPM's stored names ("Net revenue — Managed basis", "Markets — revenue") reached tiles and rows.
+  it("reads a stored name with an em dash as the company would print it, in sentence case", () => {
+    expect(shownLabel("Net revenue — Managed basis")).toBe("Net revenue: managed basis");
+    expect(shownLabel("Markets — revenue")).toBe("Markets: revenue");
+    expect(shownLabel("U.S. offices — Noninterest-bearing")).toBe("U.S. offices: Noninterest-bearing");
+    expect(shownLabel("Net income — Consumer & Community Banking")).toBe("Net income: Consumer & Community Banking");
+    expect(shownLabel("Revenue—Americas")).toBe("Revenue: Americas");
+    expect(shownLabel("Net revenue\u00a0—\u00a0Managed basis")).toBe("Net revenue: managed basis");
+    expect(shownLabel("Card Services — Net charge-off rate")).toBe("Card Services: Net charge-off rate");
+    for (const x of ["Net revenue — Managed basis", "A — B — C", "Total —", "— Total"]) expect(shownLabel(x)).not.toContain("—");
+  });
   it("titles a list of loose lines with a colon", () => {
     expect(groupTitle({ id: "x", cat: "segment", met: "revenue", unit: "usd", label: "", root: null, rows: [] })).toBe("Revenue: other segment lines");
   });

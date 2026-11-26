@@ -60,7 +60,7 @@ describe("IR viz components", () => {
       <SummaryStrip tiles={summaryTilesOf(jpm, "JPM")} mix={segmentMixOf(jpm, "JPM")} scale="M" />,
     );
     const tile = screen.getByRole("button", {
-      name: /^Net interest income, Quarter ended September 30, 2026: \$27,036M, \+12\.8% on a year/,
+      name: /^Net interest income, Quarter ended September 30, 2026: \$27\.0 billion, \+12\.8% on a year/,
     });
     expect(tile.getAttribute("aria-label")).toMatch(/As filed 27,036/);
     fireEvent.click(tile);

@@ -2,7 +2,7 @@
 // on a year and on the period before, twelve periods of trend) and the revenue or net revenue mix by segment.
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { decimalsOf, fmtChange, fmtValue } from "./format";
+import { asPrinted, decimalsOf, fmtChange, fmtReader, printedScaleWords } from "./format";
 import { statOf } from "./model";
 import { Spark, VizNote, useOpener } from "./parts";
 import { SectionChart } from "./section-chart";
@@ -15,23 +15,21 @@ const toneOf = (c: VizChange | null, inverted: boolean) => {
 
 function StatTile({
   stat,
-  scale,
   onOpen,
 }: {
   stat: VizStat;
-  scale: SummaryStripProps["scale"];
   onOpen: () => void;
 }) {
   const { series: s, latest, yoy, qoq, spark } = stat;
-  const value = fmtValue(latest.value, s.unit, scale, s.printedUnit, decimalsOf(latest));
-  const label = `${s.label}, ${latest.periodLabel}: ${value}${yoy ? `, ${fmtChange(yoy)} on a year` : ""}${qoq ? `, ${fmtChange(qoq)} on the quarter` : ""}. As filed ${latest.printed ?? "not printed as a cell"}.${latest.source ? " Opens the source." : ""}`;
+  const value = fmtReader(latest.value, s.unit, s.printedUnit, decimalsOf(latest));
+  const label = `${s.label}, ${latest.periodLabel}: ${value}${yoy ? `, ${fmtChange(yoy)} on a year` : ""}${qoq ? `, ${fmtChange(qoq)} on the quarter` : ""}. As filed ${latest.printed ? `${latest.printed}${printedScaleWords(latest.value, latest.printed) ? ` ${printedScaleWords(latest.value, latest.printed)}` : ""}` : "not printed as a cell"}.${latest.source ? " Opens the source." : ""}`;
   return (
     <button
       type="button"
       onClick={onOpen}
       disabled={!latest.source}
       aria-label={label}
-      title={latest.printed ? `As filed: ${latest.printed}` : undefined}
+      title={asPrinted(latest.value, latest.printed)}
       className="group flex min-w-0 flex-col gap-1 rounded-md border bg-card px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default motion-reduce:transition-none"
     >
       <span className="line-clamp-2 min-h-8 text-[12px] leading-4 text-muted-foreground">
@@ -73,7 +71,7 @@ export function SummaryStrip({ tiles, mix, scale, onOpen, className }: SummarySt
       {stats.length > 0 && (
         <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3 @3xl:grid-cols-4">
           {stats.map((st) => (
-            <StatTile key={st.series.key} stat={st} scale={scale} onOpen={() => open(st.latest)} />
+            <StatTile key={st.series.key} stat={st} onOpen={() => open(st.latest)} />
           ))}
         </div>
       )}

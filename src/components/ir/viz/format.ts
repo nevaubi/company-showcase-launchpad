@@ -1,7 +1,8 @@
 // How the IR charts write a figure: dollars in the reader's $K/$M/$B choice (the app's one formatter, fmtIr), the
 // other units as printed; the tooltip adds the cell text as filed. Pure.
 import { fmtIr, unitCaption } from "@/lib/ir/display";
-import type { Scale } from "@/lib/format";
+import { fmtCompactUsd, type Scale } from "@/lib/format";
+import { printedDiv } from "@/lib/ir/statements";
 import { MINUS } from "@/components/alt/library/charts/primitives";
 import type { VizChange, VizPoint, VizSeries, VizUnit } from "./types";
 
@@ -23,6 +24,33 @@ export function fmtValue(
   }
   if (unit === "other" && printedUnit) return `${s} ${printedUnit}`;
   return s;
+}
+
+const SCALE_NAME: Record<string, string> = { K: "thousand", M: "million", B: "billion", T: "trillion" };
+
+/**
+ * A headline figure for a reader (tiles, panel headlines): dollars compact with the scale in words ("$50.9 billion",
+ * "−$455 million"), the same on every tile whatever the page's $K/$M/$B choice; other units as `fmtValue` writes them.
+ */
+export function fmtReader(v: number, unit: VizUnit, printedUnit?: string, decimals?: number): string {
+  if (unit !== "usd") return fmtValue(v, unit, "full", printedUnit, decimals);
+  const a = Math.abs(v);
+  const step = a >= 1e12 ? 1e12 : a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
+  const s = fmtCompactUsd(v, step > 1 && a / step >= 100 ? 0 : 1);
+  return s.replace(/^(−?\$[\d.,]+)([KMBT])$/, (_m, n: string, u: string) => `${n} ${SCALE_NAME[u]}`);
+}
+
+/** The scale a figure is printed at, in words ("in millions"), from its value and its printed text; "" when unscaled or unknown. */
+export function printedScaleWords(v: number, printed?: string): string {
+  const d = printedDiv({ v, x: printed });
+  return d === 1e3 ? "in thousands" : d === 1e6 ? "in millions" : d === 1e9 ? "in billions" : "";
+}
+
+/** The tooltip of a headline figure: the cell as printed, with the scale it is printed at. */
+export function asPrinted(v: number, printed?: string): string | undefined {
+  if (!printed) return undefined;
+  const w = printedScaleWords(v, printed);
+  return `As filed: ${printed.trim()}${w ? ` (${w})` : ""}`;
 }
 
 /** A shorter figure for axis ticks: dollars without decimals past what the span needs. */

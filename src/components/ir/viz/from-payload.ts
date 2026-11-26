@@ -2,7 +2,7 @@
 // own names; held (suspect) cells are never used, because `cellsFor` leaves them out; every point carries the source
 // target the table's own cell opens (openIrCell in breakdowns.tsx builds the same target).
 import type { SourceTarget } from "@/components/source/source-context";
-import { derivedOf, periodLabel, periodLong, printedUnit, refOf } from "@/lib/ir/display";
+import { derivedOf, periodLabel, periodLong, printedUnit, refOf, shownLabel } from "@/lib/ir/display";
 import { keyLines } from "@/lib/ir/highlights";
 import type { IrPayload, PayloadCell, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { cellsFor, periodGrids } from "@/lib/ir/periods";
@@ -32,10 +32,10 @@ export function targetOf(
   const label = periodLong(c.m === 0 && c.e ? c.e : end, cadence, c.m);
   const derived = derivedOf(payload, c);
   if (derived)
-    return { ticker, label: s.label, periodLabel: label, unit: s.unit, value: c.v, derived };
+    return { ticker, label: shownLabel(s.label), periodLabel: label, unit: s.unit, value: c.v, derived };
   const src = refOf(payload, { ...c, e: c.e ?? end }, s.label);
   return src
-    ? { ticker, label: s.label, periodLabel: label, unit: s.unit, value: c.v, src }
+    ? { ticker, label: shownLabel(s.label), periodLabel: label, unit: s.unit, value: c.v, src }
     : undefined;
 }
 
@@ -79,7 +79,7 @@ export function seriesOf(
       return p;
     });
   const unit = unitOf(s.unit);
-  const out: VizSeries = { key: s.k, label: s.label, unit, cadence, points };
+  const out: VizSeries = { key: s.k, label: shownLabel(s.label), unit, cadence, points };
   if (unit === "other") out.printedUnit = printedUnit(points.map((p) => p.printed ?? ""));
   return out;
 }
@@ -130,7 +130,7 @@ export function partsOf(
   if (parts.length < 2 || !total.points.length) return null;
   return {
     key: g.id,
-    label: g.t ?? g.label,
+    label: shownLabel(g.t ?? g.label),
     unit: total.unit,
     cadence,
     total,

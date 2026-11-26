@@ -513,7 +513,7 @@ export function assembleStatements(p: IrPayload): Statement[] {
         let gap = false;
         for (let i = prevR + 1; i < r; i++) {
           const h = heads.get(i);
-          if (h) between.push({ kind: "head", text: sentenceCase(h, keep), depth: 0 });
+          if (h) between.push({ kind: "head", text: shownLabel(sentenceCase(h, keep)), depth: 0 });
           else if (blank.has(i) || !cap) gap = true;
         }
         if (between.length) {
@@ -524,7 +524,7 @@ export function assembleStatements(p: IrPayload): Statement[] {
       } else if (r != null && prevR == null && cap) {
         const before = [...heads.entries()].filter(([i]) => i < r && i >= r - 2);
         for (const [, h] of before)
-          rows.push({ kind: "head", text: sentenceCase(h, keep), depth: Math.max(0, depth - 1) });
+          rows.push({ kind: "head", text: shownLabel(sentenceCase(h, keep)), depth: Math.max(0, depth - 1) });
       }
       if (r != null) prevR = r;
       // Bold with a rule only where the section prints parts of it; a total of parts printed elsewhere reads as a line.
@@ -543,13 +543,13 @@ export function assembleStatements(p: IrPayload): Statement[] {
     const money = lines.filter((s) => s.unit === "usd");
     const div = mode(money.map(lineDiv)) ?? 1;
     const bds = lines.map((s) => s.bd).filter((x): x is string => !!x);
-    const printed = cap?.title && tableTitle(cap.title) ? sentenceCase(cap.title, keep) : "";
+    const printed = cap?.title && tableTitle(cap.title) ? shownLabel(sentenceCase(cap.title, keep)) : "";
     const bd = mode(bds);
     const cat = mode(lines.map((s) => s.cat)) ?? "kpi";
     const unitText = cap?.unit?.replace(/^\(|\)$/g, "").trim();
     const sec: Statement = {
       id: dr.anchor.id,
-      title: printed || bd || CATEGORY_LABEL[cat] || cat,
+      title: shownLabel(printed || bd || CATEGORY_LABEL[cat] || cat),
       titleFrom: printed ? "printed" : bd ? "breakdown" : "category",
       group: "main",
       unitLine: unitText
