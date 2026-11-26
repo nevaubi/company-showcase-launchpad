@@ -178,7 +178,6 @@ const HOUSING: TileSpec[] = [
     ],
   }),
   fhfaStat("fhfa-california", "CA", "California"),
-  fhfaStat("fhfa-texas", "TX", "Texas"),
   fhfaStat("fhfa-florida", "FL", "Florida"),
   countyRank("fhfa-counties-highest", "highest"),
   countyRank("fhfa-counties-lowest", "lowest"),
@@ -206,19 +205,6 @@ const HOUSING: TileSpec[] = [
     section: "Counties",
     note: COUNTY_NOTE,
   } satisfies CompareTileSpec,
-  {
-    id: "fhfa-county-records",
-    collection: "11_real_estate",
-    datasetId: FHFA_COUNTY_HISTORY,
-    title: "Counties in FHFA's annual index, records by year",
-    subject: "FHFA's annual county index",
-    transform: "records",
-    headline: "records",
-    form: "bars",
-    per: { dimension: "period", format: "year", by: "year" },
-    section: "Counties",
-    note: "One record per county and year as FHFA publishes them, from the county's first recorded year; a blank figure is a record too.",
-  } satisfies RecordsTileSpec,
 ];
 
 // ---------------------------------------------------------------- Technology
