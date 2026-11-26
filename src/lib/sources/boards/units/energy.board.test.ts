@@ -64,7 +64,7 @@ describe("energy boards on production rows, through the board server", () => {
       expect(summary(tile), tile.id).toEqual(CHECKS.tiles[tile.id]);
       expect(tile.source.snapshotId).toBe(CHECKS.tiles[tile.id].snapshotId);
       expect(tile.section, tile.id).toBeTruthy();
-      expect(tile.result.ok && tile.result.headline).not.toMatch(/—/);
+      expect(tile.result.ok && tile.result.headline).not.toMatch(/\u2014/);
     }
   });
 

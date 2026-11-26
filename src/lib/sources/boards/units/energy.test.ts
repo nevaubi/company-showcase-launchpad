@@ -79,7 +79,7 @@ describe("refused families", () => {
     const profiled = new Set(PROFILE_ENTRIES.map((e) => e.family));
     for (const [source, reason] of Object.entries(ENERGY_REFUSED)) {
       expect(reason.length).toBeGreaterThan(30);
-      expect(reason).not.toMatch(/—/);
+      expect(reason).not.toMatch(/\u2014/);
       expect(profiled.has(source)).toBe(false);
     }
     expect(Object.keys(ENERGY_REFUSED)).not.toContain("EPA_EGRID");
@@ -130,7 +130,7 @@ describe("energy tiles", () => {
       headline: result.headline,
       rows: result.refs.rows,
     }).toEqual(check);
-    expect(result.headline).not.toMatch(/—/);
+    expect(result.headline).not.toMatch(/\u2014/);
     expect(result.gaps.count).toBe(0);
   });
 
