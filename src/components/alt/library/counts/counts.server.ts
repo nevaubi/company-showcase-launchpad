@@ -4,10 +4,11 @@
  * - `readCategoryCounts`: the values of up to 24 fields counted over every record of a snapshot. One select of the
  *   snapshot by key; then, at any size, one select of the field counts stored with the snapshot (`source_field_counts`,
  *   migration 0070: the fields asked for and the snapshot's last field, at most 25 rows by primary key), used when
- *   they are complete and add up (`stored-counts.ts`). Otherwise, on a snapshot of at most 5,000 rows, the records in
- *   file order by row number: at most five selects of 1,000 rows, one `values->>N` path per field. Only the counts go
- *   back, with where they come from (`counted`). A larger snapshot without stored counts is refused before any record
- *   is read, and a read that did not reach every record is refused after it: a part is never counted as the whole.
+ *   they are complete and add up (`stored-counts.ts`) and, on a snapshot of at most 5,000 rows, no field asked for was
+ *   capped there. Otherwise, on a snapshot of at most 5,000 rows, the records in file order by row number: at most
+ *   five selects of 1,000 rows, one `values->>N` path per field. Only the counts go back, with where they come from
+ *   (`counted`). A larger snapshot without stored counts is refused before any record is read, and a read that did not
+ *   reach every record is refused after it: a part is never counted as the whole.
  *   While the table of 0070 is missing (PostgREST PGRST205, Postgres 42P01) the read is as before; the server
  *   remembers that for ten minutes and then looks again.
  * - `readTablePeriods`: the period range of every dataset's current snapshot from `source_snapshot_stats` (0069),
@@ -104,7 +105,10 @@ async function countOnce(db: SourceDirectClient, input: CategoryCountsInput, sto
     } else {
       storedMissingAt = null;
       const kept = storedCounts(Array.isArray(answer.data) ? answer.data : [], fields, width, rows);
-      if (kept) return readOk({ snapshot: ref, fields: kept.fields, capped: kept.capped, counted: { from: "stored", records: rows, computedAt: kept.computedAt } });
+      // A small snapshot is read whole when a field asked for was capped: its records give exact counts of every
+      // value, so stored counts never show less than the request-time read did.
+      if (kept && (rows > CATEGORY_READ_ROWS || kept.capped.length === 0))
+        return readOk({ snapshot: ref, fields: kept.fields, capped: kept.capped, counted: { from: "stored", records: rows, computedAt: kept.computedAt } });
     }
   }
   if (rows > CATEGORY_READ_ROWS)

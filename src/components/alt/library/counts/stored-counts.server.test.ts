@@ -83,6 +83,17 @@ describe("readCategoryCounts with stored field counts", () => {
     expect(db.calls.filter((c) => c.table === "source_records")).toHaveLength(0);
   });
 
+  it("answers a small snapshot from its stored counts, unless a field asked for was capped there", async () => {
+    const counts = new FakeCounts([stored(SMALL, 1, 30), stored(SMALL, 2, 30, { distinct_values: null, capped: "values", top: [], other_rows: 30, other_values: null })]);
+    const r = await readCategoryCounts(db, { datasetId: "small", snapshotId: SMALL, fields: [1] }, counts);
+    expect(r.ok && r.data.counted).toMatchObject({ from: "stored" });
+    expect(db.calls.filter((c) => c.table === "source_records")).toHaveLength(0);
+    const whole = await readCategoryCounts(db, { datasetId: "small", snapshotId: SMALL, fields: [1, 2] }, counts);
+    expect(whole.ok && whole.data.counted).toEqual({ from: "records", records: 30 });
+    expect(whole.ok && whole.data.fields.map((f) => f.position)).toEqual([1, 2]);
+    expect(db.calls.filter((c) => c.table === "source_records")).toHaveLength(1);
+  });
+
   it("counts a small snapshot's records as before when it has no stored counts, and says so", async () => {
     const r = await readCategoryCounts(db, { datasetId: "small", snapshotId: SMALL, fields: [1] }, new FakeCounts([]));
     expect(r.ok && r.data.fields[0]).toMatchObject({ filled: 30, top: [{ value: "A", rows: 20, row: 1 }, { value: "B", rows: 10, row: 21 }] });
