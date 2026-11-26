@@ -17,7 +17,7 @@ import { parsePeriod, type PeriodFormat } from "../periods";
 import { hasDimension, readSourceFacets, readSourceSeriesFields, type SourceDirectClient, type SourceSnapshotKnown } from "../read.server";
 import { READ_LIMITS, SERIES_SURE_LIMIT, type SourceCellMatch, type SourceFacets, type SourceSeriesAddress } from "../read-types";
 import type { SourceColumn, SourceIngest } from "../schema";
-import { computeRankTile, computeSeriesTile, type CellInput, type RankCellInput, type TileContext, type WholeTable } from "./compute";
+import { computeRankTile, computeSeriesTile, periodId, yearEarlierId, type CellInput, type RankCellInput, type TileContext, type WholeTable } from "./compute";
 import {
   computeCompareTile,
   computeCurveTile,
@@ -31,7 +31,7 @@ import {
   type LineInput,
 } from "./compute-forms";
 import { boardSpec, tileSpec } from "./specs";
-import type { Board, BoardRead, BoardTile, CrossSpec, SeriesTileSpec, TileResult, TileSeriesSpec, TileSource, TileSpec } from "./types";
+import type { Board, BoardRead, BoardTile, Cadence, CrossSpec, SeriesTileSpec, TileResult, TileSeriesSpec, TileSource, TileSpec } from "./types";
 
 type DatasetMeta = {
   dataset: { id: string; source_id: string | null; name: string; sector: string; agency: string; source_url: string | null; grain: string };
@@ -285,6 +285,8 @@ export type CrossRead = {
   skipped: SkippedPeriod[];
   /** True when the whole table was read (a snapshot without a period dimension). */
   table: boolean;
+  /** The period the fields composed, for a profile whose period is composed (the records' `period` holds its text). */
+  composed?: { text: string; format: PeriodFormat; cadence: Cadence };
 };
 
 const cellPath = (at: number) => `values->>${at}`;
@@ -333,12 +335,26 @@ export async function latestParsedPeriod(
  * order, complete only when it ends inside them. Field matches filter inside the select on a snapshot of at most
  * 50,000 records and after the read above that. `fields` are read beside the measure (`values->>N` paths).
  */
+/**
+ * A period composed from fields of the record (FHFA: the store's period is the year, the quarter or month is a field):
+ * the fields' positions and the profile's compose. The period index is then read as years.
+ */
+export type ComposedPeriod = {
+  positions: readonly number[];
+  compose(cells: readonly (string | null)[]): { text: string; format: PeriodFormat } | null;
+  /** Keep only the records of this composed period (its identity under the cadence), for a year-earlier read. */
+  pick?: { id: string; cadence: Cadence };
+};
+
+const cadenceOfComposed = (format: PeriodFormat): Cadence => (format === "quarter" ? "quarter" : format === "year" ? "year" : format === "yyyy-mm" || format === "yyyymm" ? "month" : "day");
+
 export async function crossRead(
   db: SourceDirectClient,
   meta: { snapshotId: string; rows: number; columns: readonly SourceColumn[]; ingest: SourceIngest },
   across: CrossSpec,
   fields: readonly number[],
   format: PeriodFormat | null,
+  composed?: ComposedPeriod,
 ): Promise<CrossRead> {
   const table = across.period === "table";
   const periodic = hasDimension(meta.ingest, "period");
@@ -349,13 +365,14 @@ export async function crossRead(
   } else if (!periodic) {
     stop("The table has no period dimension; a tile reads a whole small table with the period \"table\".");
   } else if (across.period === "latest") {
-    if (!format) stop("The period format of this table is not declared, so no period is the latest.");
-    ({ period, skipped } = await latestParsedPeriod(db, meta.snapshotId, format!));
+    const probe = composed ? "year" : format;
+    if (!probe) stop("The period format of this table is not declared, so no period is the latest.");
+    ({ period, skipped } = await latestParsedPeriod(db, meta.snapshotId, probe!));
   } else period = across.period;
 
   const matches = (across.where ?? []).map((m) => ({ position: position(meta.columns, m.field), value: m.value }));
   const inSelect = meta.rows <= READ_LIMITS.cellFilterRows;
-  const extra = [...new Set([...fields, ...(inSelect ? [] : matches.map((m) => m.position))])];
+  const extra = [...new Set([...fields, ...(inSelect ? [] : matches.map((m) => m.position)), ...(composed?.positions ?? [])])];
   const select = `row_number,period,entity_id,entity_name,geo_code,geo_name${extra.map((at, i) => `,c${i}:${cellPath(at)}`).join("")}`;
   const slot = new Map(extra.map((at, i) => [at, `c${i}`] as const));
   const base = () => {
@@ -386,21 +403,52 @@ export async function crossRead(
     return typeof v === "string" ? v : null;
   };
   const str = (v: unknown) => (typeof v === "string" ? v : null);
-  const cells: RankCellInput[] = [];
+  const cells: (RankCellInput & { composed?: { text: string; format: PeriodFormat } | null })[] = [];
   for (const r of got) {
     if (!inSelect && matches.some((m) => str(r[slot.get(m.position)!]) !== m.value)) continue;
     const row = rowOf(r);
+    const made = composed ? composed.compose(composed.positions.map((at) => str(r[slot.get(at)!]))) : undefined;
     cells.push({
       row,
       key: key(r) ?? `row ${row}`,
       name: str(r.entity_name) ?? str(r.geo_name),
-      period: str(r.period),
+      period: made ? made.text : made === null ? null : str(r.period),
       text: fields.length ? str(r[slot.get(fields[0])!]) : null,
       unit: fields.length > 1 ? str(r[slot.get(fields[1])!]) : undefined,
       check: fields.length > 2 ? str(r[slot.get(fields[2])!]) : undefined,
+      ...(composed ? { composed: made ?? null } : {}),
     });
   }
-  return { period, cells, skipped, table };
+  if (!composed) return { period, cells, skipped, table };
+
+  // One composed period: the greatest of the year read (latest), the one picked (a year earlier), or the only one.
+  const unplaced = cells.filter((c) => !c.composed);
+  if (unplaced.length) skipped = [...skipped, { period: `${period ?? ""}, without a period the fields compose`, records: unplaced.length, atLeast: false }];
+  const placed = cells.filter((c) => c.composed).map((c) => ({ c, parsed: parsePeriod(c.composed!.text, c.composed!.format) }));
+  const ok = placed.filter((x): x is { c: (typeof cells)[number]; parsed: NonNullable<typeof x.parsed> } => x.parsed !== null);
+  if (!ok.length) stop(`No record of ${period ?? "the table"} has a period the fields compose.`);
+  let keepText: string;
+  if (composed.pick) {
+    const hit = ok.find((x) => periodId(x.parsed.start, composed.pick!.cadence) === composed.pick!.id);
+    if (!hit) stop(`No record of ${period} is of the period a year earlier.`);
+    keepText = hit!.c.composed!.text;
+  } else if (across.period === "latest") {
+    keepText = ok.reduce((best, x) => (x.parsed.order > best.parsed.order ? x : best), ok[0]).c.composed!.text;
+  } else {
+    const texts = [...new Set(ok.map((x) => x.c.composed!.text))];
+    if (texts.length > 1) stop(`The records of ${period} hold ${texts.length} periods (${texts.slice(0, 4).join(", ")}); a field match must name one.`);
+    keepText = texts[0];
+  }
+  const kept = ok.filter((x) => x.c.composed!.text === keepText).map((x) => x.c);
+  const keptFormat = kept[0].composed!.format;
+  return { period, cells: kept.map(({ composed: _c, ...rest }) => rest), skipped, table, composed: { text: keepText, format: keptFormat, cadence: cadenceOfComposed(keptFormat) } };
+}
+
+/** The composed period of a profile whose period is made of fields, for a cross-section read. */
+function composedOf(profile: Profile, meta: DatasetMeta): ComposedPeriod | undefined {
+  if (profile.period.from !== "fields") return undefined;
+  const p = profile.period;
+  return { positions: p.fields.map((f) => position(meta.snapshot.columns, f)), compose: (cells) => p.compose(cells) };
 }
 
 /** The measure, its unit column and a subject check as the fields of a cross-section, in that order. */
@@ -439,11 +487,25 @@ function skippedNote(skipped: readonly SkippedPeriod[]): string | null {
 
 // ---------------------------------------------------------------- counts
 
+/** Facet calls a count tile pages through at most (each up to 1,000 values and the function's own scan cap). */
+export const FACET_PAGES = 5;
+
+/**
+ * The store's counts of one indexed dimension, paged by value (`nextAfter`) through at most five calls of 1,000 values:
+ * complete only when the last call is, and exact only where every value is.
+ */
 async function facetCounts(db: SourceDirectClient, meta: DatasetMeta, dimension: IndexedDimension | "period"): Promise<CountInput> {
-  const got = await readSourceFacets(db, { datasetId: meta.dataset.id, snapshotId: meta.snapshot.id, dimension, limit: READ_LIMITS.page });
-  if (!got.ok) stop(got.reason === "unavailable" ? "The store's counts are not available yet." : got.message);
-  const data = (got as { data: SourceFacets }).data;
-  return { from: "facets", values: data.values, complete: data.complete };
+  const values: SourceFacets["values"] = [];
+  let after: string | undefined;
+  for (let page = 0; page < FACET_PAGES; page += 1) {
+    const got = await readSourceFacets(db, { datasetId: meta.dataset.id, snapshotId: meta.snapshot.id, dimension, limit: READ_LIMITS.page, ...(after !== undefined ? { after } : {}) });
+    if (!got.ok) stop(got.reason === "unavailable" ? "The store's counts are not available yet." : got.message);
+    const data = (got as { data: SourceFacets }).data;
+    values.push(...data.values);
+    if (data.complete || data.nextAfter === null) return { from: "facets", values, complete: data.complete || data.nextAfter === null };
+    after = data.nextAfter;
+  }
+  return { from: "facets", values, complete: false };
 }
 
 async function cellCounts(db: SourceDirectClient, meta: DatasetMeta, field: string): Promise<CountInput> {
@@ -548,20 +610,32 @@ async function computeOne(db: SourceDirectClient, spec: TileSpec, metas: Map<str
     const fields = crossFields(meta, measure, spec.subjectCheck);
     const snap = { snapshotId: meta.snapshot.id, rows: meta.snapshot.rows, columns: meta.snapshot.columns, ingest: meta.snapshot.ingest };
     const format = profile.period.from === "dimension" ? profile.period.format : null;
-    const read = await crossRead(db, snap, spec.across, fields, format);
+    const composed = composedOf(profile, meta);
+    const read = await crossRead(db, snap, spec.across, fields, format, composed);
     const cells = crossCells(read, measure, spec.subjectCheck);
     const table = wholeTable(meta, read);
+    // a composed period is read in its own format and cadence ("Q2 2026")
+    const ctx = read.composed ? { ...context, format: read.composed.format, cadence: spec.transform === "rank" ? context.cadence : read.composed.cadence } : context;
     let result: TileResult;
-    if (spec.transform === "rank") result = computeRankTile(spec, context, cells, table);
-    else if (spec.form === "distribution") result = computeDistributionTile(spec, context, cells, table);
+    if (spec.transform === "rank") result = computeRankTile(spec, read.composed ? { ...ctx, cadence: read.composed.cadence } : ctx, cells, table);
+    else if (spec.form === "distribution") result = computeDistributionTile(spec, ctx, cells, table);
     else {
       let earlier: RankCellInput[] | null = null;
       if (spec.transform === "change-12m") {
-        const before = read.period === null || !format ? null : yearEarlierText(read.period, format, context.cadence);
-        if (!before) stop(`The period a year before ${read.period ?? "this one"} cannot be written in the declared format.`);
-        earlier = crossCells(await crossRead(db, snap, { ...spec.across, period: before! }, fields, format), measure, spec.subjectCheck);
+        if (read.composed && composed) {
+          // the year before in the store's period (the year), the same field matches, the composed period a year earlier
+          const parsed = parsePeriod(read.composed.text, read.composed.format);
+          const id = parsed ? yearEarlierId(parsed.start, read.composed.cadence) : null;
+          if (!id || read.period === null || !/^\d{4}$/.test(read.period)) stop("The period a year earlier cannot be found for this composed period.");
+          const prior = await crossRead(db, snap, { ...spec.across, period: String(Number(read.period) - 1) }, fields, format, { ...composed, pick: { id: id!, cadence: read.composed.cadence } });
+          earlier = crossCells(prior, measure, spec.subjectCheck);
+        } else {
+          const before = read.period === null || !format ? null : yearEarlierText(read.period, format, context.cadence);
+          if (!before) stop(`The period a year before ${read.period ?? "this one"} cannot be written in the declared format.`);
+          earlier = crossCells(await crossRead(db, snap, { ...spec.across, period: before! }, fields, format), measure, spec.subjectCheck);
+        }
       }
-      result = computeMapTile(spec, context, cells, earlier, table);
+      result = computeMapTile(spec, ctx, cells, earlier, table);
     }
     const note = skippedNote(read.skipped);
     return result.ok && note ? { ...result, sourceNote: [result.sourceNote, note].filter(Boolean).join(" ") } : result;
@@ -746,7 +820,17 @@ export type LookCrossInput = {
   where?: FieldMatch[];
 };
 
-export type LookCross = { snapshotId: string; period: string | null; table: boolean; cells: RankCellInput[]; skipped: SkippedPeriod[]; retrieved: string | null };
+export type LookCross = {
+  snapshotId: string;
+  /** The period read as the records state it (a composed period's text, "2026Q2"), or null for a whole table. */
+  period: string | null;
+  /** The format that period is written in, for the view's labels. */
+  format: PeriodFormat | null;
+  table: boolean;
+  cells: RankCellInput[];
+  skipped: SkippedPeriod[];
+  retrieved: string | null;
+};
 
 /**
  * One period of a table for a table page's ranking or map, read as a rank tile reads it: the greatest period of the
@@ -759,8 +843,19 @@ export async function readLookCross(db: SourceDirectClient, input: LookCrossInpu
     const { profile, measure } = profiled(meta, input.field);
     const format = profile.period.from === "dimension" ? profile.period.format : null;
     const snap = { snapshotId: meta.snapshot.id, rows: meta.snapshot.rows, columns: meta.snapshot.columns, ingest: meta.snapshot.ingest };
-    const read = await crossRead(db, snap, { by: input.by, period: input.period, where: input.where }, crossFields(meta, measure, undefined), format);
-    return { ok: true, data: { snapshotId: meta.snapshot.id, period: read.period, table: read.table, cells: crossCells(read, measure, undefined), skipped: read.skipped, retrieved: retrievedDay(meta.snapshot.retrievedAt) } };
+    const read = await crossRead(db, snap, { by: input.by, period: input.period, where: input.where }, crossFields(meta, measure, undefined), format, composedOf(profile, meta));
+    return {
+      ok: true,
+      data: {
+        snapshotId: meta.snapshot.id,
+        period: read.composed?.text ?? read.period,
+        format: read.composed?.format ?? format,
+        table: read.table,
+        cells: crossCells(read, measure, undefined),
+        skipped: read.skipped,
+        retrieved: retrievedDay(meta.snapshot.retrievedAt),
+      },
+    };
   } catch (error) {
     return { ok: false, reason: error instanceof TileStop ? error.message : "The period could not be read." };
   }

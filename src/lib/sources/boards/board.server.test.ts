@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeSourceDb } from "../read.fake";
 import { resetReadState } from "../read.server";
 import { BOARD_READ_BUDGET, crossRead, latestParsedPeriod, readBoard, readTiles, resetBoardCache } from "./board.server";
-import { fixtureTables } from "./fixtures";
-import { CORE_BOARDS, CORE_TILES } from "./specs";
+import { boardFixtureTables, fixtureTables } from "./fixtures";
+import { BOARDS, CORE_BOARDS, CORE_TILES, TILES } from "./specs";
 import type { Board, CompareTileSpec, TileSpec } from "./types";
 
 /** Every board computed through the real read layer, on a fake member client that holds the fixture rows. */
@@ -161,6 +161,51 @@ describe("boards on the fixture rows", () => {
   });
 });
 
+/** Every tile of a board through as many requests as its read budget takes, each request's selects counted. */
+async function wholeBoard(db: FakeSourceDb, id: string, now: number): Promise<{ board: Board; requests: number[] }> {
+  const requests: number[] = [];
+  let left: string[] | undefined;
+  const tiles: Board["tiles"] = [];
+  const refused: Board["refused"] = [];
+  for (let round = 0; round < 12; round += 1) {
+    const before = db.calls.length;
+    const read = await readBoard(db, id, now, left);
+    if (!read.ok) throw new Error(read.message);
+    requests.push(db.calls.length - before);
+    tiles.push(...read.data.tiles);
+    refused.push(...read.data.refused);
+    left = read.data.deferred;
+    if (!left?.length) return { board: { ...read.data, tiles, refused, deferred: undefined }, requests };
+  }
+  throw new Error(`board ${id} still defers tiles after 12 requests`);
+}
+
+describe("every board with every unit's tiles, on the core and unit fixtures", () => {
+  const all = boardFixtureTables();
+  it("computes every tile, each request within its budget, every read cached once", async () => {
+    const now = Date.UTC(2026, 10, 26, 6);
+    for (const spec of BOARDS) {
+      resetBoardCache();
+      resetReadState();
+      const db = new FakeSourceDb(all);
+      const { board: b, requests } = await wholeBoard(db, spec.id, now);
+      expect(b.refused, spec.id).toEqual([]);
+      expect(new Set(b.tiles.map((t) => t.id)), spec.id).toEqual(new Set(spec.tiles));
+      for (const n of requests) expect(n, spec.id).toBeLessThanOrEqual(BOARD_READ_BUDGET);
+      for (const c of db.calls.filter((x) => x.table === "source_records")) {
+        expect(c.filters[0], spec.id).toBe("snapshot_id=eq");
+        expect(c.limit as number, spec.id).toBeLessThanOrEqual(1001);
+        expect(c.columns, spec.id).not.toMatch(/(^|,)values(,|$)/);
+      }
+      // warm: the same board again reads nothing
+      const cold = db.calls.length;
+      await wholeBoard(db, spec.id, now);
+      expect(db.calls.length - cold, spec.id).toBe(0);
+    }
+    expect(new Set(BOARDS.flatMap((b) => b.tiles))).toEqual(new Set(TILES.map((t) => t.id)));
+  });
+});
+
 describe("the read budget of a board request", () => {
   it("defers the tiles past the budget and serves them in the next request, no request past its budget", async () => {
     const db = new FakeSourceDb(productionShaped());
@@ -279,6 +324,29 @@ describe("cross-sections", () => {
     const b = await crossRead(db2, large.meta as never, { by: "geo_code", period: "2025", where: [{ field: "Kind", value: "a" }] }, [2], "year");
     expect(b.cells.map((c) => c.key)).toEqual(["K1", "K3", "K5", "K7", "K9"]);
     expect(db2.calls[0].filters).not.toContain("values->>3=eq");
+  });
+
+  it("compose a period from fields: the greatest of the latest year, one named, or the one a year earlier", async () => {
+    const records: Record<string, unknown>[] = [];
+    let row = 0;
+    for (const [yr, q] of [["2025", "2"], ["2026", "1"], ["2026", "2"]])
+      for (const st of ["CA", "TX"]) records.push({ snapshot_id: "s2", row_number: (row += 1), period: yr, geo_code: st, values: [yr, q, "quarterly", st, `${yr}.${q}`] });
+    const columns = ["yr", "period", "frequency", "place_id", "index_sa"].map((label, i) => ({ key: `col${i}`, label, type: "string" }));
+    const meta = { snapshotId: "s2", rows: records.length, columns, ingest: { dimensions: { period: 0, geo_code: 3 } } };
+    const db = new FakeSourceDb({ source_datasets: [], source_snapshots: [{ id: "s2", dataset_id: "d2", status: "ready", columns }], source_records: records } as never);
+    const composed = {
+      positions: [0, 1],
+      compose: ([yr, q]: readonly (string | null)[]) => (yr && q ? { text: `${yr}Q${q}`, format: "quarter" as const } : null),
+    };
+    const latest = await crossRead(db, meta as never, { by: "geo_code", period: "latest" }, [4], "yyyy-mm", composed);
+    expect(latest.composed).toEqual({ text: "2026Q2", format: "quarter", cadence: "quarter" });
+    expect(latest.cells.map((c) => [c.key, c.period, c.text])).toEqual([
+      ["CA", "2026Q2", "2026.2"],
+      ["TX", "2026Q2", "2026.2"],
+    ]);
+    await expect(crossRead(db, meta as never, { by: "geo_code", period: "2026" }, [4], "yyyy-mm", composed)).rejects.toThrow("hold 2 periods");
+    const before = await crossRead(db, meta as never, { by: "geo_code", period: "2025" }, [4], "yyyy-mm", { ...composed, pick: { id: "2025Q2", cadence: "quarter" } });
+    expect(before.cells.map((c) => c.text)).toEqual(["2025.2", "2025.2"]);
   });
 
   it("read a whole small table only when it has no period dimension", async () => {
