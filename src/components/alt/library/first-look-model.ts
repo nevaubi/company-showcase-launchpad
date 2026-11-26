@@ -6,7 +6,7 @@
  * them. Nothing here is read twice or guessed.
  */
 import type { CellInput, RankCellInput, TileContext } from "@/lib/sources/boards/compute";
-import type { RankTileSpec, SeriesTileSpec } from "@/lib/sources/boards/types";
+import type { MapTileSpec, RankTileSpec, SeriesTileSpec } from "@/lib/sources/boards/types";
 import {
   addressMatches,
   addressRefusal,
@@ -18,7 +18,7 @@ import {
   type SeriesAddress,
 } from "@/lib/sources/profiles";
 import type { SourceCrossSection, SourcePoint, SourceSeriesAddress } from "@/lib/sources/read-types";
-import type { SourceColumn } from "@/lib/sources/schema";
+import type { SourceColumn, SourceIngest } from "@/lib/sources/schema";
 import type { LookState } from "./dataset-search";
 
 export type SeriesPlan =
@@ -186,6 +186,37 @@ export function rankSpec(
     headline: "rank",
     across: { by, period: "latest", top },
   } as RankTileSpec;
+}
+
+/** One period across states as a map tile spec, so a table page's state grid is drawn as a board's map is. */
+export function mapSpec(
+  datasetId: string,
+  collection: string,
+  measure: MeasureSpec,
+  by: "entity_id" | "entity_name" | "geo_code" | "geo_name",
+  unit: string,
+  entities: string,
+): MapTileSpec {
+  // no decimals: a table page prints each figure with the places the publisher wrote, as its ranking does
+  return {
+    entities,
+    id: `look-map:${datasetId}`,
+    collection,
+    datasetId,
+    measure: measure.field,
+    title: measure.label,
+    subject: measure.label,
+    unit,
+    form: "map",
+    transform: "level",
+    headline: "rank",
+    across: { by, period: "latest" },
+  } as MapTileSpec;
+}
+
+/** True when the snapshot has a period dimension (declared, constant or composed), as the reads decide it. */
+export function snapshotHasPeriod(ingest: SourceIngest | null | undefined): boolean {
+  return ingest?.dimensions?.period !== undefined || ingest?.constants?.period !== undefined || !!ingest?.composites?.period;
 }
 
 /** Cross-section rows as rank cells, keyed by the profile's dimension. */

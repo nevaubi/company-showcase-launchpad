@@ -29,6 +29,17 @@ describe("readNative", () => {
     expect(readNative("0")).toMatchObject({ kind: "number", value: 0 });
   });
 
+  it("reads a number right-aligned with spaces only when the field declares it", () => {
+    expect(readNative("   1234.5")).toEqual({ kind: "text", text: "   1234.5" });
+    expect(readNative("   1234.5", { padding: "leading-spaces" })).toEqual({ kind: "number", value: 1234.5, text: "   1234.5", decimals: 1 });
+    expect(readNative("  -0.25", { padding: "leading-spaces" })).toMatchObject({ kind: "number", value: -0.25, decimals: 2 });
+    expect(readNative("  1,234,567", { padding: "leading-spaces", grouping: "," })).toMatchObject({ kind: "number", value: 1234567 });
+    expect(readNative("\t12", { padding: "leading-spaces" })).toEqual({ kind: "text", text: "\t12" });
+    expect(readNative("12 ", { padding: "leading-spaces" })).toEqual({ kind: "text", text: "12 " });
+    expect(readNative("   ", { padding: "leading-spaces" })).toEqual({ kind: "text", text: "   " });
+    expect(readNative("", { padding: "leading-spaces" })).toEqual({ kind: "empty" });
+  });
+
   it("lets a declared marker win over a numeric reading", () => {
     expect(readNative("-999", { markers: ["-999"] })).toEqual({ kind: "marker", text: "-999" });
     expect(readNative("-999")).toMatchObject({ kind: "number", value: -999 });

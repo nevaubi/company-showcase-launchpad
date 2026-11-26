@@ -25,6 +25,13 @@ export type ReadNativeOptions = {
   markers?: readonly string[];
   /** "," also accepts "1,234,567.8" with complete groups of three. Default "none". */
   grouping?: "," | "none";
+  /**
+   * "leading-spaces" also accepts a number right-aligned with spaces ("   1234.5"), as fixed-width
+   * publisher files write them (SEC N-MFP). Only spaces (U+0020) before the first other character
+   * are passed over; a tab, a trailing space or a cell of spaces alone stays text, and `text` keeps
+   * the stored string. A profile declares it per field. Default "none".
+   */
+  padding?: "leading-spaces" | "none";
 };
 
 /** Optional sign, digits, optional fraction, optional exponent. ASCII digits only. */
@@ -48,11 +55,13 @@ export function readNative(
   if (cell == null) return { kind: "null" };
   if (cell === "") return { kind: "empty" };
   if (options?.markers?.includes(cell)) return { kind: "marker", text: cell };
-  let match = PLAIN.exec(cell);
-  let plain = cell;
+  const body = options?.padding === "leading-spaces" ? cell.replace(/^ +/, "") : cell;
+  if (body === "") return { kind: "text", text: cell };
+  let match = PLAIN.exec(body);
+  let plain = body;
   if (!match && options?.grouping === ",") {
-    match = GROUPED.exec(cell);
-    if (match) plain = cell.replace(/,/g, "");
+    match = GROUPED.exec(body);
+    if (match) plain = body.replace(/,/g, "");
   }
   if (!match) return { kind: "text", text: cell };
   const value = Number(plain);
