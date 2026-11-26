@@ -148,12 +148,20 @@ export function SeriesReadout({
   );
 }
 
-/** Time-axis ticks: one per year (every two or five on long spans) from two years on, months below. */
+/** Year steps of a long time axis, the smallest first. */
+const YEAR_STEPS = [1, 2, 5, 10, 20, 25, 50, 100];
+
+/**
+ * Time-axis ticks: years from two years on, in the smallest step of 1, 2, 5, 10 ... years that leaves every label
+ * room (about 52px a year label), months below, days on a span of a few months.
+ */
 export function timeTicks(x: d3.ScaleTime<number, number>, width: number): { ticks: Date[]; format: (d: Date) => string } {
   const [a, b] = x.domain();
   const span = (b.getTime() - a.getTime()) / 86_400_000;
   if (span > 700) {
-    const every = span > 3700 ? 5 : span > 1900 ? 2 : 1;
+    const room = Math.max(2, Math.floor(width / 52));
+    const years = span / 365.25;
+    const every = YEAR_STEPS.find((s) => Math.floor(years / s) + 1 <= room) ?? YEAR_STEPS[YEAR_STEPS.length - 1];
     return { ticks: x.ticks(d3.utcYear.every(every) as d3.TimeInterval), format: d3.utcFormat("%Y") };
   }
   return { ticks: x.ticks(width < 360 ? 3 : 4), format: d3.utcFormat(span > 120 ? "%b %Y" : "%b %d") };
