@@ -7,6 +7,7 @@ import type { SourceEntities, SourceFacetDimension, SourceFieldFill } from "@/li
 import type { SourceSnapshot } from "@/lib/sources/schema";
 import { cn } from "@/lib/utils";
 import { CATEGORY_READ_ROWS, categoryCandidates, categoryCharts } from "./counts/category-model";
+import { basisLine, cappedLine } from "./counts/stored-counts";
 import { EntityListPanel, EntityPanel, PlacePanel } from "./counts/dimension-panels";
 import { PanelNote, PanelSkeleton } from "./counts/panel";
 import { PeriodPanel, PeriodPanelSkeleton } from "./counts/period-panel";
@@ -32,9 +33,10 @@ const BARS_HEIGHT = 11 * 32;
 /**
  * "What this table holds": the first look of a table no profile can chart, in charts that count records and need no
  * unit. Records per period (columns), records by place (the state grid where the place field holds states), records
- * per entity, records by category for the fields whose values repeat (counted on tables of up to 5,000 records), and
- * how complete each field is (a heat strip from the counts stored with the version). Nothing here reads a cell as a
- * number; every mark opens the records behind it.
+ * per entity, records by category for the fields whose values repeat (from the field counts stored with the version
+ * at any size, or counted on request on tables of up to 5,000 records; each chart says which), and how complete each
+ * field is (a heat strip from the counts stored with the version). Nothing here reads a cell as a number; every mark
+ * opens the records behind it.
  */
 export function CoverageView({
   datasetId,
@@ -79,14 +81,20 @@ export function CoverageView({
   const roles = useMemo(() => fieldRoles(snapshot.columns, snapshot.ingest), [snapshot.columns, snapshot.ingest]);
   const candidates = useMemo(() => categoryCandidates(snapshot.columns, snapshot.ingest, roles, fills), [snapshot.columns, snapshot.ingest, roles, fills]);
   const small = snapshot.loaded_rows <= CATEGORY_READ_ROWS;
-  const categoryQuery = useQuery({ ...countQueries.categories(datasetId, snapshot.id, candidates), enabled: small && candidates.length > 0 });
+  // at any size: the server answers from the counts stored with the version, or counts a small table's records
+  const categoryQuery = useQuery({ ...countQueries.categories(datasetId, snapshot.id, candidates), enabled: candidates.length > 0 });
 
   const periods = readData(periodQuery.data);
   const ents = readData(entityQuery.data);
   const places = readData(placeQuery.data);
   const stats = readData(statsQuery.data);
   const counted = readData(categoryQuery.data);
-  const charts = useMemo(() => (counted.data ? categoryCharts(counted.data.fields, snapshot.columns) : []), [counted.data, snapshot.columns]);
+  const charts = useMemo(() => {
+    if (!counted.data) return [];
+    // where the counts come from, on every chart (an answer without it was counted from the records)
+    const line = basisLine(counted.data.counted ?? { from: "records", records: snapshot.loaded_rows });
+    return categoryCharts(counted.data.fields, snapshot.columns).map((c) => ({ ...c, caption: `${c.caption} ${line}` }));
+  }, [counted.data, snapshot.columns, snapshot.loaded_rows]);
 
   const notes: string[] = [];
   const constant = snapshot.ingest.constants?.period;
@@ -96,11 +104,15 @@ export function CoverageView({
         ? `Every record is of one period, ${constant} as the source writes it, so the records are not counted by period.`
         : "No period field: the records are not counted by period.",
     );
-  if (!small && candidates.length > 0)
-    notes.push(`Values inside the fields are counted on tables of up to ${n(CATEGORY_READ_ROWS)} records; this one holds ${n(snapshot.loaded_rows)}.`);
-  else if (small && candidates.length > 0 && (counted.reason || categoryQuery.isError)) notes.push("The values of this table's fields could not be counted.");
-  else if (small && counted.data && !charts.length && candidates.length > 0)
+  if (!small && candidates.length > 0 && counted.reason === "invalid")
+    notes.push(
+      `Values inside the fields are counted on tables of up to ${n(CATEGORY_READ_ROWS)} records and on larger ones whose counts are stored with the version; this one holds ${n(snapshot.loaded_rows)} and has none stored yet.`,
+    );
+  else if (candidates.length > 0 && (counted.reason || categoryQuery.isError)) notes.push("The values of this table's fields could not be counted.");
+  else if (counted.data && !charts.length && candidates.length > 0)
     notes.push(`None of the ${n(candidates.length)} ${candidates.length === 1 ? "field" : "fields"} counted holds a few values that repeat, so no field is drawn by category.`);
+  const capped = counted.data?.capped?.length ? cappedLine(counted.data.capped, candidates.length) : null;
+  if (capped) notes.push(capped);
 
   const failed = (reason: string | null, what: string) => (reason === "unavailable" ? AWAITS_UPDATE : `${what} could not be counted.`);
   const gridCells: ReactNode[] = [];
@@ -127,6 +139,8 @@ export function CoverageView({
     else if (entities) gridCells.push(<EntityListPanel key="entity" entities={entities} noun={entityNoun} onEntity={onEntity} />);
     else gridCells.push(<PanelNote key="entity" name="Records per entity" title={title}>{failed(ents.reason, title)}</PanelNote>);
   }
+  // a placeholder only where charts will come (a small table is counted on request); a large table's stored counts
+  // are one quick select that may find none, and a placeholder that then goes would move the page
   if (small && candidates.length > 0 && categoryQuery.isPending)
     gridCells.push(<PanelSkeleton key="cat-loading" name="Records by category" title="Records by category" height={BARS_HEIGHT} />);
   for (const chart of charts) gridCells.push(<CategoryPanel key={`cat-${chart.position}`} chart={chart} view={view} onOpen={onOpen} />);

@@ -4,6 +4,7 @@ import { requireAppAccess } from "@/lib/app-access-middleware";
 import type { SourceDirectClient } from "@/lib/sources/read.server";
 import type { SourceRead } from "@/lib/sources/read-types";
 import { CATEGORY_FIELDS_MAX } from "./category-model";
+import type { FieldCountsClient } from "./counts.server";
 import type { CategoryCounts, TablePeriodsWire } from "./wire";
 
 /**
@@ -11,6 +12,7 @@ import type { CategoryCounts, TablePeriodsWire } from "./wire";
  * security applies) and answers `SourceRead<T>`: a failure is a value the screen shows as one quiet line.
  */
 const client = (context: { supabase: unknown }) => context.supabase as SourceDirectClient;
+const fieldCounts = (context: { supabase: unknown }) => context.supabase as FieldCountsClient;
 
 const categoryInput = z
   .object({
@@ -20,13 +22,13 @@ const categoryInput = z
   })
   .strict();
 
-/** Values of up to 24 fields counted over every record of a snapshot of at most 5,000 rows. */
+/** Values of up to 24 fields counted over every record of a snapshot: stored with it (0070), or read on request on up to 5,000 rows. */
 export const getCategoryCounts = createServerFn({ method: "POST" })
   .middleware([requireAppAccess])
   .inputValidator(categoryInput)
   .handler(async ({ data, context }): Promise<SourceRead<CategoryCounts>> => {
     const { readCategoryCounts } = await import("./counts.server");
-    return readCategoryCounts(client(context), data);
+    return readCategoryCounts(client(context), data, fieldCounts(context));
   });
 
 /** The period range of every dataset's current snapshot (from the snapshot statistics), packed. */

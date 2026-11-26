@@ -111,6 +111,23 @@ export function storedPositions(positions: readonly number[], width: number): nu
 
 const n = (v: number) => v.toLocaleString("en-US");
 
+/**
+ * One line about the fields asked for that the worker did not count value by value (`asked` fields in all): "3 of the
+ * 12 fields counted hold more than 1,000 values, so they are not drawn by category." Null when there are none.
+ */
+export function cappedLine(capped: readonly CappedField[], asked: number): string | null {
+  const many = capped.filter((c) => c.reason === "values");
+  const long = capped.filter((c) => c.reason === "memory");
+  const parts: string[] = [];
+  if (many.length)
+    parts.push(
+      `${many.length === 1 ? "One" : n(many.length)} of the ${n(asked)} fields counted ${many.length === 1 ? "holds" : "hold"} more than ${n(Math.max(...many.map((c) => c.cap)))} values, so ${many.length === 1 ? "it is" : "they are"} not drawn by category.`,
+    );
+  if (long.length)
+    parts.push(`${long.length === 1 ? "One field was" : `${n(long.length)} fields were`} not counted value by value: ${long.length === 1 ? "its values were" : "their values were"} too many or too long to hold.`);
+  return parts.length ? parts.join(" ") : null;
+}
+
 /** The line a category chart carries about where its counts come from. */
 export function basisLine(basis: CountBasis): string {
   return basis.from === "stored"

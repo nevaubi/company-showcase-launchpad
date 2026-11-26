@@ -4,9 +4,14 @@
  */
 import type { SourceSnapshotRef } from "@/lib/sources/read-types";
 import type { FieldCounts } from "./category-model";
+import type { CappedField, CountBasis } from "./stored-counts";
 
 export type CategoryCountsInput = { datasetId: string; snapshotId: string; fields: number[] };
-export type CategoryCounts = { snapshot: SourceSnapshotRef; fields: FieldCounts[] };
+/**
+ * The counts of the fields counted value by value (`fields`), the fields the worker did not count value by value
+ * (`capped`: more than 1,000 distinct values, or dropped to bound memory), and where the counts come from (`counted`).
+ */
+export type CategoryCounts = { snapshot: SourceSnapshotRef; fields: FieldCounts[]; capped?: CappedField[]; counted?: CountBasis };
 
 /** One dataset: its id, the least and greatest period strings of its current snapshot, and how many periods. */
 export type TablePeriod = { id: string; first: string | null; last: string | null; periods: number | null };

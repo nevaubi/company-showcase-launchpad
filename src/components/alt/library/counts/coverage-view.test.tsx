@@ -5,9 +5,9 @@ import type { SourceFacetValue } from "@/lib/sources/read-types";
 import type { SourceSnapshot } from "@/lib/sources/schema";
 
 /**
- * "What this table holds" on three real-shaped tables: an MSHA-like state table (27 years by state), an Orange Book
- * like small table with categories, and a 60,000-record table whose fields are not counted. The reads are replaced
- * here; the charts are the real ones.
+ * "What this table holds" on real-shaped tables: an MSHA-like state table (27 years by state), an Orange Book like small
+ * table with categories, a 60,000-record table without stored field counts, and an N-MFP-like table of 99,413 records
+ * drawn from the counts stored with its version. The reads are replaced here; the charts are the real ones.
  */
 const mocks = vi.hoisted(() => ({ facets: vi.fn(), categories: vi.fn(), stats: vi.fn() }));
 vi.mock("@/lib/sources/read.functions", () => ({
@@ -130,12 +130,55 @@ describe("What this table holds", () => {
     expect(screen.queryByRole("list", { name: "entities by records" })).not.toBeInTheDocument();
   });
 
-  it("does not count the fields of a large table, and says so in one line", async () => {
+  it("says in one line that a large table without stored counts is not counted by value", async () => {
     mocks.facets.mockResolvedValue({ ok: false, reason: "unavailable", message: "x" });
+    mocks.categories.mockResolvedValue({ ok: false, reason: "invalid", message: "no stored field counts" });
     mount(snap(H(4), 60000, [col("id"), col("type")], { entity_id: 0 }, [0, 0]), { entity: true, geo: false, period: false });
-    expect(await screen.findByText(/Values inside the fields are counted on tables of up to 5,000 records; this one holds 60,000\./)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Values inside the fields are counted on tables of up to 5,000 records and on larger ones whose counts are stored with the version; this one holds 60,000 and has none stored yet\./),
+    ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Counts by period and by entity arrive with the next database update.")).toBeInTheDocument());
-    expect(mocks.categories).not.toHaveBeenCalled();
+    expect(mocks.categories).toHaveBeenCalledWith({ datasetId: "d", snapshotId: H(4), fields: [1] });
+    expect(screen.queryByText("Records by category")).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: /Share of records with a value/ })).toBeInTheDocument();
+  });
+
+  it("draws the categories of a large table from the counts stored with its version, and says so", async () => {
+    mocks.facets.mockResolvedValue({ ok: false, reason: "unavailable", message: "x" });
+    mocks.categories.mockResolvedValue({
+      ok: true,
+      data: {
+        snapshot: {},
+        fields: [
+          { position: 1, filled: 99413, blank: 0, missing: 0, distinct: 3, numeric: false, otherRows: 0, otherValues: 0,
+            top: [{ value: "Moody's", rows: 60000, row: 3 }, { value: "S&P", rows: 30000, row: 1 }, { value: "Fitch", rows: 9413, row: 7 }] },
+        ],
+        capped: [{ position: 2, filled: 99413, blank: 0, missing: 0, cap: 1000, reason: "values" }],
+        counted: { from: "stored", records: 99413, computedAt: "2026-11-26T08:10:00+00:00" },
+      },
+    });
+    const h = mount(snap(H(6), 99413, [col("ACCESSION_NUMBER"), col("NAMEOFNRSRO", "Rating agency"), col("SECURITY_ID", "Security")], { entity_id: 0 }, [0, 0, 0]), { entity: true, geo: false, period: false });
+    const list = await screen.findByRole("list", { name: "Records by Rating agency" });
+    expect(screen.getByText(/3 values in 99,413 records\. Counted over all 99,413 records of this version as published\./)).toBeInTheDocument();
+    fireEvent.click(within(list).getByRole("button", { name: /Rating agency Moody's: 60,000 records/ }));
+    expect(h.onOpen).toHaveBeenCalledWith(3);
+    expect(screen.getByText(/One of the 2 fields counted holds more than 1,000 values, so it is not drawn by category\./)).toBeInTheDocument();
+    expect(mocks.categories).toHaveBeenCalledWith({ datasetId: "d", snapshotId: H(6), fields: [1, 2] });
+  });
+
+  it("says that a small table's categories were counted from its records", async () => {
+    mocks.facets.mockResolvedValue({ ok: false, reason: "unavailable", message: "x" });
+    mocks.categories.mockResolvedValue({
+      ok: true,
+      data: {
+        snapshot: {},
+        fields: [{ position: 1, filled: 40, blank: 0, missing: 0, distinct: 2, numeric: false, otherRows: 0, otherValues: 0, top: [{ value: "N", rows: 30, row: 1 }, { value: "A", rows: 10, row: 2 }] }],
+        capped: [],
+        counted: { from: "records", records: 40 },
+      },
+    });
+    mount(snap(H(7), 40, [col("Appl_No"), col("Appl_Type", "Application type")], { entity_id: 0 }, [0, 0]), { entity: true, geo: false, period: false });
+    await screen.findByRole("list", { name: "Records by Application type" });
+    expect(screen.getByText(/2 values in 40 records\. Counted over all 40 records of this version\./)).toBeInTheDocument();
   });
 });
