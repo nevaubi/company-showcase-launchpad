@@ -22,7 +22,7 @@ import type {
  * or one ranking was computed once from those rows; the report lists the figure, period and snapshot.
  *
  * The state tiles read the eGRID2023 state table and the EIA-861 net metering state table through this unit's
- * profiles (`../../profiles/units/energy.ts`); the count tile counts records and needs no profile.
+ * profiles (`../../profiles/units/energy.ts`); the count tiles count records and need no profile.
  *
  * Every tile here is on a board (the shared board test requires it) and computes in the board tests on the energy
  * fixture rows (`energy.fixtures.json`, written from `energy.rows.json` by `energy-tables.ts`).
@@ -50,6 +50,8 @@ const T11_06 = "official_04_energy_raw_mer_t11_06_aa6ddc226e";
 const EGRID_ST23 = "official_05_utilities_csv_egrid2023_st23_full_3993eec81f";
 const NET_METERING_STATES = "official_05_utilities_csv_eia861_net_metering_2025_states_state_level_662ef5df39";
 const EIA860_STORAGE_PROPOSED = "official_05_utilities_csv_eia860_3_4_energy_storage_y2025_proposed_cde5506369";
+const EIA860_OPERABLE = "official_05_utilities_csv_eia860_3_1_generator_y2025_operable_105a35a881";
+const EIA860_PROPOSED = "official_05_utilities_csv_eia860_3_1_generator_y2025_proposed_f256d7a434";
 
 const KWH = "Million Kilowatthours";
 const CO2 = "Million Metric Tons of Carbon Dioxide";
@@ -602,6 +604,34 @@ const UTILITY_FORMS: readonly TileSpec[] = [
     note: "Report year 2025. Photovoltaic capacity under net metering programs, all customer classes, as utilities reported it on Form EIA-861.",
   } satisfies MapTileSpec,
   {
+    id: "eia860-operable-generators-by-state",
+    collection: "05_utilities",
+    datasetId: EIA860_OPERABLE,
+    title: "Operable generators by state (EIA-860, 2025)",
+    subject: "EIA-860's operable generator table",
+    transform: "records",
+    headline: "records",
+    form: "map",
+    per: { dimension: "geo_code", top: 60 },
+    noun: "places (the states and DC)",
+    section: "Capacity",
+    note: "One record per generator as plants reported it for 2025: records, not megawatts.",
+  } satisfies RecordsTileSpec,
+  {
+    id: "eia860-proposed-generators-by-state",
+    collection: "05_utilities",
+    datasetId: EIA860_PROPOSED,
+    title: "Proposed generators by state (EIA-860, 2025)",
+    subject: "EIA-860's proposed generator table",
+    transform: "records",
+    headline: "records",
+    form: "map",
+    per: { dimension: "geo_code", top: 60 },
+    noun: "places (the states and DC)",
+    section: "Capacity",
+    note: "One record per planned generator as reported for 2025: records, not megawatts.",
+  } satisfies RecordsTileSpec,
+  {
     id: "eia860-proposed-storage-by-state",
     collection: "05_utilities",
     datasetId: EIA860_STORAGE_PROPOSED,
@@ -634,7 +664,7 @@ const ENERGY_BOARD: readonly string[] = [
   "co2-emissions-stat",
 ];
 
-/** Power and utilities, 13 tiles in five sections. */
+/** Power and utilities, 15 tiles in five sections. */
 export const UTILITIES_BOARD: BoardSpec = {
   id: "05_utilities",
   title: "Power and utilities",
@@ -651,6 +681,8 @@ export const UTILITIES_BOARD: BoardSpec = {
     "egrid-state-co2-rate",
     "egrid-state-renewables",
     "net-metered-solar-capacity",
+    "eia860-operable-generators-by-state",
+    "eia860-proposed-generators-by-state",
     "eia860-proposed-storage-by-state",
   ],
 };

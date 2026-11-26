@@ -607,6 +607,24 @@
     8
    ]
   },
+  "eia860-operable-generators-by-state": {
+   "datasetId": "official_05_utilities_csv_eia860_3_1_generator_y2025_operable_105a35a881",
+   "snapshotId": "eaad5f31e4aa81251d5e6d4e7024aac2a9dfafb56f47dc60e0fa75224f5f080a",
+   "asOf": "Retrieved 24 Nov 2026",
+   "figure": "27,919",
+   "figureUnit": "records",
+   "headline": "EIA-860's operable generator table holds 27,919 records as retrieved on 24 Nov 2026; California has the most, 3,161, of 51 places (the states and DC).",
+   "rows": []
+  },
+  "eia860-proposed-generators-by-state": {
+   "datasetId": "official_05_utilities_csv_eia860_3_1_generator_y2025_proposed_f256d7a434",
+   "snapshotId": "ac29846ec52a3c942df2b2cbfc009339df5962e7c8426e3b4f34316f9641ca4e",
+   "asOf": "Retrieved 24 Nov 2026",
+   "figure": "2,851",
+   "figureUnit": "records",
+   "headline": "EIA-860's proposed generator table holds 2,851 records as retrieved on 24 Nov 2026; Texas has the most, 655, of 51 places (the states and DC).",
+   "rows": []
+  },
   "eia860-proposed-storage-by-state": {
    "datasetId": "official_05_utilities_csv_eia860_3_4_energy_storage_y2025_proposed_cde5506369",
    "snapshotId": "3f690a21bce349e2ddc057192fe57b495e49376137ca0c3bd548d98ce2b4aed1",

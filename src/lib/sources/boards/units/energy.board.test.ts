@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeSourceDb } from "../../read.fake";
 import { resetReadState } from "../../read.server";
 import { BOARD_READ_BUDGET, readBoard, resetBoardCache } from "../board.server";
-import { boardFixtureTables, fixtureTables } from "../fixtures";
+import { boardFixtureTables, facetsAnswer, fixtureTables } from "../fixtures";
 import type { Board } from "../types";
 import { SPECS } from "./energy";
 import { energyFixtureTables, type EnergyTableFixtures } from "./energy-tables";
@@ -54,7 +54,9 @@ beforeEach(() => {
 
 describe("energy boards on production rows, through the board server", () => {
   it.each(["04_energy", "05_utilities", "library"])("%s: every energy tile computes the checked figures within the read budget", async (id) => {
-    const db = new FakeSourceDb(boardFixtureTables());
+    const tables = boardFixtureTables();
+    const db = new FakeSourceDb(tables);
+    db.rpcAnswer = facetsAnswer(tables);
     const { board, requests } = await wholeBoard(db, id);
     expect(board.refused.filter((r) => MINE.has(r.id))).toEqual([]);
     for (const n of requests) expect(n).toBeLessThanOrEqual(BOARD_READ_BUDGET);
@@ -69,11 +71,14 @@ describe("energy boards on production rows, through the board server", () => {
   });
 
   it("gives the same figures on the untrimmed rows", async () => {
-    const full = withUnitFixtures(fixtureTables(), [{ unit: "energy", tables: energyFixtureTables(ROWS) }]);
+    // the untrimmed rows, with the store's counts the committed fixture carries
+    const full = withUnitFixtures(fixtureTables(), [{ unit: "energy", tables: { ...energyFixtureTables(ROWS), facets: boardFixtureTables().facets } }]);
     for (const id of ["04_energy", "05_utilities"]) {
       resetBoardCache();
       resetReadState();
-      const { board } = await wholeBoard(new FakeSourceDb(full), id);
+      const db = new FakeSourceDb(full);
+      db.rpcAnswer = facetsAnswer(full);
+      const { board } = await wholeBoard(db, id);
       expect(board.refused.filter((r) => MINE.has(r.id))).toEqual([]);
       for (const tile of board.tiles.filter((t) => MINE.has(t.id))) expect(summary(tile), tile.id).toEqual(CHECKS.tiles[tile.id]);
     }

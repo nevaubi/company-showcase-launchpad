@@ -213,12 +213,12 @@ describe("energy tiles of the round 6 forms", () => {
 });
 
 describe("energy boards", () => {
-  it("fill Energy with 18 tiles and Power and utilities with 13, every tile under a section", () => {
+  it("fill Energy with 18 tiles and Power and utilities with 15, every tile under a section", () => {
     const energy = boardSpec("04_energy");
     const utilities = boardSpec("05_utilities");
     expect(energy?.tiles).toHaveLength(18);
     expect(utilities?.title).toBe("Power and utilities");
-    expect(utilities?.tiles).toHaveLength(13);
+    expect(utilities?.tiles).toHaveLength(15);
     expect(UTILITIES_BOARD.tiles).toEqual(utilities?.tiles);
     for (const id of [...SPECS.boardTiles["04_energy"], ...UTILITIES_BOARD.tiles]) expect(tileSpec(id)?.section, id).toBeTruthy();
     const sections = (ids: readonly string[]) => [...new Set(ids.map((id) => tileSpec(id)?.section))];
