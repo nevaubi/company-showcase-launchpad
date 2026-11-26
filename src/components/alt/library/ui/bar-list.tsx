@@ -28,6 +28,7 @@ export function BarList({
   selectedKey,
   label,
   labelWidth = "minmax(0,16rem)",
+  valueWidth = "6.75rem",
 }: {
   bars: Bar[];
   /** The scale's end; defaults to the largest value. */
@@ -37,6 +38,8 @@ export function BarList({
   /** Accessible name of the list. */
   label: string;
   labelWidth?: string;
+  /** Width of the printed value at the bar's end (counts need less than amounts with units). */
+  valueWidth?: string;
 }) {
   const top = max ?? Math.max(0, ...bars.map((b) => b.value));
   return (
@@ -59,12 +62,14 @@ export function BarList({
                   style={{ width: `${(share * 100).toFixed(2)}%`, minWidth: b.value > 0 ? 2 : 0 }}
                 />
               </span>
-              <span className="num w-[6.75rem] shrink-0 text-right text-[13px] leading-5">{b.text}</span>
+              <span className="num shrink-0 text-right text-[13px] leading-5" style={{ minWidth: valueWidth }}>
+                {b.text}
+              </span>
             </span>
           </>
         );
         // the label column gives way first (labels truncate), the bar column keeps room for its value
-        const grid = { gridTemplateColumns: `${labelWidth} minmax(9rem,1fr)` };
+        const grid = { gridTemplateColumns: `${labelWidth} minmax(7rem,1fr)` };
         return (
           <li key={b.key}>
             {onSelect && !b.inert ? (

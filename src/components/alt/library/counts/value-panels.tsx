@@ -19,7 +19,8 @@ export function CategoryPanel({ chart, view, onOpen }: { chart: CategoryChart; v
         <BarList
           bars={bars}
           label={`Records by ${chart.title}`}
-          labelWidth="minmax(0,10rem)"
+          labelWidth="minmax(0,8rem)"
+          valueWidth="4.75rem"
           onSelect={onOpen ? (b) => {
             const row = chart.bars.find((x) => x.key === b.key)?.row;
             if (row) onOpen(row);

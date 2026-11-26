@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FieldRole } from "@/lib/sources/fields";
 import type { SourceFieldFill } from "@/lib/sources/read-types";
 import type { SourceColumn } from "@/lib/sources/schema";
-import { categoryCandidates, categoryCaption, categoryCharts, countFields, isCategorical, type FieldCounts } from "./category-model";
+import { categoryCandidates, categoryCaption, categoryCharts, countFields, isCategorical, samePartition, type FieldCounts } from "./category-model";
 
 const col = (key: string, title?: string): SourceColumn => ({ key, label: key, type: "string", ...(title ? { title } : {}) });
 const fill = (position: number, filled: number, blank: number): SourceFieldFill => ({ position, key: `f${position}`, label: `f${position}`, filled, blank, share: filled / (filled + blank) });
@@ -56,6 +56,8 @@ describe("isCategorical", () => {
     expect(isCategorical(counts({ distinct: 1, top: [{ value: "x", rows: 100, row: 1 }] }))).toBe(false);
     // 2,462 records and 800 application numbers: one value per three records
     expect(isCategorical(counts({ filled: 2462, distinct: 800 }))).toBe(false);
+    // Orange Book exclusivity codes: 487 codes in 2,462 records, the ten most common hold 58%
+    expect(isCategorical(counts({ filled: 2462, distinct: 487, top: [{ value: "NCE", rows: 1431, row: 14 }] }))).toBe(true);
     // 200 values in 5,000 records, but the ten most common hold only 30%
     expect(isCategorical(counts({ filled: 5000, distinct: 200, top: Array.from({ length: 10 }, (_, i) => ({ value: `v${i}`, rows: 150, row: i + 1 })) }))).toBe(false);
     expect(isCategorical(counts({ filled: 5000, distinct: 200, top: Array.from({ length: 10 }, (_, i) => ({ value: `v${i}`, rows: 250, row: i + 1 })) }))).toBe(true);
@@ -83,8 +85,19 @@ describe("categoryCharts", () => {
     expect(charts[1].caption).toBe("25 values in 2,462 records; the 10 most common hold 72%; empty in 3.");
   });
 
+  it("draws a code and its name once, and names the twin in the caption", () => {
+    const sector = counts({ position: 0, filled: 1012, blank: 1, distinct: 3, top: [{ value: "2", rows: 762, row: 2 }, { value: "1", rows: 203, row: 1 }, { value: "4", rows: 47, row: 143 }] });
+    const name = counts({ position: 1, filled: 1012, blank: 1, distinct: 3, top: [{ value: "IPP Non-CHP", rows: 762, row: 2 }, { value: "Electric Utility", rows: 203, row: 1 }, { value: "Commercial", rows: 47, row: 143 }] });
+    const flags = counts({ position: 2, filled: 1012, blank: 1, distinct: 3, top: [{ value: "Y", rows: 762, row: 3 }, { value: "N", rows: 203, row: 1 }, { value: "U", rows: 47, row: 143 }] });
+    expect(samePartition(sector, name)).toBe(true);
+    expect(samePartition(sector, flags)).toBe(false);
+    const charts = categoryCharts([name, sector, flags], [col("Sector Name"), col("Sector"), col("Flag")]);
+    expect(charts.map((c) => c.title)).toEqual(["Sector Name", "Flag"]);
+    expect(charts[0].caption).toBe("3 values in 1,012 records; empty in 1. Sector gives the same counts.");
+  });
+
   it("stops at six charts", () => {
-    const many = Array.from({ length: 8 }, (_, i) => counts({ position: i }));
+    const many = Array.from({ length: 8 }, (_, i) => counts({ position: i, top: [{ value: "x", rows: 60, row: i + 1 }, { value: "y", rows: 40, row: 20 + i }] }));
     expect(categoryCharts(many, Array.from({ length: 8 }, (_, i) => col(`f${i}`)))).toHaveLength(6);
   });
 

@@ -114,6 +114,9 @@ export function CoverageView({
   if (small && candidates.length > 0 && categoryQuery.isPending)
     gridCells.push(<PanelSkeleton key="cat-loading" name="Records by category" title="Records by category" height={BARS_HEIGHT} />);
   for (const chart of charts) gridCells.push(<CategoryPanel key={`cat-${chart.position}`} chart={chart} view={view} onOpen={onOpen} />);
+  // a short dictionary's strip sits beside the other charts when they leave a cell free; a long one takes the width
+  const fillInGrid = snapshot.columns.length <= 60 && gridCells.length % 2 === 1 && gridCells.length < 3;
+  if (fillInGrid) gridCells.push(<FillPanel key="fill" fills={fills} columns={snapshot.columns} view={view} />);
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3" data-section="What this table holds">
@@ -127,7 +130,7 @@ export function CoverageView({
           <PanelNote name="Records per period" title="Records per period">{failed(periods.reason, "Records per period")}</PanelNote>
         ))}
       {gridCells.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-3", gridCells.length > 1 && "@3xl:grid-cols-2", gridCells.length > 2 && "@6xl:grid-cols-3")}>{gridCells}</div>}
-      <FillPanel fills={fills} columns={snapshot.columns} view={view} />
+      {!fillInGrid && <FillPanel fills={fills} columns={snapshot.columns} view={view} />}
     </div>
   );
 }

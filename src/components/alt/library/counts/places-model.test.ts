@@ -29,7 +29,7 @@ describe("readStates", () => {
     const facets = [...STATES.slice(0, 10).map((p) => v(p.code, 5)), v("US", 70)];
     const reading = readStates(facets)!;
     expect(reading.national).toEqual([{ value: "US", label: "US", rows: 70, exact: true }]);
-    expect(stateCaption(reading)).toBe(`50 records in 10 states; most in ${reading.states[0].place.name}, 5. 70 more records are national totals.`);
+    expect(stateCaption(reading)).toBe("50 records in 10 states; 10 hold the most, 5 each. 70 more records are national totals.");
   });
 
   it("refuses fewer than 10 states, any key that is not a state, and two keys for one state", () => {
@@ -48,6 +48,11 @@ describe("place marks", () => {
     const places = stateMapPlaces(reading);
     expect(places[0]).toEqual({ code: STATES[9].code, name: STATES[9].name, key: STATES[9].code, value: 10, display: "10", text: null, row: null, filter: { geography: STATES[9].code } });
     expect(places.find((p) => p.code === STATES[0].code)!.display).toBe("at least 1");
+    expect(places).toHaveLength(10);
+    // every value was read: a state of the grid without a record is 0, and opens nothing
+    const all = stateMapPlaces(reading, true);
+    expect(all).toHaveLength(51);
+    expect(all.find((p) => p.code === "DC")).toEqual({ code: "DC", name: "District of Columbia", key: "DC", value: 0, display: "0", text: null, row: null });
     expect(stateBars(reading)[0]).toMatchObject({ key: STATES[9].code, label: STATES[9].name, sub: STATES[9].code, text: "10" });
   });
 

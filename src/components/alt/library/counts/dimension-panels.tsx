@@ -30,15 +30,15 @@ export function PlacePanel({
 }) {
   const reading = useMemo(() => (facets.complete ? readStates(facets.values) : null), [facets]);
   if (reading) {
-    const grid = reading.states.filter((s) => s.place.kind !== "territory");
-    const places = stateMapPlaces(reading);
+    const territories = new Set(reading.states.filter((s) => s.place.kind === "territory").map((s) => s.place.code));
+    const places = stateMapPlaces(reading, facets.complete);
     const max = Math.max(0, ...reading.states.map((s) => s.rows));
     return (
       <CountPanel name="Records by state" title="Records by state" caption={stateCaption(reading)}>
         {view === "chart" ? (
           <StateGrid
-            places={places.filter((p) => grid.some((g) => g.place.code === p.code))}
-            territories={places.filter((p) => !grid.some((g) => g.place.code === p.code))}
+            places={places.filter((p) => !territories.has(p.code))}
+            territories={places.filter((p) => territories.has(p.code))}
             scale="sequential"
             domain={[0, max]}
             rangeLabels={["0", n(max)]}
@@ -66,7 +66,7 @@ export function PlacePanel({
   return (
     <CountPanel name="Records by place" title="Records by place" caption={caption}>
       {view === "chart" ? (
-        <BarList bars={bars} label="Places by records" labelWidth="minmax(0,10rem)" onSelect={onGeography ? (b) => onGeography(b.key) : undefined} />
+        <BarList bars={bars} label="Places by records" labelWidth="minmax(0,8rem)" valueWidth="4.75rem" onSelect={onGeography ? (b) => onGeography(b.key) : undefined} />
       ) : (
         <CountTable head={["Place", "Records"]} rows={bars.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} />
       )}
@@ -108,7 +108,7 @@ export function EntityPanel({
   return (
     <CountPanel name={name} title={title} caption={caption}>
       {view === "chart" ? (
-        <BarList bars={bars} label={`${many} by records`} labelWidth="minmax(0,11rem)" onSelect={(b) => onEntity(b.key)} />
+        <BarList bars={bars} label={`${many} by records`} labelWidth="minmax(0,8rem)" valueWidth="4.75rem" onSelect={(b) => onEntity(b.key)} />
       ) : (
         <CountTable head={["Name", "Records"]} rows={bars.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} />
       )}

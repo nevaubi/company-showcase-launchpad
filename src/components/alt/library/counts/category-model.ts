@@ -24,8 +24,8 @@ export const CATEGORY_RULE = {
   minFilled: 10,
   /** Distinct values, at least. */
   minValues: 2,
-  /** At most one distinct value per this many filled records. */
-  recordsPerValue: 10,
+  /** At most one distinct value per this many filled records (identifiers and names repeat less). */
+  recordsPerValue: 4,
   /** The ten most common values hold at least this share of the filled records. */
   topShare: 0.5,
 } as const;
@@ -115,8 +115,9 @@ export function countFields(positions: readonly number[], rows: readonly { row: 
 
 /**
  * A field is a category when, over every record: at least 10 hold a value, at least 2 distinct values occur, there is
- * at most one distinct value per 10 filled records, and the 10 most common values hold at least half of the filled
- * records. Identifiers, names and amounts fail the third test; a long tail fails the fourth.
+ * at most one distinct value per 4 filled records, and the 10 most common values hold at least half of the filled
+ * records. Identifiers and names fail the third test; amounts and dates, spread over many values, fail the fourth.
+ * A code field with a long tail of rare codes passes when its common codes hold most records.
  */
 export function isCategorical(c: FieldCounts): boolean {
   if (c.filled < CATEGORY_RULE.minFilled || c.distinct < CATEGORY_RULE.minValues) return false;
@@ -160,13 +161,31 @@ export function categoryCaption(c: FieldCounts): string {
   return `${parts.join("; ")}.`;
 }
 
-/** The charts of the fields the rule calls categories, in dictionary order, at most six. */
+/**
+ * Two fields give the same counts when every value is counted (no remainder) and their groups have the same sizes,
+ * each starting on the same record, with the same empty cells: a code and its name ("Sector" and "Sector Name").
+ * Only the first is drawn; the caption names the other.
+ */
+export function samePartition(a: FieldCounts, b: FieldCounts): boolean {
+  if (a.distinct !== b.distinct || a.filled !== b.filled || a.blank + a.missing !== b.blank + b.missing || a.otherValues > 0 || b.otherValues > 0) return false;
+  const key = (c: FieldCounts) => c.top.map((v) => `${v.rows}@${v.row}`).sort().join(",");
+  return key(a) === key(b);
+}
+
+/**
+ * The charts of the fields the rule calls categories, in dictionary order, at most six. A field that gives the same
+ * counts as an earlier one is named in that chart's caption instead of drawn again.
+ */
 export function categoryCharts(counts: readonly FieldCounts[], columns: readonly SourceColumn[], max = CATEGORY_CHARTS_MAX): CategoryChart[] {
-  return counts
-    .filter((c) => columns[c.position] && isCategorical(c))
-    .sort((a, b) => a.position - b.position)
+  const kept: { counts: FieldCounts; same: string[] }[] = [];
+  for (const c of [...counts].filter((x) => columns[x.position] && isCategorical(x)).sort((a, b) => a.position - b.position)) {
+    const twin = kept.find((k) => samePartition(k.counts, c));
+    if (twin) twin.same.push(fieldTitle(columns[c.position]));
+    else kept.push({ counts: c, same: [] });
+  }
+  return kept
     .slice(0, max)
-    .map((c) => {
+    .map(({ counts: c, same }) => {
       const column = columns[c.position];
       const title = fieldTitle(column);
       const code = fieldCode(column);
@@ -188,6 +207,7 @@ export function categoryCharts(counts: readonly FieldCounts[], columns: readonly
           title: `${title}, the other ${n(c.otherValues)} values: ${n(c.otherRows)} records.`,
           row: null,
         });
-      return { position: c.position, title, code: code !== title ? code : null, caption: categoryCaption(c), bars };
+      const twins = same.length ? ` ${same.join(" and ")} ${same.length === 1 ? "gives" : "give"} the same counts.` : "";
+      return { position: c.position, title, code: code !== title ? code : null, caption: `${categoryCaption(c)}${twins}`, bars };
     });
 }

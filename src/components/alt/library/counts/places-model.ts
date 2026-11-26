@@ -6,7 +6,7 @@
  * places, never as a map. The facet label (the place name on the first record of a code) is tried when the stored
  * codes are not states themselves.
  */
-import { isNationalKey, placeByKey, stateKeyKind, type StateKeyKind, type UsPlace } from "@/lib/sources/geo/us-states";
+import { GRID_PLACES, isNationalKey, placeByKey, stateKeyKind, type StateKeyKind, type UsPlace } from "@/lib/sources/geo/us-states";
 import type { MapPlace } from "@/lib/sources/boards/types";
 import type { SourceFacetValue } from "@/lib/sources/read-types";
 
@@ -62,8 +62,10 @@ export function stateCaption(reading: StateReading): string {
   const total = reading.states.reduce((s, v) => s + v.rows, 0);
   const exact = reading.states.every((s) => s.exact);
   const top = reading.states[0];
+  const tied = reading.states.filter((s) => s.rows === top.rows).length;
   const where = reading.states.some((s) => s.place.kind === "territory") ? "states and territories" : reading.states.some((s) => s.place.kind === "district") ? "states and DC" : "states";
-  let line = `${exact ? "" : "At least "}${n(total)} records in ${n(reading.states.length)} ${where}; most in ${top.place.name}, ${n(top.rows)}`;
+  const most = tied > 1 ? `${n(tied)} hold the most, ${n(top.rows)} each` : `most in ${top.place.name}, ${n(top.rows)}`;
+  let line = `${exact ? "" : "At least "}${n(total)} records in ${n(reading.states.length)} ${where}; ${most}`;
   if (reading.national.length) {
     const rows = reading.national.reduce((s, v) => s + v.rows, 0);
     line += `. ${n(rows)} more ${rows === 1 ? "record is" : "records are"} national totals`;
@@ -71,9 +73,16 @@ export function stateCaption(reading: StateReading): string {
   return `${line}.`;
 }
 
-/** Counts as the grid's places: one per state, the stored value as the records filter. */
-export function stateMapPlaces(reading: StateReading): MapPlace[] {
-  return reading.states.map((s) => ({
+/**
+ * Counts as the grid's places: one per state, the stored value as the records filter. With `zeros` (the facets read
+ * every value), a state or DC of the grid that holds no record is drawn as 0, which it is, and opens nothing.
+ */
+export function stateMapPlaces(reading: StateReading, zeros = false): MapPlace[] {
+  const held = new Set(reading.states.map((s) => s.place.code));
+  const missing: MapPlace[] = zeros
+    ? GRID_PLACES.filter((p) => !held.has(p.code)).map((p) => ({ code: p.code, name: p.name, key: p.code, value: 0, display: "0", text: null, row: null }))
+    : [];
+  return [...reading.states.map((s) => ({
     code: s.place.code,
     name: s.place.name,
     key: s.value,
@@ -82,7 +91,7 @@ export function stateMapPlaces(reading: StateReading): MapPlace[] {
     text: null,
     row: null,
     filter: { geography: s.value },
-  }));
+  })), ...missing];
 }
 
 export type PlaceBar = { key: string; label: string; sub?: string; value: number; text: string; title: string };
