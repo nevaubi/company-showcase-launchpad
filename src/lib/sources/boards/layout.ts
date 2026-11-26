@@ -39,9 +39,9 @@ export function boardLayout(id: string): BoardLayout | null {
 }
 
 /**
- * What the gallery shows, every chart once: each collection board in collection order (a board of no collection
- * after them, by id), then the landing board holding only the tiles that are on no collection board, when it has any
- * (the landing board's other tiles are each shown on their collection's board).
+ * What the gallery shows, every chart: each collection board whole, in collection order (a board of no collection
+ * after them, by id; a tile on two boards is on both, as on their collection pages), then the landing board holding
+ * only the tiles that are on no collection board, when it has any (its other tiles are on their collections' boards).
  */
 export function galleryBoards(): BoardLayout[] {
   const order = new Map(COLLECTIONS.map((c, i) => [c.id, i] as const));
