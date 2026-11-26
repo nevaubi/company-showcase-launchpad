@@ -1994,5 +1994,78 @@
     "equal": true
    }
   ]
+ },
+ "fdicCapital": {
+  "datasetId": "official_fdic_2026q2_cohort500_native_current_quarter",
+  "snapshotId": "5161b5868f6f0b69142364ccfc1a39c59578abe9d9b551c3d50b940290ac2ddf",
+  "rows": 496,
+  "dictionary": {
+   "RBC1AAJ": {
+    "position": 1874,
+    "key": "col1876",
+    "title": "LEVERAGE RATIO-PCA",
+    "unit": "Percent",
+    "native_type": "number"
+   },
+   "RBCRWAJ": {
+    "position": 1877,
+    "key": "col1879",
+    "title": "TOTAL RBC RATIO-PCA",
+    "unit": "Percent",
+    "native_type": "number"
+   },
+   "IBA": {
+    "position": 586,
+    "key": "col0587",
+    "title": "INTL BANKING ACT ENTITY FLAG",
+    "unit": "Percent",
+    "native_type": "number"
+   },
+   "CBLRIND": {
+    "position": 63,
+    "key": "col0064",
+    "title": "Community Bank Ratio",
+    "unit": "Indicator",
+    "native_type": "number"
+   }
+  },
+  "publisher": {
+   "url": "https://api.fdic.gov/banks/financials?filters=REPDTE:20260930&fields=CERT,REPDTE,RBC1AAJ,RBCRWAJ,IBA,CBLRIND&limit=10000&sort_by=CERT&sort_order=ASC",
+   "sha256": "95653de9d04d52b5897a2062cae9b1a77b80c9e564706efccd91796c3b12d1bd",
+   "institutions": 4284,
+   "fields": "https://api.fdic.gov/banks/docs/risview_properties.yaml",
+   "fieldsSha256": "b257457e4e821d6a0d9f88ffc4e6e0da80e4ccf67fa394cadb21587b50b23d59",
+   "formulas": {
+    "RBC1AAJ": "percentage: RBCT1 / AVASSETJ",
+    "RBCRWAJ": "percentage: RBC / RWAJT"
+   }
+  },
+  "ratios": {
+   "storedMd5": "e00a4dd42d8e53453ebb955a3d934221",
+   "publisherMd5": "e00a4dd42d8e53453ebb955a3d934221",
+   "equal": true
+  },
+  "flags": {
+   "storedMd5": "32c8b356f283e89406b4ce7857f3018d",
+   "publisherMd5": "32c8b356f283e89406b4ce7857f3018d",
+   "equal": true
+  },
+  "groups": {
+   "IBA 0, CBLRIND 0": {
+    "records": 428,
+    "leverageZero": 0,
+    "riskBasedZero": 0
+   },
+   "IBA 0, CBLRIND 1": {
+    "records": 60,
+    "leverageZero": 0,
+    "riskBasedZero": 60
+   },
+   "IBA 1, CBLRIND empty": {
+    "records": 8,
+    "leverageZero": 8,
+    "riskBasedZero": 8
+   }
+  }
  }
 }
