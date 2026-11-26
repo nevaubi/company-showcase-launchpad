@@ -56,7 +56,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")
       { title: `${params.ticker.toUpperCase()} investor-relations data · FiledUnder` },
       {
         name: "description",
-        content: `Segment and KPI breakdowns from ${params.ticker.toUpperCase()}'s earnings releases, supplements and presentations, each linked to the exact cell in the stored document.`,
+        content: `${params.ticker.toUpperCase()}'s statements, segments and KPIs as its earnings releases, supplements and presentations print them, each figure linked to the exact cell in the stored document.`,
       },
       {
         property: "og:title",
@@ -64,7 +64,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")
       },
       {
         property: "og:description",
-        content: "Segment and KPI breakdowns with click-to-source into stored IR documents.",
+        content: "Statements, segments and KPIs as the company prints them, with click-to-source into stored IR documents.",
       },
     ],
   }),

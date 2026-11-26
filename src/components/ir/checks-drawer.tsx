@@ -29,7 +29,8 @@ interface Item {
   text: string;
 }
 
-const full = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+/** A checked figure: money in millions as most tables print it, other units as stored. */
+const amount = (v: number, unit: string) => (unit === "usd" ? `${v < 0 ? "−" : ""}$${(Math.abs(v) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 1 })}M` : v.toLocaleString("en-US", { maximumFractionDigits: 2 }));
 
 export function IrChecksDrawer({
   open,
@@ -67,7 +68,7 @@ export function IrChecksDrawer({
       const s = byKey.get(ck.k);
       const kind = ck.kind === "fy" ? "y" : "q";
       const c = s && (kind === "q" ? s.q : s.y)[ck.e];
-      if (s && c) failed.push({ s, e: ck.e, kind, c, text: `parts add up to ${full(ck.sum)}, the printed total is ${full(ck.total)} (difference ${full(ck.sum - ck.total)}, full units)` });
+      if (s && c) failed.push({ s, e: ck.e, kind, c, text: `parts add up to ${amount(ck.sum, s.unit)}, the printed total is ${amount(ck.total, s.unit)} (difference ${amount(ck.sum - ck.total, s.unit)})` });
     }
     const flagged: Item[] = [];
     const held: Item[] = [];
@@ -79,7 +80,7 @@ export function IrChecksDrawer({
           for (const f of c.flags ?? []) flagged.push({ s, e, kind, c, text: f.why });
           if (c.alt) {
             const doc = c.alt.d != null ? payload.docs[c.alt.d] : undefined;
-            alt.push({ s, e, kind, c, text: `shown ${full(c.v)}; ${c.alt.kind === "restated" ? "an earlier" : "another"} ${KIND_NAME[doc?.kind ?? ""] ?? "document"}${doc?.filed ? ` filed ${doc.filed}` : ""} prints ${full(c.alt.v)}` });
+            alt.push({ s, e, kind, c, text: `shown ${amount(c.v, s.unit)}; ${c.alt.kind === "restated" ? "an earlier" : "another"} ${KIND_NAME[doc?.kind ?? ""] ?? "document"}${doc?.filed ? ` filed ${doc.filed}` : ""} prints ${amount(c.alt.v, s.unit)}` });
           }
         }
         for (const [e, c] of Object.entries((kind === "q" ? s.held?.q : s.held?.y) ?? {})) held.push({ s, e, kind, c, text: c.why ?? "unit, sign or period contradicted by the documents" });
@@ -126,9 +127,9 @@ export function IrChecksDrawer({
           </SheetDescription>
         </SheetHeader>
         {!sec && (
-          <dl className="grid grid-cols-2 gap-px border-b bg-border sm:grid-cols-3">
-            {stats.map((x) => (
-              <div key={x.label} className="min-w-0 bg-background px-4 py-2.5">
+          <dl className="grid grid-cols-2 gap-px border-b bg-border">
+            {stats.map((x, i) => (
+              <div key={x.label} className={cn("min-w-0 bg-background px-4 py-2.5", i === stats.length - 1 && stats.length % 2 === 1 && "col-span-2")}>
                 <dt className={IR.caption}>{x.label}</dt>
                 <dd className="num text-[15px] font-semibold leading-6">{x.value}</dd>
                 {x.hint && <dd className={cn("num truncate", IR.caption)}>{x.hint}</dd>}
