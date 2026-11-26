@@ -17,7 +17,7 @@ import type {
  * 26 Nov 2026 (the unit's report lists figure, period and snapshot). Pure data: no network; no shared list is edited.
  */
 
-const DS140 = (id: string) => `official_07_materials_csv_${id}`;
+const DS140 = (id: string) => `official_07_materials_csv_ds140_${id}`;
 const COPPER = DS140("ds140_copper_2020_copper_fe7a2ceced");
 const LITHIUM = DS140("ds140_lithium_2021_lithium_statistics_5b2b81ee38");
 const RARE_EARTHS = DS140("ds140_rare_earths_2020_rare_earths_b3eaf5640c");

@@ -44,7 +44,7 @@ const SOURCE: Record<string, { source_id: string; columns: SourceColumn[] }> = {
   },
 };
 for (const t of DS140_TABLES)
-  SOURCE[`official_07_materials_csv_${t.id}`] = { source_id: "USGS_DS140", columns: dictionary(["Year", ...t.measures.map((m) => m[0])]) };
+  SOURCE[`official_07_materials_csv_ds140_${t.id}`] = { source_id: "USGS_DS140", columns: dictionary(["Year", ...t.measures.map((m) => m[0])]) };
 
 /** Every series a tile reads: its own measure, or each line's. */
 function reads(spec: TileSpec): { datasetId: string; measure: string; unit: string; matches: string[] }[] {

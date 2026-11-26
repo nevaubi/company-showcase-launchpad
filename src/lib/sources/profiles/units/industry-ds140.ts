@@ -15,7 +15,7 @@
 export type Ds140Measure = readonly [field: string, unit: string, label?: string];
 
 export type Ds140Table = {
-  /** The dataset id after "official_07_materials_csv_". */
+  /** The dataset id after "official_07_materials_csv_ds140_" (production's ids repeat "ds140_"). */
   id: string;
   /** The snapshot whose dictionary and rows were checked. */
   snapshotId: string;

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { computeSeriesTile, type CellInput, type TileContext } from "../../boards/compute";
@@ -13,6 +14,7 @@ import {
   MSHA_STATE_ENTRY,
   NHTSA_MAKER_ENTRY,
   NHTSA_YEAR_ENTRY,
+  ds140DatasetId,
   ds140Unit,
   ds140Workbook,
   forecastMonth,
@@ -30,7 +32,7 @@ const CHECKS = JSON.parse(readFileSync("src/lib/sources/profiles/units/industry.
   nhtsa: { byYear: { snapshotId: string; rows: number; equal: number; differ: Record<string, unknown> }; byMaker: { snapshotId: string } };
 };
 
-const ds140 = (id: string): ProfileDataset => ({ id: `official_07_materials_csv_${id}`, source_id: "USGS_DS140" });
+const ds140 = (id: string): ProfileDataset => ({ id: `official_07_materials_csv_ds140_${id}`, source_id: "USGS_DS140" });
 const table = (fragment: string) => {
   const found = DS140_TABLES.filter((t) => t.id.includes(fragment));
   if (found.length !== 1) throw new Error(`${found.length} DS140 tables match ${fragment}`);
@@ -51,6 +53,16 @@ describe("USGS DS140 profile", () => {
       expect(ds140Workbook(t)).toMatch(/^https:\/\/d9-wret\.s3\.us-west-2\.amazonaws\.com\/assets\/palladium\/production\/.+\.xlsx$/);
       expect(t.statement).toContain(t.unit);
     }
+  });
+
+  it("claims production's own dataset ids: the list's ids after the prefix, 121 of 121", () => {
+    // Production, 26 Nov 2026: md5 of the ids of the 123 per-sheet DS140 tables less the two titanium mineral sheets,
+    // sorted by code point and joined by commas (source_datasets, source_id USGS_DS140).
+    const ids = DS140_TABLES.map((t) => ds140DatasetId(t)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    expect(createHash("md5").update(ids.join(",")).digest("hex")).toBe("5e5d3ee22e19c4f52312cf64d4b8ddac");
+    expect(ds140DatasetId(table("copper_2020_copper"))).toBe("official_07_materials_csv_ds140_ds140_copper_2020_copper_fe7a2ceced");
+    expect(DS140_ENTRY.claims({ id: "official_07_materials_csv_ds140_ds140_copper_2020_copper_fe7a2ceced", source_id: "USGS_DS140" })).toBe(true);
+    expect(DS140_ENTRY.claims({ id: "official_07_materials_csv_ds140_copper_2020_copper_fe7a2ceced", source_id: "USGS_DS140" })).toBe(false);
   });
 
   it("names every table compared cell for cell with the snapshot the list holds", () => {

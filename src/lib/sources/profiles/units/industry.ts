@@ -10,13 +10,17 @@ import { DS140_TABLES, type Ds140Table } from "./industry-ds140";
 
 // ---------------------------------------------------------------- USGS DS140
 
-const DS140_DATASET_PREFIX = "official_07_materials_csv_";
+/** Every DS140 sheet table's dataset id starts with this, the list's id after it (121 of 121 equal production's ids). */
+export const DS140_DATASET_PREFIX = "official_07_materials_csv_ds140_";
 const DS140_HOST = "https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/";
 const DS140_PAGE = "https://www.usgs.gov/centers/national-minerals-information-center/historical-statistics-mineral-commodities-united";
 /** The sheets' footnotes: "NA Not available. W Withheld to avoid disclosing company proprietary data.", "E Exporter.", "2Less than ½ unit." */
 const DS140_MARKERS = ["NA", "W", "E", "(2)"] as const;
 
-const DS140_BY_ID = new Map<string, Ds140Table>(DS140_TABLES.map((t) => [`${DS140_DATASET_PREFIX}${t.id}`, t]));
+/** The dataset id of a DS140 table of the list. */
+export const ds140DatasetId = (table: Pick<Ds140Table, "id">): string => `${DS140_DATASET_PREFIX}${table.id}`;
+
+const DS140_BY_ID = new Map<string, Ds140Table>(DS140_TABLES.map((t) => [ds140DatasetId(t), t]));
 
 /** The workbook of a DS140 table, as USGS serves it. */
 export function ds140Workbook(table: Pick<Ds140Table, "workbook">): string {
