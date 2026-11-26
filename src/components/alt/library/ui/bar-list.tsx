@@ -15,6 +15,10 @@ export type Bar = {
   text: string;
   /** Hover and focus text: value, unit as stated, period, stored string. */
   title: string;
+  /** A remainder ("All other values"): drawn in the de-emphasis grey, so the named bars lead. */
+  quiet?: boolean;
+  /** A bar that opens nothing even when the list's bars do (a remainder). */
+  inert?: boolean;
 };
 
 export function BarList({
@@ -48,7 +52,10 @@ export function BarList({
             <span className="flex min-w-0 items-center gap-2">
               <span className="relative h-4 min-w-0 flex-1" aria-hidden>
                 <span
-                  className="absolute inset-y-0 left-0 rounded-r-[4px] bg-chart-1 transition-opacity duration-150 group-hover:opacity-80 motion-reduce:transition-none"
+                  className={cn(
+                    "absolute inset-y-0 left-0 rounded-r-[4px] transition-opacity duration-150 group-hover:opacity-80 motion-reduce:transition-none",
+                    b.quiet ? "bg-chart-5/70" : "bg-chart-1",
+                  )}
                   style={{ width: `${(share * 100).toFixed(2)}%`, minWidth: b.value > 0 ? 2 : 0 }}
                 />
               </span>
@@ -60,7 +67,7 @@ export function BarList({
         const grid = { gridTemplateColumns: `${labelWidth} minmax(9rem,1fr)` };
         return (
           <li key={b.key}>
-            {onSelect ? (
+            {onSelect && !b.inert ? (
               <button
                 type="button"
                 onClick={() => onSelect(b)}
