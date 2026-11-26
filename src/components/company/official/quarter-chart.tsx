@@ -58,7 +58,12 @@ export function QuarterChart({
   }, [box]);
 
   const drawn = useMemo(() => points.map((p, i) => ({ ...p, i })).filter(p => p.value != null), [points]);
-  const ticks = useMemo(() => (compact && axis.ticks.length > 3 ? axis.ticks.filter((_, i, a) => i === 0 || i === a.length - 1 || i === Math.floor((a.length - 1) / 2)) : axis.ticks), [axis.ticks, compact]);
+  // a small multiple keeps at most three evenly spaced ticks, the lowest always among them
+  const ticks = useMemo(() => {
+    if (!compact || axis.ticks.length <= 3) return axis.ticks;
+    const step = Math.ceil((axis.ticks.length - 1) / 2);
+    return axis.ticks.filter((_, i) => i % step === 0);
+  }, [axis.ticks, compact]);
   const left = Math.max(28, ...ticks.map(t => t.text.length * 6 + 8));
   const M = { top: 10, right: compact ? 40 : 52, bottom: 20, left };
   const geo = useMemo(() => {

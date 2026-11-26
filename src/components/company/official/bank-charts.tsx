@@ -48,27 +48,27 @@ function RatioTile({ s }: { s: RatioStat }) {
   const shown = showCell(s.latest!.cell, s.unit);
   const basis = BASIS_TEXT[s.basis];
   return (
-    <div className="min-w-0 rounded-[4px] border px-3 py-2">
-      <p className="truncate text-[11px] text-muted-foreground" title={FDIC_LINES.find(l => l.field === s.field)?.label}>
-        {s.label}
-        {basis && <span> · {basis}</span>}
-      </p>
-      <p className="flex items-baseline gap-1.5">
+    <div className="flex min-w-0 flex-col rounded-[4px] border px-3 py-2">
+      <p className="text-[11px] leading-snug text-muted-foreground">{s.label}</p>
+      <p className="mt-0.5">
         <RecordLink at={s.latest!.ref} title={shown.title} className="text-[18px] font-semibold leading-tight text-foreground">
           {shown.text}%
         </RecordLink>
-        <span className="ml-auto text-[11px] text-muted-foreground">{quarterLabel(s.latest!.period)}</span>
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        {quarterLabel(s.latest!.period)}
+        {basis && `, ${basis}`}
       </p>
       <p className="text-[11px] text-muted-foreground" title={s.change?.formula}>
         {s.change ? (
           <>
-            <span className="num text-foreground">{s.change.text}</span> pts on {quarterLabel(s.yearEarlier!.period)}
+            <span className="num text-foreground">{s.change.text}</span> pts from {quarterLabel(s.yearEarlier!.period)}
           </>
         ) : (
           "No figure a year earlier"
         )}
       </p>
-      <GapSparkline values={s.spark} className="mt-1" />
+      <GapSparkline values={s.spark} className="mt-auto pt-1" />
     </div>
   );
 }
@@ -81,7 +81,7 @@ export function RatioTiles({ history }: { history: BankHistory }) {
   return (
     <div data-section="Bank ratios" className="min-w-0 px-3.5 pb-2.5">
       <h4 className="mb-1.5 text-[11px] font-medium text-muted-foreground">Ratios as the FDIC publishes them, latest quarter</h4>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {stats.map(s => (
           <RatioTile key={s.field} s={s} />
         ))}
@@ -205,8 +205,9 @@ export function ChartersCompared({ trends, banks, selected, onSelect }: { trends
           );
         })}
       </div>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">Each chart has its own value axis; charters are never added together. {COHORT_NOTE}</p>
       <SourceLine source={trends[0].sources[0] ?? null} table="Open history table">
-        FDIC quarterly reports, {quarterLabel(span[0])} to {quarterLabel(span[1])}. Each chart has its own value axis; charters are never added together. {COHORT_NOTE}
+        FDIC quarterly reports, {quarterLabel(span[0])} to {quarterLabel(span[1])}
       </SourceLine>
     </div>
   );

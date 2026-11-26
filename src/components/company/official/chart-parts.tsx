@@ -27,7 +27,7 @@ export function FigureHead({ title, reader, cell, unit, period, at }: { title: R
         {reader?.unit && <span className="text-[11px] text-muted-foreground">{reader.unit}</span>}
         {period && <span className="ml-auto text-[11px] text-muted-foreground">{dayLabel(period)}</span>}
       </p>
-      {reader && <p className="truncate text-[11px] leading-snug text-muted-foreground" title={reader.filed}>{reader.filed}</p>}
+      {reader && <p className="text-[11px] leading-snug text-muted-foreground">{reader.filed}</p>}
     </div>
   );
 }

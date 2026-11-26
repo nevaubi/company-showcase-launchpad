@@ -61,7 +61,8 @@ export function QuarterColumns({ points, unit, axis, label, height = 132 }: { po
           const d = up
             ? `M${cx - bar / 2},${base}V${top + r}Q${cx - bar / 2},${top} ${cx - bar / 2 + r},${top}H${cx + bar / 2 - r}Q${cx + bar / 2},${top} ${cx + bar / 2},${top + r}V${base}Z`
             : `M${cx - bar / 2},${top}V${base - r}Q${cx - bar / 2},${base} ${cx - bar / 2 + r},${base}H${cx + bar / 2 - r}Q${cx + bar / 2},${base} ${cx + bar / 2},${base - r}V${top}Z`;
-          const text = p.value == null ? "" : axisText(p.value, axis);
+          // the cap carries the figure in the axis's reader scale, or the stored figure itself when the unit stays as filed
+          const text = p.value == null ? "" : axis.decimals != null ? axisText(p.value, axis) : showCell(p.cell, unit).text;
           return (
             <g key={p.period}>
               {p.value != null && <path d={d} fill="var(--chart-1)" opacity={active == null || active === i ? 1 : 0.55} />}
@@ -120,18 +121,20 @@ export function RatioLines({ lines, axis, label, height = 176, unit }: { lines: 
   const [active, setActive] = useState<number | null>(null);
   const live = useRef<HTMLParagraphElement>(null);
   const periods = lines[0]?.points.map(p => p.period) ?? [];
-  const labelWidth = Math.min(170, Math.max(...lines.map(l => l.label.length * 6 + 44), 80));
-  const roomy = width >= 420;
-  const M = { top: 10, right: roomy ? labelWidth : 40, bottom: 18, left: Math.max(24, ...axis.ticks.map(t => t.text.length * 6 + 8)) };
-  const iw = Math.max(60, width - M.left - M.right), ih = height - M.top - M.bottom;
-  const x = (i: number) => M.left + (periods.length > 1 ? (i / (periods.length - 1)) * iw : iw / 2);
-  const y = (v: number) => M.top + ih - ((v - axis.min) / (axis.max - axis.min || 1)) * ih;
-  // end labels only where every pair of line ends is at least 12 px apart
+  const labelWidth = Math.min(250, Math.max(...lines.map(l => l.label.length * 5.6 + 48), 80));
+  const roomy = width >= 520;
+  const top = 10, bottom = 18;
+  const ih = height - top - bottom;
+  const y = (v: number) => top + ih - ((v - axis.min) / (axis.max - axis.min || 1)) * ih;
+  // end labels only where every pair of line ends is at least 12 px apart; otherwise the legend and the readout name them
   const ends = lines.map(l => {
     const last = [...l.points].reverse().find(p => p.value != null);
-    return { key: l.key, y: last ? y(last.value!) : null };
+    return last ? y(last.value!) : null;
   });
-  const separate = ends.every((a, i) => ends.every((b, j) => i === j || a.y == null || b.y == null || Math.abs(a.y - b.y) >= 12));
+  const separate = ends.every((a, i) => ends.every((b, j) => i === j || a == null || b == null || Math.abs(a - b) >= 12));
+  const M = { top, right: roomy && separate ? labelWidth : 28, bottom, left: Math.max(24, ...axis.ticks.map(t => t.text.length * 6 + 8)) };
+  const iw = Math.max(60, width - M.left - M.right);
+  const x = (i: number) => M.left + (periods.length > 1 ? (i / (periods.length - 1)) * iw : iw / 2);
   const say = (i: number) => `${quarterLabel(periods[i])}: ${lines.map(l => `${l.label} ${showCell(l.points[i]?.cell, unit, { decimals: "stored" }).text}`).join(", ")}`;
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!periods.length) return;

@@ -175,7 +175,7 @@ export function ObTimelineView({ data }: { data: CompanyPatents }) {
           <ol className="divide-y text-[13px]">
             {upcoming.map(e => (
               <li key={`${e.appl}-${e.kind}-${e.day}`} className="flex min-h-7 flex-wrap items-baseline gap-x-2 py-1">
-                <span className="num w-[92px] shrink-0">{e.printed}</span>
+                <span className="num w-[6.75rem] shrink-0 whitespace-nowrap">{e.printed}</span>
                 <span className="font-medium">{tradeOf(e.appl)}</span>
                 <span className="min-w-0 flex-1 text-[11px] text-muted-foreground">
                   {KIND_WORD[e.kind].toLowerCase()}, {e.items.join(", ")}
