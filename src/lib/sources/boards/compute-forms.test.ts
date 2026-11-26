@@ -268,7 +268,14 @@ describe("distribution", () => {
     if (r.shape?.kind !== "distribution") throw new Error("shape");
     expect(r.shape.count).toBe(496);
     expect(r.shape.bins?.reduce((s, b) => s + b.count, 0)).toBe(496);
-    expect(r.shape.bins?.map((b) => b.label)).toEqual(["1000000 to 5000000", "5000000 to 10000000", "10000000 to 50000000", "50000000 and above"]);
+    expect(r.shape.bins?.map((b) => b.label)).toEqual(["1,000,000 to 5,000,000", "5,000,000 to 10,000,000", "10,000,000 to 50,000,000", "50,000,000 and above"]);
+    // the edges stay decimal text in the unit as filed, for the chart's scale
+    expect(r.shape.bins?.map((b) => [b.from, b.to])).toEqual([
+      ["1000000", "5000000"],
+      ["5000000", "10000000"],
+      ["10000000", "50000000"],
+      ["50000000", null],
+    ]);
     expect(r.derivation?.inputs).toHaveLength(2);
   });
 

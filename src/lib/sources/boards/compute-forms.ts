@@ -543,10 +543,12 @@ export function computeDistributionTile(spec: DistributionTileSpec, context: Til
       if (compareDecimal(edges[i - 1]!, edges[i]!) >= 0) return refuse("The bin edges must rise.");
     const e = edges as Decimal[];
     const texts = spec.draw.edges;
+    // labels print each edge as the figures are printed, digits grouped ("1,000,000"), never rescaled
+    const said = e.map((d) => formatDecimal(d, { decimals: spec.decimals }));
     const buckets: { from: string | null; to: string | null; label: string; members: { name: string; value: Decimal }[] }[] = [
-      { from: null, to: texts[0], label: `below ${texts[0]}`, members: [] },
-      ...texts.slice(0, -1).map((t, i) => ({ from: t, to: texts[i + 1], label: `${t} to ${texts[i + 1]}`, members: [] as { name: string; value: Decimal }[] })),
-      { from: texts[texts.length - 1], to: null, label: `${texts[texts.length - 1]} and above`, members: [] },
+      { from: null, to: texts[0], label: `below ${said[0]}`, members: [] },
+      ...texts.slice(0, -1).map((t, i) => ({ from: t, to: texts[i + 1], label: `${said[i]} to ${said[i + 1]}`, members: [] as { name: string; value: Decimal }[] })),
+      { from: texts[texts.length - 1], to: null, label: `${said[said.length - 1]} and above`, members: [] },
     ];
     for (const v of sorted) {
       let at = 0;
