@@ -9,7 +9,7 @@ import { sourceQueries } from "@/lib/sources/queries";
 import { SERIES_SURE_LIMIT, type SourcePoint } from "@/lib/sources/read-types";
 import type { SourceSnapshot } from "@/lib/sources/schema";
 import { cn } from "@/lib/utils";
-import { lastYears, levelSpec, seriesCells, seriesPlan, tileContext } from "./first-look-model";
+import { holdsRange, lastYears, levelSpec, rowsFromEnd, seriesCells, seriesPlan, tileContext } from "./first-look-model";
 import { count } from "./dataset-model";
 import { AWAITS_UPDATE } from "./coverage-view";
 import { PANEL, QuietLine } from "./ui/primitives";
@@ -25,7 +25,9 @@ export const rowOf = (href: string): number | null => {
 
 /**
  * One measure over time for one series, drawn only from a reviewed profile: the unit as the profile establishes
- * it, periods by the profile's format and cadence, a gap never drawn as zero. Every point opens its record.
+ * it, periods by the profile's format and cadence, a gap never drawn as zero. Every point opens its record. A
+ * series longer than one read holds is read from its end when its profile says so (its latest rows, in date
+ * order): then only a range those rows hold whole is drawn, and the caption says how many of the records it read.
  */
 export function SeriesView({
   datasetId,
@@ -49,9 +51,17 @@ export function SeriesView({
   onOpen: (row: number) => void;
 }) {
   const plan = useMemo(() => seriesPlan(profile, snapshot.columns, measure, address), [profile, snapshot.columns, measure, address]);
+  const fromEnd = rowsFromEnd(profile, address);
   const reads = useQueries({
     queries: (plan.ok ? plan.positions : []).map((field) => ({
-      ...sourceQueries.series({ datasetId, snapshotId: snapshot.id, field, address: plan.ok ? plan.read : { whole: true }, limit: SERIES_LIMIT }),
+      ...sourceQueries.series({
+        datasetId,
+        snapshotId: snapshot.id,
+        field,
+        address: plan.ok ? plan.read : { whole: true },
+        limit: fromEnd ?? SERIES_LIMIT,
+        ...(fromEnd !== undefined ? { last: fromEnd } : {}),
+      }),
     })),
   });
   const pending = reads.some((r) => r.isPending);
@@ -80,14 +90,26 @@ export function SeriesView({
   if (!result) return <span className="block h-[17rem] animate-pulse rounded-md bg-muted/60" aria-label="Reading the series" />;
   if (!result.ok) return <QuietLine>{result.reason}</QuietLine>;
 
-  const points = lastYears(result.points, range);
+  // rows before the read were not read: "All" is not offered for such a series, and a range is drawn only whole
+  const partial = fromEnd !== undefined && snapshot.loaded_rows > fromEnd;
+  const shown = partial && range === "all" ? "10y" : range;
+  if (partial && !holdsRange(result.points, shown))
+    return (
+      <QuietLine>
+        The latest {count(result.points.length)} of {count(snapshot.loaded_rows)} records reach back to {result.points[0]?.label}, short of the{" "}
+        {shown === "5y" ? "5" : "10"} years asked for. The records table holds every one.
+      </QuietLine>
+    );
+  const points = lastYears(result.points, shown);
   const latest = result.points[result.points.length - 1];
   const gaps = result.gaps.count;
   return (
     <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Series">
       <p className="text-[13px] font-medium leading-5">{result.headline}</p>
       <p className="mb-2 text-[11px] leading-4 text-muted-foreground">
-        {measure.label}, {result.plotUnit}. {count(result.points.length)} periods, {result.points[0]?.label} to {result.asOf}
+        {measure.label}, {result.plotUnit}.{" "}
+        {partial ? `The latest ${count(result.points.length)} of ${count(snapshot.loaded_rows)} records, read from the end of the file` : `${count(result.points.length)} periods`},{" "}
+        {result.points[0]?.label} to {result.asOf}
         {gaps ? `; ${count(gaps)} without a figure (${[result.gaps.markers ? `${count(result.gaps.markers)} marked` : null, result.gaps.empties ? `${count(result.gaps.empties)} empty` : null, result.gaps.texts ? `${count(result.gaps.texts)} as text` : null, result.gaps.nulls ? `${count(result.gaps.nulls)} missing` : null].filter(Boolean).join(", ")}), left out, never drawn as zero` : ""}.
       </p>
       {view === "chart" ? (

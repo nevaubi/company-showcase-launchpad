@@ -216,12 +216,34 @@ export function chosenMeasure(profile: Profile, look: LookState | undefined): Me
   return profile.measures.find((m) => m.field === look?.m) ?? profile.measures[0];
 }
 
+/** The date a range of N years before `last` starts after: the same day N years earlier. */
+const rangeStart = (last: string, range: "5y" | "10y") => `${Number(last.slice(0, 4)) - (range === "5y" ? 5 : 10)}${last.slice(4)}`;
+
 /** Points of the last N years of a dated series ("all": every point). */
 export function lastYears<T extends { date?: string }>(points: readonly T[], range: "5y" | "10y" | "all"): T[] {
   if (range === "all" || !points.length) return [...points];
   const last = points[points.length - 1].date;
   if (!last) return [...points];
-  const years = range === "5y" ? 5 : 10;
-  const from = `${Number(last.slice(0, 4)) - years}${last.slice(4)}`;
+  const from = rangeStart(last, range);
   return points.filter((p) => !p.date || p.date > from);
+}
+
+/**
+ * Whether points read from the end of a series hold the whole range: the first point read is on or before the day
+ * the range starts after, so no observation of the range lies in the rows that were not read. "all" never holds.
+ */
+export function holdsRange<T extends { date?: string }>(points: readonly T[], range: "5y" | "10y" | "all"): boolean {
+  if (range === "all" || !points.length) return false;
+  const first = points[0].date;
+  const last = points[points.length - 1].date;
+  if (!first || !last) return false;
+  return first <= rangeStart(last, range);
+}
+
+/**
+ * The rows a series view reads from the end of the snapshot, or undefined to read it from its first row: only a
+ * whole-snapshot series whose profile reads its latest rows (a FRED daily file longer than one read holds).
+ */
+export function rowsFromEnd(profile: Pick<Profile, "addressing">, address: SeriesAddress): number | undefined {
+  return profile.addressing.scan === "latest" && "whole" in address ? profile.addressing.rowsScanned : undefined;
 }

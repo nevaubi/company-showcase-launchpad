@@ -15,7 +15,7 @@ import { CoverageView } from "./coverage-view";
 import { variesByRow } from "./dataset-model";
 import { readData } from "./dataset-queries";
 import type { LookState } from "./dataset-search";
-import { chosenAddress, chosenMeasure } from "./first-look-model";
+import { chosenAddress, chosenMeasure, rowsFromEnd } from "./first-look-model";
 import { PlaceView } from "./place-view";
 import { RankingView } from "./ranking-view";
 import { SeriesView } from "./series-view";
@@ -131,7 +131,9 @@ function Measured({
 }) {
   const measure = chosenMeasure(profile, look);
   const address = useMemo(() => chosenAddress(profile, dataset.id, dataset.source_id, look), [profile, dataset.id, dataset.source_id, look]);
-  const range = look?.r ?? "10y";
+  // a series read from its end (its latest rows) holds no "All": the earliest records are not read
+  const fromEnd = address !== null && rowsFromEnd(profile, address) !== undefined;
+  const range = fromEnd && look?.r === "all" ? "10y" : (look?.r ?? "10y");
   const top = look?.n === "40" ? 40 : 15;
   const picker = profile.firstLook === "series" && (profile.addressing.by || profile.addressing.where.length > 0);
   return (
@@ -154,7 +156,7 @@ function Measured({
             options={[
               { v: "5y", l: "5 years" },
               { v: "10y", l: "10 years" },
-              { v: "all", l: "All" },
+              ...(fromEnd ? [] : [{ v: "all" as const, l: "All" }]),
             ]}
           />
         )}

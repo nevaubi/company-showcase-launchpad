@@ -87,7 +87,12 @@ function DatasetBody({
       }),
     [dataset, snapshot.loaded_rows, snapshot.retrieved_at],
   );
-  const profile = useMemo(() => profileStatus(dataset, snapshot.columns), [dataset, snapshot.columns]);
+  // The snapshot's retrieval time goes with the dataset: a series whose publisher changed its unit is drawn only
+  // from the snapshots retrieved on the new one.
+  const profile = useMemo(
+    () => profileStatus({ id: dataset.id, source_id: dataset.source_id, retrievedAt: snapshot.retrieved_at }, snapshot.columns),
+    [dataset.id, dataset.source_id, snapshot.retrieved_at, snapshot.columns],
+  );
   const dims = useMemo(() => recordDims(snapshot.ingest), [snapshot.ingest]);
   const varies = {
     entity: variesByRow(snapshot.ingest, "entity"),

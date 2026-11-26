@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SERIES_SURE_LIMIT } from "../read-types";
 import type { SourceColumn } from "../schema";
-import { FRED_REFUSED, FRED_SERIES, fredSeries } from "./fred";
+import { FRED_REFUSED, FRED_SERIES, fredSeries, heldFor } from "./fred";
 import {
   PROFILE_ENTRIES,
   defineProfile,
@@ -167,20 +167,31 @@ describe("series addresses", () => {
 /**
  * What production and FRED said when each FRED profile was checked (fred.checks.json): every FRED series
  * file of the store with its latest snapshot and its row in the store's series catalogue, FRED's series page,
- * and for each profiled series the snapshot it was proven on and the values check of its last 24 rows.
+ * and for each profiled series the snapshot it was proven on and the values check of its last 24 rows. The
+ * fred2 check of 26 Nov 2026 adds, for the 23 it profiled, the retrieval time, a check of every stored row
+ * (`whole`), for a series over 4,999 rows the last 4,999 (`window`), and for the rebased series FRED's page
+ * fetched again (`pageNow`).
  */
+type FredPage = { unit: string; adjustment: string; frequency: string; title: string };
 type FredDatasetFact = {
   datasetId: string;
   latestSnapshotId: string;
   latestRows: number;
   retrievedAt: string;
   catalogue: { unit: string; frequency: string; adjustment: string };
-  page: { unit: string; adjustment: string; frequency: string; title: string };
+  page: FredPage;
+  pageNow?: FredPage & { updated: string; retrievedAt: string };
+  listedAt?: string;
 };
+type Window = { rows: [number, number]; periods: [string, string]; equal: number; of: number; empty: number; null: number };
 type FredCheck = {
   snapshotId: string;
   rows: number;
-  values: { rows: [number, number]; periods: [string, string]; equal: number; of: number; empty: number; null: number } | null;
+  retrievedAt?: string;
+  values: Window | null;
+  whole?: Window & { ordered: boolean };
+  window?: Window;
+  dates?: { weekday: string; apartDays: number; of: number };
   by: string;
 };
 const FRED_FACTS = JSON.parse(readFileSync("src/lib/sources/profiles/fred.checks.json", "utf8")) as {
@@ -189,11 +200,15 @@ const FRED_FACTS = JSON.parse(readFileSync("src/lib/sources/profiles/fred.checks
 };
 
 /** FRED's "Frequency:" as the cadence a profile declares; null for a frequency no FRED profile reads. */
-function cadenceOfFrequency(frequency: string): { cadence: Cadence; weekEnding?: string } | null {
+function cadenceOfFrequency(frequency: string): { cadence: Cadence; weekEnding?: string; asOf?: string } | null {
   if (frequency === "Monthly" || frequency === "Monthly, End of Period") return { cadence: "month" };
   if (frequency === "Quarterly") return { cadence: "quarter" };
+  if (frequency === "Daily" || frequency === "Daily, 7-Day") return { cadence: "day" };
   const week = /^Weekly, Ending (Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/.exec(frequency);
-  return week ? { cadence: "week", weekEnding: week[1] } : null;
+  if (week) return { cadence: "week", weekEnding: week[1] };
+  // a level as of one weekday is that day's figure, not a week's: it is dated by its own day
+  const asOf = /^Weekly, As of (Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/.exec(frequency);
+  return asOf ? { cadence: "day", asOf: asOf[1] } : null;
 }
 
 /** A FRED series file's dictionary as production stores it. */
@@ -201,6 +216,8 @@ const fredColumns = (code: string): SourceColumn[] => [
   { key: "col0001", label: "observation_date", type: "string" },
   { key: "col0002", label: code, type: "string" },
 ];
+
+const plusYears = (date: string, years: number) => `${Number(date.slice(0, 4)) + years}${date.slice(4)}`;
 
 describe("FRED series profiles", () => {
   it("lists each series once and none that was refused", () => {
@@ -217,21 +234,39 @@ describe("FRED series profiles", () => {
     expect(s.datasetId).toBe(fact.datasetId);
     expect(s.snapshotId).toBe(check.snapshotId);
     expect(s.rows).toBe(check.rows);
-    // the unit as FRED's page states it, equal to the store's catalogue row retrieved with the data
-    expect(s.unit).toBe(fact.page.unit);
-    expect(s.unit).toBe(fact.catalogue.unit);
-    expect(s.adjustment).toBe(fact.page.adjustment);
-    expect(fact.catalogue.adjustment).toBe(`${s.unit} , ${s.adjustment}`);
-    expect(fact.catalogue.frequency).toBe(fact.page.frequency);
-    expect(cadenceOfFrequency(fact.page.frequency)).toEqual(s.weekEnding ? { cadence: s.cadence, weekEnding: s.weekEnding } : { cadence: s.cadence });
-    // a first look reads the whole series
-    expect(s.rows).toBeLessThanOrEqual(SERIES_SURE_LIMIT);
+    // the unit as FRED's page states it; the page fetched again where FRED changed the unit after the first retrieval
+    const page = fact.pageNow ?? fact.page;
+    expect(s.unit).toBe(page.unit);
+    expect(s.adjustment).toBe(page.adjustment);
+    expect(s.title).toBe(page.title);
+    expect(fact.catalogue.frequency).toBe(page.frequency);
+    if (s.retrievedFrom) {
+      // the store's catalogue was retrieved with the earlier snapshot, on the old unit; only the unit differs
+      expect(fact.pageNow).toBeDefined();
+      expect(fact.catalogue.unit).not.toBe(s.unit);
+      expect(fact.catalogue.adjustment).toBe(`${fact.catalogue.unit} , ${s.adjustment}`);
+    } else {
+      // equal to the store's catalogue row retrieved with the data
+      expect(s.unit).toBe(fact.catalogue.unit);
+      expect(fact.catalogue.adjustment).toBe(`${s.unit} , ${s.adjustment}`);
+    }
+    const expected: { cadence: Cadence; weekEnding?: string; asOf?: string } = { cadence: s.cadence };
+    if (s.weekEnding) expected.weekEnding = s.weekEnding;
+    if (s.asOf) expected.asOf = s.asOf;
+    expect(cadenceOfFrequency(page.frequency)).toEqual(expected);
     if (check.values) {
       expect(check.values.of).toBe(24);
       expect(check.values.equal).toBe(check.values.of);
       expect(check.values.rows).toEqual([check.rows - 23, check.rows]);
     }
-    const status = profileStatus({ id: s.datasetId, source_id: `FRED_${code}` }, fredColumns(code));
+    if (check.whole) {
+      expect(check.whole.rows).toEqual([1, check.rows]);
+      expect(check.whole.of).toBe(check.rows);
+      expect(check.whole.equal).toBe(check.rows);
+      expect(check.whole.ordered).toBe(true);
+    }
+    const dataset = { id: s.datasetId, source_id: `FRED_${code}`, retrievedAt: check.retrievedAt ?? fact.retrievedAt };
+    const status = profileStatus(dataset, fredColumns(code));
     expect(status.state).toBe("on");
     if (status.state !== "on") return;
     expect(status.profile.cadence).toBe(s.cadence);
@@ -239,37 +274,20 @@ describe("FRED series profiles", () => {
     const measure = measureOf(status.profile, code);
     expect(measure?.label).toBe(s.title);
     expect(measure ? unitOf(measure, fredColumns(code)) : null).toEqual({ ok: true, text: s.unit });
+    // a first look reads the whole series, or the latest rows of one that is longer than a read holds
+    if (s.rows <= SERIES_SURE_LIMIT) expect(status.profile.addressing).toMatchObject({ scan: "table", rowsScanned: s.rows });
+    else expect(status.profile.addressing).toMatchObject({ scan: "latest", rowsScanned: SERIES_SURE_LIMIT });
   });
 
-  it.each(Object.entries(FRED_REFUSED))("%s is refused for a plain reason and gets no profile", (code, reason) => {
-    const fact = FRED_FACTS.datasets[code];
-    expect(fact).toBeDefined();
-    expect(reason.length).toBeGreaterThan(40);
-    expect(reason).not.toMatch(/\u2014/);
-    const dataset = { id: fact.datasetId, source_id: `FRED_${code}` };
-    expect(fredSeries(dataset)).toBeNull();
-    expect(profileStatus(dataset, fredColumns(code))).toEqual({ state: "none" });
-  });
-
-  it("refuses a rebased index only where the catalogue and FRED's page disagree on the base", () => {
-    const rebased = Object.entries(FRED_REFUSED).filter(([, reason]) => /Index 2022=100/.test(reason));
-    expect(rebased.map(([code]) => code).sort()).toEqual(
-      ["INDPRO", "IPG311A2S", "IPG322S", "IPG325S", "IPG332S", "IPG333S", "IPG3361T3S", "IPG3364S", "IPMAN"],
-    );
-    for (const [code] of rebased) {
-      expect(FRED_FACTS.datasets[code].catalogue.unit).toBe("Index 2017=100");
-      expect(FRED_FACTS.datasets[code].page.unit).toBe("Index 2022=100");
-    }
-  });
-
-  it("refuses a series longer than a first look reads, with its row count", () => {
-    const long = Object.entries(FRED_REFUSED).filter(([, reason]) => /a first look reads at most 4,999 records/.test(reason));
-    expect(long.map(([code]) => code).sort()).toEqual(["DEXCHUS", "DEXJPUS", "DEXUSEU", "DFF", "DTWEXBGS"]);
-    expect(SERIES_SURE_LIMIT).toBe(4999);
-    for (const [code, reason] of long) {
+  it("refuses for a plain reason and gives no profile to every series it lists as refused", () => {
+    for (const [code, reason] of Object.entries(FRED_REFUSED)) {
       const fact = FRED_FACTS.datasets[code];
-      expect(fact.latestRows).toBeGreaterThan(SERIES_SURE_LIMIT);
-      expect(reason).toContain(`${fact.page.frequency} series of ${fact.latestRows.toLocaleString("en-US")} rows`);
+      expect(fact).toBeDefined();
+      expect(reason.length).toBeGreaterThan(40);
+      expect(reason).not.toMatch(/\u2014/);
+      const dataset = { id: fact.datasetId, source_id: `FRED_${code}` };
+      expect(fredSeries(dataset)).toBeNull();
+      expect(profileStatus(dataset, fredColumns(code))).toEqual({ state: "none" });
     }
   });
 
@@ -279,22 +297,75 @@ describe("FRED series profiles", () => {
     expect(codes).toHaveLength(119);
     for (const code of codes) expect(Number(profiled.has(code)) + Number(code in FRED_REFUSED)).toBe(1);
     for (const code of [...profiled, ...Object.keys(FRED_REFUSED)]) expect(codes).toContain(code);
+    expect(Object.keys(FRED_REFUSED)).toEqual([]);
   });
 
-  it("refuses a series FRED revised after the retrieval until a refreshed snapshot is checked", () => {
-    const revised = Object.entries(FRED_REFUSED).filter(([, reason]) => /FRED updated the series on 25 Nov 2026/.test(reason));
-    expect(revised.map(([code]) => code).sort()).toEqual(["ALTSALES", "AMDMTI", "AMDMVS", "CCSA", "HTRUCKSSAAR", "NEWORDER", "PCEDG", "PCES"]);
-    for (const [code] of revised) {
-      const fact = FRED_FACTS.datasets[code];
-      expect(fact.retrievedAt.startsWith("2026-11-24")).toBe(true);
-      // the unit is not the reason: catalogue and page agree
-      expect(fact.catalogue.unit).toBe(fact.page.unit);
+  it("reads a daily series longer than a first look holds from its end, and its latest 4,999 rows cover ten years", () => {
+    const long = FRED_SERIES.filter((s) => s.rows > SERIES_SURE_LIMIT);
+    expect(long.map((s) => s.code).sort()).toEqual(["DEXCHUS", "DEXJPUS", "DEXUSEU", "DFF", "DTWEXBGS"]);
+    expect(SERIES_SURE_LIMIT).toBe(4999);
+    for (const s of long) {
+      const check = FRED_FACTS.checks[s.code];
+      expect(s.cadence).toBe("day");
+      // every row in date order: the last rows of the file are its latest observations
+      expect(check.whole?.ordered).toBe(true);
+      expect(check.window).toBeDefined();
+      if (!check.window) continue;
+      expect(check.window.rows).toEqual([s.rows - SERIES_SURE_LIMIT + 1, s.rows]);
+      expect(check.window.equal).toBe(SERIES_SURE_LIMIT);
+      expect(check.window.of).toBe(SERIES_SURE_LIMIT);
+      expect(plusYears(check.window.periods[0], 10) <= check.window.periods[1]).toBe(true);
     }
   });
 
-  it("refuses WALCL because FRED dates it as a Wednesday level, not a week ending", () => {
+  it("dates WALCL by its own day, the level as of each Wednesday, never as a week ending", () => {
+    const walcl = FRED_SERIES.find((s) => s.code === "WALCL");
+    expect(walcl).toMatchObject({ cadence: "day", asOf: "Wednesday" });
+    expect(walcl?.weekEnding).toBeUndefined();
     expect(FRED_FACTS.datasets.WALCL.page.frequency).toBe("Weekly, As of Wednesday");
-    expect(cadenceOfFrequency(FRED_FACTS.datasets.WALCL.page.frequency)).toBeNull();
-    expect(FRED_REFUSED.WALCL).toContain("As of Wednesday");
+    expect(FRED_FACTS.checks.WALCL.dates).toEqual({ weekday: "Wednesday", apartDays: 7, of: FRED_FACTS.checks.WALCL.rows });
+    const status = profileStatus({ id: FRED_FACTS.datasets.WALCL.datasetId, source_id: "FRED_WALCL" }, fredColumns("WALCL"));
+    expect(status.state === "on" && status.profile.cadence).toBe("day");
+  });
+
+  it("draws a rebased index only from snapshots retrieved on its new base", () => {
+    const rebased = FRED_SERIES.filter((s) => s.retrievedFrom);
+    expect(rebased.map((s) => s.code).sort()).toEqual(
+      ["INDPRO", "IPG311A2S", "IPG322S", "IPG325S", "IPG332S", "IPG333S", "IPG3361T3S", "IPG3364S", "IPMAN"],
+    );
+    for (const s of rebased) {
+      const fact = FRED_FACTS.datasets[s.code];
+      const check = FRED_FACTS.checks[s.code];
+      expect(s.unit).toBe("Index 2022=100");
+      expect(fact.catalogue.unit).toBe("Index 2017=100");
+      expect(fact.pageNow?.unit).toBe("Index 2022=100");
+      // FRED's update (CST) came after the store's first retrieval and before the checked one
+      expect(fact.pageNow?.updated).toMatch(/^Nov 24, 2026 11:0[5-8] AM CST$/);
+      expect(s.retrievedFrom).toBe(check.retrievedAt);
+      expect(Date.parse(s.retrievedFrom ?? "")).toBeGreaterThan(Date.parse("2026-11-24T17:08:00Z"));
+      expect(check.whole?.equal).toBe(check.rows);
+      const columns = fredColumns(s.code);
+      const at = (retrievedAt: string | null | undefined) => profileStatus({ id: s.datasetId, source_id: `FRED_${s.code}`, retrievedAt }, columns).state;
+      expect(at(s.retrievedFrom)).toBe("on");
+      expect(at("2026-11-27T06:00:00.123456+00:00")).toBe("on");
+      // the first retrieval, on the 2017 base, and a snapshot whose retrieval is not known get no chart
+      expect(at("2026-11-24T09:58:23Z")).toBe("none");
+      expect(at(new Date(Date.parse(s.retrievedFrom ?? "") - 1000).toISOString())).toBe("none");
+      expect(at(null)).toBe("none");
+      expect(at(undefined)).toBe("none");
+      expect(at("not a time")).toBe("none");
+    }
+    expect(heldFor({}, null)).toBe(true);
+  });
+
+  it("profiles the series FRED revised after the first retrieval on the snapshots retrieved after the revision", () => {
+    for (const code of ["ALTSALES", "AMDMTI", "AMDMVS", "CCSA", "HTRUCKSSAAR", "NEWORDER", "PCEDG", "PCES"]) {
+      const s = FRED_SERIES.find((x) => x.code === code);
+      const check = FRED_FACTS.checks[code];
+      expect(s?.snapshotId).toBe(check.snapshotId);
+      expect(check.retrievedAt?.startsWith("2026-11-26")).toBe(true);
+      expect(check.whole?.equal).toBe(check.rows);
+      expect(s?.retrievedFrom).toBeUndefined();
+    }
   });
 });

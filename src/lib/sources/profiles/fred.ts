@@ -1,3 +1,4 @@
+import { SERIES_SURE_LIMIT } from "../read-types";
 import { defineProfile } from "./define";
 import type { Cadence, Profile, ProfileDataset, ProfileEntry } from "./types";
 
@@ -7,11 +8,13 @@ import type { Cadence, Profile, ProfileDataset, ProfileEntry } from "./types";
  * and no type, so a series is drawn only when it is listed here with the unit FRED states on its series
  * page, checked against that page, the store's own series catalogue (retrieved with the data) and FRED's
  * graph file (every stored value of the checked window equal, or a later revision named in the report).
- * The first 19 were checked on 25 Nov 2026 (boards report), the rest on 26 Nov 2026 (fred report: the
- * last 24 stored rows of each equal FRED's file). A series that is not listed gets no measure chart.
+ * The first 19 were checked on 25 Nov 2026 (boards report), 77 on 26 Nov 2026 (fred report: the last 24
+ * stored rows of each equal FRED's file), the last 23 later that day (fred2 report: every stored row equal
+ * FRED's file). Every FRED series file of the store is listed. A series that is not gets no measure chart.
  *
  * FRED dates every observation by the first day of its period (a month, a quarter) or, for a weekly
- * series, by the day the week ends; the cadence says which, so "2026-10-01" is read as Oct 2026.
+ * series, by the day the week ends; the cadence says which, so "2026-10-01" is read as Oct 2026. A daily
+ * series, and a weekly level as of one weekday (WALCL, the Wednesday level), is dated by its own day.
  */
 export type FredSeries = {
   code: string;
@@ -24,10 +27,17 @@ export type FredSeries = {
   cadence: Cadence;
   /** For a weekly series: the day each week ends, as FRED states the frequency. */
   weekEnding?: string;
+  /** For a weekly level ("Weekly, As of Wednesday"): the weekday each observation is the level of; the cadence is "day". */
+  asOf?: string;
+  /**
+   * The profile holds only for snapshots retrieved at or after this time (ISO 8601, the checked snapshot's
+   * retrieval): FRED changed the series' unit before it, and earlier snapshots of the dataset are on the old one.
+   */
+  retrievedFrom?: string;
   /** The snapshot the check read. */
   snapshotId: string;
   datasetId: string;
-  /** Rows of that snapshot: the whole series is read in row order. */
+  /** Rows of that snapshot. Up to 4,999 the whole series is read in row order; beyond, its latest 4,999 rows. */
   rows: number;
 };
 
@@ -139,57 +149,58 @@ const CHECKED_26_NOV: readonly FredSeries[] = [
   { code: "TCU", title: "Capacity Utilization: Total Index", unit: "Percent", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "f741dd4eb8c722b7facadddc9cac13aa6dbc57d5c43c4d9fa1514962831528f1", datasetId: "official_00_universal_raw_fred_tcu_5e58bb3c88", rows: 322 },
 ];
 
-export const FRED_SERIES: readonly FredSeries[] = [...CHECKED_25_NOV, ...CHECKED_26_NOV];
+/**
+ * Checked later on 26 Nov 2026 (fred2 report), the 23 the first check refused, each on its latest snapshot with
+ * every stored row equal to FRED's graph file of 26 Nov 2026 02:16 UTC:
+ * - eight series FRED revised on 24 and 25 Nov, on the snapshots the refresh retrieved on 26 Nov;
+ * - five daily series longer than one read holds (7,015 to 9,825 rows): rows in date order, so a first look reads
+ *   their latest 4,999 rows from the end, which reach back to 2013 (DFF) or 2007, and offers 5 and 10 years;
+ * - WALCL, the level as of each Wednesday (every stored date a Wednesday, seven days apart), dated by its own day;
+ * - nine industrial production series FRED rebased to Index 2022=100 on 24 Nov 2026 (11:05 to 11:08 AM CST), after
+ *   the store's first retrieval (09:58 UTC, on Index 2017=100, as the store's series catalogue of that retrieval
+ *   states): drawn only from snapshots retrieved at or after the checked one, all on the 2022 base.
+ */
+const CHECKED_26_NOV_LATER: readonly FredSeries[] = [
+  { code: "ALTSALES", title: "Light Weight Vehicle Sales: Autos and Light Trucks", unit: "Millions of Units", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "94fa65613c6154d4261ce9feb2ccda6d50ccb09adec413f880991529d607249b", datasetId: "official_08_consumer_discretionary_raw_fred_altsales_57a2f199b6", rows: 322 },
+  { code: "AMDMTI", title: "Manufacturers' Total Inventories: Durable Goods", unit: "Millions of Dollars", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "7671abc457a6af247b9f64676d2bfb94e635fb0d048798537ed35bb8d8fe5f8c", datasetId: "official_06_industrials_raw_fred_amdmti_27ff644024", rows: 322 },
+  { code: "AMDMVS", title: "Manufacturers' Value of Shipments: Durable Goods", unit: "Millions of Dollars", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "cd47e65891fac29b010f91da93ace90372f3af4b4caaeaad2f951d73828ead0e", datasetId: "official_06_industrials_raw_fred_amdmvs_946d874585", rows: 322 },
+  { code: "CCSA", title: "Continued Claims (Insured Unemployment)", unit: "Number", adjustment: "Seasonally Adjusted", cadence: "week", weekEnding: "Saturday", snapshotId: "08c3872189349f05ed4f58e1d8802e503317cec33b71d5ccc461ed7c2d7f5af4", datasetId: "official_00_universal_raw_fred_ccsa_1f53c3efc9", rows: 1403 },
+  { code: "HTRUCKSSAAR", title: "Motor Vehicle Retail Sales: Heavy Weight Trucks", unit: "Millions of Units", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "46eaf52271b13a7f69ad29dae545989d053582773cdb91946a95de1891d42877", datasetId: "official_08_consumer_discretionary_raw_fred_htruckssaar_f2e6454dd7", rows: 322 },
+  { code: "NEWORDER", title: "Manufacturers' New Orders: Nondefense Capital Goods Excluding Aircraft", unit: "Millions of Dollars", adjustment: "Seasonally Adjusted", cadence: "month", snapshotId: "27a0164eff0f909e1d81cdbfa0cb432f595814e2796d0e09f8073a681c13e8d8", datasetId: "official_06_industrials_raw_fred_neworder_337e137569", rows: 322 },
+  { code: "PCEDG", title: "Personal Consumption Expenditures: Durable Goods", unit: "Billions of Dollars", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "9abf9a47a288dd81a212867f35d1e4f323b760b04f89a4404cc01933e947b9dc", datasetId: "official_08_consumer_discretionary_raw_fred_pcedg_a9b42f8a40", rows: 322 },
+  { code: "PCES", title: "Personal Consumption Expenditures: Services", unit: "Billions of Dollars", adjustment: "Seasonally Adjusted Annual Rate", cadence: "month", snapshotId: "b1585c36f8b14b248f10b8075259e164cb602d64fa90052f8f1177458caa7d24", datasetId: "official_08_consumer_discretionary_raw_fred_pces_63dce14440", rows: 322 },
+  { code: "DEXCHUS", title: "Chinese Yuan Renminbi to U.S. Dollar Spot Exchange Rate", unit: "Chinese Yuan Renminbi to One U.S. Dollar", adjustment: "Not Seasonally Adjusted", cadence: "day", snapshotId: "2b38ef5030cf38806ee3d9adcea56502f21e7e66727f30298a470d278b6fc414", datasetId: "official_00_universal_raw_fred_dexchus_a79759fb8b", rows: 7015 },
+  { code: "DEXJPUS", title: "Japanese Yen to U.S. Dollar Spot Exchange Rate", unit: "Japanese Yen to One U.S. Dollar", adjustment: "Not Seasonally Adjusted", cadence: "day", snapshotId: "14566ee15275352307608643c902b5ad96fd30ee80301ce2148dc9b69a78d443", datasetId: "official_00_universal_raw_fred_dexjpus_79e0cc8584", rows: 7015 },
+  { code: "DEXUSEU", title: "U.S. Dollars to Euro Spot Exchange Rate", unit: "U.S. Dollars to One Euro", adjustment: "Not Seasonally Adjusted", cadence: "day", snapshotId: "082091bd4d1b6e67a14afe96ecea60cbae3811c6679ccbaf70e1105ff8e5e880", datasetId: "official_00_universal_raw_fred_dexuseu_50393f32a2", rows: 7015 },
+  { code: "DFF", title: "Federal Funds Effective Rate", unit: "Percent", adjustment: "Not Seasonally Adjusted", cadence: "day", snapshotId: "2f0c1bc4083f6fb2900cf11ac44b290ed098f6405b9ff4e0307bf7320b6cfcb4", datasetId: "official_00_universal_raw_fred_dff_32ca79c588", rows: 9825 },
+  { code: "DTWEXBGS", title: "Nominal Broad U.S. Dollar Index", unit: "Index Jan 2006=100", adjustment: "Not Seasonally Adjusted", cadence: "day", snapshotId: "22e61c16c8334c1da9f6b268fb7021be3795787833c4537ea89f4f8e4094e8bc", datasetId: "official_00_universal_raw_fred_dtwexbgs_3c769ab77c", rows: 5450 },
+  { code: "WALCL", title: "Assets: Total Assets: Total Assets (Less Eliminations from Consolidation): Wednesday Level", unit: "Millions of U.S. Dollars", adjustment: "Not Seasonally Adjusted", cadence: "day", asOf: "Wednesday", snapshotId: "09d49d287ad0c43e572789b6c34675699b3cac50fb6ab73409f0e28a260f1e9a", datasetId: "official_00_universal_raw_fred_walcl_4d8c1ea111", rows: 1249 },
+  { code: "IPMAN", title: "Industrial Production: Manufacturing (NAICS)", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:57:53Z", snapshotId: "57de63c66b46651321c93d7dc6dbe8d0ed1f05dc3d73fac391fcd90e9114db26", datasetId: "official_06_industrials_raw_fred_ipman_8de63a9deb", rows: 322 },
+  { code: "INDPRO", title: "Industrial Production: Total Index", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:36:03Z", snapshotId: "0176808d34c4a14b2c7d0e070f37e0920cf2703ef4cd726f6f31797dd3b7fff1", datasetId: "official_00_universal_raw_fred_indpro_be760cd23c", rows: 322 },
+  { code: "IPG311A2S", title: "Industrial Production: Manufacturing: Nondurable Goods: Food, Beverage, and Tobacco (NAICS = 311,2)", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:02:55Z", snapshotId: "7b61673c126833330ea55db7488d1727b18afc4b9e9f4c4a135d7bc3229c7349", datasetId: "official_09_consumer_staples_raw_fred_ipg311a2s_14367c7736", rows: 322 },
+  { code: "IPG322S", title: "Industrial Production: Manufacturing: Nondurable Goods: Paper (NAICS = 322)", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:02:57Z", snapshotId: "80e84e82818cf1ce3172194956db70f7dccdcb78a3241edadff2a6f02e7deba9", datasetId: "official_09_consumer_staples_raw_fred_ipg322s_a3f1e6f145", rows: 322 },
+  { code: "IPG325S", title: "Industrial Production: Manufacturing: Nondurable Goods: Chemical (NAICS = 325)", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:03:00Z", snapshotId: "4f7ce4c3ffa83275d9f1ed01df300d9cc27127ac24f58c340f502cb7abe76c3b", datasetId: "official_09_consumer_staples_raw_fred_ipg325s_6eedf223be", rows: 322 },
+  { code: "IPG332S", title: "Industrial Production: Manufacturing: Durable Goods: Fabricated Metal Product (NAICS = 332)", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:57:43Z", snapshotId: "dfcc1fb4426e847500da1e2a60d1190126b7565f0a9a7817687a478c0b81b0b2", datasetId: "official_06_industrials_raw_fred_ipg332s_ac5544c0c4", rows: 322 },
+  { code: "IPG333S", title: "Industrial Production: Manufacturing: Durable Goods: Machinery (NAICS = 333)", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:57:46Z", snapshotId: "485ca6febc413045cbcd793c0503c44850652f64574310601108630ccad0457d", datasetId: "official_06_industrials_raw_fred_ipg333s_930d501424", rows: 322 },
+  { code: "IPG3361T3S", title: "Industrial Production: Manufacturing: Durable Goods: Motor Vehicles and Parts (NAICS = 3361-3)", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:57:48Z", snapshotId: "cd64449bb8c3e1ed3f50b94e05465abe38f9384b41f285a1d6b26f0e4adc37c0", datasetId: "official_06_industrials_raw_fred_ipg3361t3s_14adfab03e", rows: 322 },
+  { code: "IPG3364S", title: "Industrial Production: Manufacturing: Durable Goods: Aerospace Product and Parts (NAICS = 3364)", unit: "Index 2022=100", adjustment: "Seasonally Adjusted", cadence: "month", retrievedFrom: "2026-11-26T00:57:51Z", snapshotId: "d5f16b44dce656b4a92503c35ed22eff6a1863fbfd6696a7386123d71bc500c6", datasetId: "official_06_industrials_raw_fred_ipg3364s_a7aa556e51", rows: 322 },
+];
+
+export const FRED_SERIES: readonly FredSeries[] = [...CHECKED_25_NOV, ...CHECKED_26_NOV, ...CHECKED_26_NOV_LATER];
 
 /** The day each series was checked, for its proof. */
 const CHECKED_ON = new Map<string, string>([
   ...CHECKED_25_NOV.map((s) => [s.code, "2026-11-25"] as const),
   ...CHECKED_26_NOV.map((s) => [s.code, "2026-11-26"] as const),
+  ...CHECKED_26_NOV_LATER.map((s) => [s.code, "2026-11-26"] as const),
 ]);
 
-const IP_REBASED =
-  "The store's series catalogue states Index 2017=100 (retrieved 24 Nov 2026); FRED's page now states Index 2022=100, so the stored unit cannot be established at the publisher.";
-const REVISED_SINCE =
-  "The last 24 stored rows (retrieved 24 Nov 2026) do not all equal FRED's file of 26 Nov 2026, and FRED updated the series on 25 Nov 2026, after that retrieval; check again on a refreshed snapshot.";
-const tooLong = (frequency: string, rows: number) =>
-  `${frequency} series of ${rows.toLocaleString("en-US")} rows: a first look reads at most 4,999 records, so its latest observations would not be drawn.`;
-
 /**
- * Series that were checked and refused, with the reason, so nobody adds them back without a new check.
- * IPMAN: the stored values are on the base the store's catalogue states (Index 2017=100); FRED's page now
- * states Index 2022=100 and every value of the checked window differs, so the stored unit cannot be
- * established at the publisher. The other industrial production series are in the same state.
- * A daily series longer than a first look reads (4,999 records) would be drawn without its latest
- * observations, and WALCL's period (a Wednesday level) is not a week ending. Eight series still held only
- * the 24 Nov retrieval when FRED's 25 Nov releases had revised them: their unit agrees, their values are
- * one release behind, and they wait for a refreshed snapshot and a new check.
+ * Series that were checked and refused, with the reason, so nobody adds them back without a new check. None since
+ * the fred2 check of 26 Nov 2026: every FRED series file of the store is profiled. A series that fails a later
+ * check (a unit FRED changes, values that no longer equal FRED's file) is moved here with its reason.
  */
-export const FRED_REFUSED: Readonly<Record<string, string>> = {
-  IPMAN: "Stored on Index 2017=100 as catalogued at retrieval; FRED now states Index 2022=100 and all 48 checked values differ.",
-  INDPRO: IP_REBASED,
-  IPG311A2S: IP_REBASED,
-  IPG322S: IP_REBASED,
-  IPG325S: IP_REBASED,
-  IPG332S: IP_REBASED,
-  IPG333S: IP_REBASED,
-  IPG3361T3S: IP_REBASED,
-  IPG3364S: IP_REBASED,
-  DEXCHUS: tooLong("Daily", 7015),
-  DEXJPUS: tooLong("Daily", 7015),
-  DEXUSEU: tooLong("Daily", 7015),
-  DFF: tooLong("Daily, 7-Day", 9821),
-  DTWEXBGS: tooLong("Daily", 5450),
-  ALTSALES: REVISED_SINCE,
-  AMDMTI: REVISED_SINCE,
-  AMDMVS: REVISED_SINCE,
-  CCSA: REVISED_SINCE,
-  HTRUCKSSAAR: REVISED_SINCE,
-  NEWORDER: REVISED_SINCE,
-  PCEDG: REVISED_SINCE,
-  PCES: REVISED_SINCE,
-  WALCL:
-    "FRED states the frequency as Weekly, As of Wednesday (the level on each Wednesday); a weekly cadence here reads a period as the week ending on its date, which would misstate it.",
-};
+export const FRED_REFUSED: Readonly<Record<string, string>> = {};
 
 const BY_CODE = new Map(FRED_SERIES.map((s) => [s.code, s] as const));
 
@@ -203,7 +214,22 @@ export function fredSeries(dataset: ProfileDataset): FredSeries | null {
   return code ? (BY_CODE.get(code) ?? null) : null;
 }
 
-const claims = (dataset: ProfileDataset) => fredSeries(dataset) !== null;
+/**
+ * Whether a series' profile holds for the snapshot to be drawn: always, unless FRED changed the unit and the profile
+ * names the first retrieval on the new one; then only for a snapshot retrieved at or after it, and never for a
+ * snapshot whose retrieval time is not given.
+ */
+export function heldFor(series: Pick<FredSeries, "retrievedFrom">, retrievedAt: string | null | undefined): boolean {
+  if (!series.retrievedFrom) return true;
+  if (!retrievedAt) return false;
+  const at = Date.parse(retrievedAt);
+  return Number.isFinite(at) && at >= Date.parse(series.retrievedFrom);
+}
+
+const claims = (dataset: ProfileDataset) => {
+  const series = fredSeries(dataset);
+  return series !== null && heldFor(series, dataset.retrievedAt);
+};
 
 function fredProfile(dataset: ProfileDataset): Profile {
   const series = fredSeries(dataset);
@@ -221,13 +247,22 @@ function fredProfile(dataset: ProfileDataset): Profile {
       },
     ],
     extraFields: ["observation_date"],
-    addressing: {
-      by: null,
-      where: [],
-      scan: "table",
-      rowsScanned: series.rows,
-      note: "One series per file: the whole snapshot is read in row order, at most five pages of 1,000 rows.",
-    },
+    addressing:
+      series.rows > SERIES_SURE_LIMIT
+        ? {
+            by: null,
+            where: [],
+            scan: "latest",
+            rowsScanned: SERIES_SURE_LIMIT,
+            note: "One series per file in date order, longer than one read holds: its latest 4,999 rows are read as a row range from the end, at most five pages of 1,000 rows.",
+          }
+        : {
+            by: null,
+            where: [],
+            scan: "table",
+            rowsScanned: series.rows,
+            note: "One series per file: the whole snapshot is read in row order, at most five pages of 1,000 rows.",
+          },
     defaultSeries: () => ({ whole: true }),
     firstLook: "series",
     proof: {

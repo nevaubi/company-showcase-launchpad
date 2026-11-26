@@ -17,6 +17,7 @@ import {
   versionPosition,
 } from "./dataset-model";
 import { checkWords, noteLines, rest, scopeWords, sourceWords } from "./provenance-words";
+import { holdsRange, lastYears, rowsFromEnd } from "./first-look-model";
 
 const col = (label: string, extra: Partial<SourceColumn> = {}): SourceColumn => ({ key: `col${label}`, label, type: "string", ...extra });
 
@@ -91,6 +92,31 @@ describe("the column picker", () => {
     const plain = fieldRoles(columns, { dimensions: { period: 0 } } as unknown as SourceIngest);
     expect(formatCell("677247", plain[1], columns[1]).text).toBe("677247");
     expect(columnHead(columns[1]).sub).toBeNull();
+  });
+  it("reads a FRED daily file longer than one read holds from its end, and draws a range only when those rows hold it", () => {
+    const columns: SourceColumn[] = [
+      { key: "col0001", label: "observation_date", type: "string" },
+      { key: "col0002", label: "DEXUSEU", type: "string" },
+    ];
+    const daily = profileStatus({ id: "official_00_universal_raw_fred_dexuseu_50393f32a2", source_id: "FRED_DEXUSEU" }, columns);
+    const monthly = profileStatus({ id: "official_06_industrials_raw_fred_amtmno_17ff88a923", source_id: "FRED_AMTMNO" }, [columns[0], { ...columns[1], label: "AMTMNO" }]);
+    expect(daily.state === "on" && rowsFromEnd(daily.profile, { whole: true })).toBe(4999);
+    expect(monthly.state === "on" && rowsFromEnd(monthly.profile, { whole: true })).toBeUndefined();
+    if (daily.state === "on") expect(rowsFromEnd(daily.profile, { by: "entity_id", key: "x" })).toBeUndefined();
+    // business days from 25 Sep 2007 to 20 Nov 2026: the latest 4,999 rows of DEXUSEU
+    const dates = ["2007-09-25", "2016-11-18", "2016-11-21", "2021-11-19", "2021-11-22", "2026-11-20"].map((date) => ({ date }));
+    expect(holdsRange(dates, "10y")).toBe(true);
+    expect(holdsRange(dates, "5y")).toBe(true);
+    expect(holdsRange(dates, "all")).toBe(false);
+    // a read whose first point lies inside the range does not hold it
+    expect(holdsRange(dates.slice(3), "10y")).toBe(false);
+    expect(holdsRange(dates.slice(3), "5y")).toBe(true);
+    expect(holdsRange([], "5y")).toBe(false);
+    // the drawn range and the held range share one boundary: the day the range starts after is not drawn, and a read
+    // holds the range only when it reaches back to that day (a sufficient test, never one that claims too much)
+    expect(lastYears(dates, "10y").map((p) => p.date)).toEqual(["2016-11-21", "2021-11-19", "2021-11-22", "2026-11-20"]);
+    expect(holdsRange([{ date: "2016-11-20" }, { date: "2026-11-20" }], "10y")).toBe(true);
+    expect(holdsRange([{ date: "2016-11-21" }, { date: "2026-11-20" }], "10y")).toBe(false);
   });
   it("gives a column of names room whatever its head says", () => {
     expect(columnWidth(col("NAME"), false, true)).toBeGreaterThanOrEqual(232);

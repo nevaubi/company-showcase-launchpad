@@ -81,9 +81,13 @@ export type SeriesAddressing = {
   by: IndexedDimension | null;
   /** Fields (by label) that must also be fixed to reach one series. */
   where: readonly string[];
-  /** key: the rows of one key are read through that dimension's index; table: the table is read from its first row. */
-  scan: "key" | "table";
-  /** The most rows one series read has to scan, as counted on the proven snapshot. */
+  /**
+   * key: the rows of one key are read through that dimension's index; table: the table is read from its first row;
+   * latest: the table is one series in date order, longer than one read holds, and its last `rowsScanned` rows are
+   * read as a row range from its end (the latest observations; the order was proven on the checked snapshot).
+   */
+  scan: "key" | "table" | "latest";
+  /** The most rows one series read has to scan, as counted on the proven snapshot (for `latest`, the rows read from the end). */
   rowsScanned: number;
   /** One sentence for the report and the next engineer. */
   note: string;
@@ -98,8 +102,12 @@ export type FirstLook = "series" | "ranking" | "places" | "none";
  */
 export type Cadence = "day" | "week" | "month" | "quarter" | "year";
 
-/** What a profile is matched on. `source_id` and `id` come from the dataset as registered. */
-export type ProfileDataset = { id: string; source_id: string | null };
+/**
+ * What a profile is matched on. `source_id` and `id` come from the dataset as registered; `retrievedAt` is when the
+ * snapshot to be drawn was retrieved (ISO 8601). A profile that holds only from a retrieval on (a series whose
+ * publisher changed its unit, so an earlier snapshot of the same dataset is on the old one) claims nothing without it.
+ */
+export type ProfileDataset = { id: string; source_id: string | null; retrievedAt?: string | null };
 
 /** A dictionary entry as far as a profile needs it. A SourceColumn satisfies this. */
 export type ProfileField = { key: string; label: string };
