@@ -44,6 +44,11 @@ export type EnergyFixtures = {
   rank: Record<string, CrossFixture>;
   /** The dictionary entries the profiles read, as production stores them (positional keys, the publisher's labels). */
   dictionaries: Record<string, { sourceId: string; columns: SourceColumn[] }>;
+  /**
+   * Records per value of an indexed dimension, counted on production inside one snapshot (the count tiles), keyed by
+   * dataset id; the values sum to the snapshot's rows.
+   */
+  counts?: Record<string, { snapshotId: string; retrievedAt: string; rows: number; dimension: "period" | "geo_code"; values: { value: string; rows: number }[] }>;
 };
 
 type Resolved = { ok: true; profile: Profile; measure: MeasureSpec; columns: SourceColumn[] } | { ok: false; reason: string };

@@ -255,6 +255,16 @@ describe("energy boards", () => {
     expect(BOARDS.filter((b) => b.id === "05_utilities")).toHaveLength(1);
   });
 
+  it("hold record counts that sum to each snapshot's rows, for the count tiles", () => {
+    const counts = FIXTURES.counts ?? {};
+    expect(Object.keys(counts)).toHaveLength(3);
+    for (const [id, c] of Object.entries(counts)) {
+      expect(c.values.reduce((n, v) => n + v.rows, 0), id).toBe(c.rows);
+      expect(new Set(c.values.map((v) => v.value)).size).toBe(c.values.length);
+      expect(SPECS.tiles.some((t) => t.datasetId === id && t.transform === "records")).toBe(true);
+    }
+  });
+
   it("proves every series the checks list against EIA's file, on the snapshot the fixtures name", () => {
     expect(CHECKS.series).toHaveLength(64);
     for (const s of CHECKS.series) {
