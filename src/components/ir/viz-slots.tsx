@@ -1,18 +1,15 @@
 // The two places the IR tab mounts charts: above the statements (`IrTopViz`) and in each statement
-// section's chart view (`IrSectionViz`). Unit irviz builds the chart components in ./viz; until they are
-// merged the section view draws the section's parts with the app's combo chart, and the top slot draws
-// nothing. Everything a chart needs comes in through these props, so swapping the body touches no caller.
-import { ComboChart, type ComboSeries } from "@/components/charts/combo-chart";
+// section's chart view (`IrSectionViz`), both drawn by the components in ./viz (unit irviz's contract:
+// SummaryStrip, BankPanel or MarginPanel at the top; SectionChart and BridgeChart per section).
+// Everything a chart needs comes in through these props.
+import { useMemo } from "react";
+import { IrPanel } from "@/components/ir/panel";
 import type { SourceTarget } from "@/components/source/source-context";
-import { fmtIr, shownLabel } from "@/lib/ir/display";
-import type { IrPayload, PayloadCell, PayloadSeries } from "@/lib/ir/payload";
+import { BankPanel, BridgeChart, MarginPanel, SectionChart, SummaryStrip, bankFiguresOf, defaultBridge, marginFiguresOf, partsOf, segmentMixOf, seriesOf, summaryTilesOf, type VizSeries } from "@/components/ir/viz";
+import type { IrPayload, PayloadCell, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import type { IrPeriodKind } from "@/lib/ir/periods";
-import type { Statement } from "@/lib/ir/statements";
+import { rowCells, type Statement } from "@/lib/ir/statements";
 import type { Scale } from "@/lib/format";
-import { fmtCompact } from "@/lib/format";
-import { cn } from "@/lib/utils";
-
-const PALETTE = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-6)", "var(--chart-5)", "var(--muted-foreground)", "var(--link)"];
 
 /** One line of a section as the chart sees it: its figures in the shown columns, oldest first. */
 export interface VizLine {
@@ -49,51 +46,42 @@ export function sectionParts(lines: VizLine[]): { total: VizLine; parts: VizLine
 }
 
 /** Whether a section has something to chart (its chart toggle is shown only then). */
-export const hasSectionViz = (lines: VizLine[]) => !!sectionParts(lines);
+export const hasSectionViz = (lines: VizLine[]) => lines.some((l) => l.cells.filter(Boolean).length >= 2);
 
-export function IrSectionViz({ lines, cols, heads, scale, openCell }: IrSectionVizProps) {
-  const pp = sectionParts(lines);
-  if (!pp) return null;
-  const div = pp.total.s.unit === "usd" ? { full: 1, K: 1e3, M: 1e6, B: 1e9 }[scale] : 1;
-  const negative = pp.parts.some((p) => p.cells.some((c) => c && c.v < 0));
-  const series: ComboSeries[] = [
-    ...pp.parts.slice(0, 8).map((p, i) => ({
-      id: p.s.k,
-      label: shownLabel(p.s.label),
-      color: PALETTE[i % PALETTE.length],
-      type: (negative ? "line" : "bar") as "line" | "bar",
-      values: p.cells.map((c) => (c ? c.v / div : null)),
-      format: (v: number) => fmtIr(v * div, p.s.unit, scale),
-      onSelect: (i2: number) => {
-        const c = p.cells[i2];
-        if (c) openCell(p.s, cols[i2], c);
-      },
-    })),
-    {
-      id: pp.total.s.k,
-      label: shownLabel(pp.total.s.label),
-      color: "var(--foreground)",
-      type: "line" as const,
-      values: pp.total.cells.map((c) => (c ? c.v / div : null)),
-      format: (v: number) => fmtIr(v * div, pp.total.s.unit, scale),
-      dashed: true,
-      onSelect: (i2: number) => {
-        const c = pp.total.cells[i2];
-        if (c) openCell(pp.total.s, cols[i2], c);
-      },
-    },
-  ];
+/** A section's line with the figures of every stored identity it joins (rowCells), as the charts read it. */
+function mergedLine(l: VizLine, payload: IrPayload, row?: { ks: string[] }): PayloadSeries {
+  if (!row || row.ks.length < 2) return l.s;
+  const byKey = new Map(payload.series.map((s) => [s.k, s]));
+  const q = rowCells(row.ks, byKey, "q").cells;
+  const y = rowCells(row.ks, byKey, "y").cells;
+  return { ...l.s, q, y };
+}
+
+export function IrSectionViz({ ticker, payload, section, lines, cols, freq, scale, onOpen }: IrSectionVizProps) {
+  const vizData = useMemo(() => {
+    const rowOf = new Map(section.rows.flatMap((r) => (r.kind === "line" ? [[r.k, r] as const] : [])));
+    const cadence = freq === "y" ? "y" : "q";
+    const inView = new Set(cols);
+    const series: VizSeries[] = lines
+      .map((l) => seriesOf(payload, ticker, mergedLine(l, payload, rowOf.get(l.s.k)), cadence))
+      .map((v) => ({ ...v, points: v.points.filter((p) => inView.has(p.period)) }))
+      .filter((v) => v.points.length > 0);
+    const pp = sectionParts(lines);
+    const group: PayloadGroup | null = pp
+      ? { id: section.id, cat: section.cat, met: pp.total.s.met, unit: pp.total.s.unit, label: section.title, t: section.title, bd: null, root: pp.total.s.k, rows: [...pp.parts, pp.total].map((l) => ({ k: l.s.k, depth: l.depth })) }
+      : null;
+    const parts = group ? partsOf(payload, ticker, group, cadence) : null;
+    const cut = parts ? { ...parts, total: { ...parts.total, points: parts.total.points.filter((p) => inView.has(p.period)) }, parts: parts.parts.map((x) => ({ ...x, points: x.points.filter((p) => inView.has(p.period)) })), ties: parts.ties.filter((e) => inView.has(e)) } : null;
+    const lead = pp ? [pp.total.s.k, ...pp.parts.map((x) => x.s.k)] : [];
+    // The section's total and its parts first, then its other lines; the chart keeps one unit and six lines.
+    const ordered = [...series.filter((v) => lead.includes(v.key)), ...series.filter((v) => !lead.includes(v.key))];
+    return { series: ordered, parts: cut, bridge: cut ? defaultBridge(cut) : null };
+  }, [payload, ticker, section, lines, cols, freq]);
+  if (!vizData.series.length) return null;
   return (
-    <div className="px-3 pb-3 pt-1">
-      <ComboChart categories={heads} series={series} stacked={!negative} height={240} leftFormat={(v) => fmtCompact(v, 1)} />
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground">
-        {series.map((s) => (
-          <span key={s.id} className="inline-flex items-center gap-1">
-            <span className={cn("inline-block size-2 rounded-sm", s.type === "line" && "h-0.5 w-3 rounded-none")} style={{ background: s.color }} />
-            {s.label}
-          </span>
-        ))}
-      </div>
+    <div className="grid grid-cols-1 gap-4 px-4 pb-4 pt-1">
+      <SectionChart series={vizData.series} parts={vizData.parts} title={section.title} scale={scale} onOpen={onOpen} />
+      {vizData.parts && vizData.bridge?.bridge && <BridgeChart bridge={vizData.bridge.bridge} reason={vizData.bridge.reason} scale={scale} onOpen={onOpen} />}
     </div>
   );
 }
@@ -105,7 +93,22 @@ export interface IrTopVizProps {
   scale: Scale;
 }
 
-/** The chart strip above the statements: filled by the irviz components when they are merged. */
-export function IrTopViz(_props: IrTopVizProps) {
-  return null;
+/** The chart strip above the statements: standardized stat tiles and the segment mix, then the bank or margin panel. */
+export function IrTopViz({ ticker, payload, scale }: IrTopVizProps) {
+  const v = useMemo(() => {
+    const tiles = summaryTilesOf(payload, ticker);
+    const mix = segmentMixOf(payload, ticker);
+    const bank = bankFiguresOf(payload, ticker);
+    const margin = bank ? null : marginFiguresOf(payload, ticker);
+    return { tiles, mix, bank, margin };
+  }, [payload, ticker]);
+  if (!v.tiles.length && !v.mix && !v.bank && !v.margin) return null;
+  return (
+    <IrPanel section="IR charts" title="At a glance" subtitle="The latest printed figures and how they moved. Click a mark to open its source.">
+      <div className="grid grid-cols-1 gap-6 p-4">
+        {(v.tiles.length > 0 || v.mix) && <SummaryStrip tiles={v.tiles} mix={v.mix} scale={scale} />}
+        {v.bank ? <BankPanel figures={v.bank} scale={scale} /> : v.margin ? <MarginPanel figures={v.margin} scale={scale} /> : null}
+      </div>
+    </IrPanel>
+  );
 }
