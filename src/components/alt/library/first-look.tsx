@@ -18,7 +18,7 @@ import type { LookState } from "./dataset-search";
 import { chosenAddress, chosenMeasure, rowsFromEnd } from "./first-look-model";
 import { PlaceView } from "./place-view";
 import { RankingView } from "./ranking-view";
-import { SeriesView } from "./series-view";
+import { CompareView, SeriesView } from "./series-view";
 import { LibrarySection, QuietLine } from "./ui/primitives";
 
 const CONTROL =
@@ -108,6 +108,7 @@ export function FirstLook({
 function profileMeta(profile: Profile): string {
   if (profile.firstLook === "ranking") return "The last period, ranked, from a reviewed reading of this table";
   if (profile.firstLook === "places") return "The last period by place, from a reviewed reading of this table";
+  if (profile.firstLook === "compare") return "Several series of one unit, from a reviewed reading of this table";
   return "One measure over time, from a reviewed reading of this table";
 }
 
@@ -135,7 +136,10 @@ function Measured({
   const fromEnd = address !== null && rowsFromEnd(profile, address) !== undefined;
   const range = fromEnd && look?.r === "all" ? "10y" : (look?.r ?? "10y");
   const top = look?.n === "40" ? 40 : 15;
-  const picker = profile.firstLook === "series" && (profile.addressing.by || profile.addressing.where.length > 0);
+  // a compare first look draws the series the profile lists, unless the reader picked one series
+  const listed = profile.firstLook === "compare" && !look?.s ? (profile.compareSeries?.({ id: dataset.id, source_id: dataset.source_id }) ?? null) : null;
+  const compare = listed && listed.length >= 2 ? listed.slice(0, 6) : null;
+  const picker = (profile.firstLook === "series" || profile.firstLook === "compare") && (profile.addressing.by || profile.addressing.where.length > 0);
   return (
     <div className="grid grid-cols-1 min-w-0 gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2" data-section="First look controls">
@@ -148,7 +152,7 @@ function Measured({
             options={profile.measures.map((m) => ({ v: m.field, l: m.label }))}
           />
         )}
-        {profile.firstLook === "series" && (
+        {(profile.firstLook === "series" || profile.firstLook === "compare") && (
           <Segmented
             label="Time range"
             value={range}
@@ -182,6 +186,18 @@ function Measured({
           measure={measure}
           top={top}
           setTop={(n) => patch({ n: n === 40 ? "40" : undefined })}
+          view={view}
+          onOpen={onOpen}
+        />
+      ) : compare ? (
+        <CompareView
+          datasetId={dataset.id}
+          collection={dataset.sector}
+          snapshot={snapshot}
+          profile={profile}
+          measure={measure}
+          series={compare}
+          range={range === "all" ? "all" : range}
           view={view}
           onOpen={onOpen}
         />

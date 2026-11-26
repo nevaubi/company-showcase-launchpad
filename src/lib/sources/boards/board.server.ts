@@ -372,7 +372,8 @@ export async function crossRead(
 
   const matches = (across.where ?? []).map((m) => ({ position: position(meta.columns, m.field), value: m.value }));
   const inSelect = meta.rows <= READ_LIMITS.cellFilterRows;
-  const extra = [...new Set([...fields, ...(inSelect ? [] : matches.map((m) => m.position)), ...(composed?.positions ?? [])])];
+  const labelAt = across.labelWith ? position(meta.columns, across.labelWith) : null;
+  const extra = [...new Set([...fields, ...(inSelect ? [] : matches.map((m) => m.position)), ...(composed?.positions ?? []), ...(labelAt !== null ? [labelAt] : [])])];
   const select = `row_number,period,entity_id,entity_name,geo_code,geo_name${extra.map((at, i) => `,c${i}:${cellPath(at)}`).join("")}`;
   const slot = new Map(extra.map((at, i) => [at, `c${i}`] as const));
   const base = () => {
@@ -408,10 +409,13 @@ export async function crossRead(
     if (!inSelect && matches.some((m) => str(r[slot.get(m.position)!]) !== m.value)) continue;
     const row = rowOf(r);
     const made = composed ? composed.compose(composed.positions.map((at) => str(r[slot.get(at)!]))) : undefined;
+    const stored = str(r.entity_name) ?? str(r.geo_name);
+    const qualifier = labelAt !== null ? str(r[slot.get(labelAt)!]) : null;
     cells.push({
       row,
       key: key(r) ?? `row ${row}`,
-      name: str(r.entity_name) ?? str(r.geo_name),
+      // "Harrison, MO": a qualifier only beside a stored name, so a name from a state code stays the state's
+      name: stored && qualifier && qualifier.trim() ? `${stored}, ${qualifier.trim()}` : stored,
       period: made ? made.text : made === null ? null : str(r.period),
       text: fields.length ? str(r[slot.get(fields[0])!]) : null,
       unit: fields.length > 1 ? str(r[slot.get(fields[1])!]) : undefined,
@@ -605,8 +609,8 @@ async function computeOne(db: SourceDirectClient, spec: TileSpec, metas: Map<str
   }
   const { profile, measure } = profiled(meta, spec.measure);
   if (spec.form === "map" || spec.form === "distribution" || spec.transform === "rank") {
-    const cadence = spec.transform === "rank" ? ("day" as const) : cadenceOf(profile);
-    const context = contextFor(profile, measure, meta, cadence);
+    // the profile's cadence names the period ("in Oct 2026"); a report date that does not open its period names the day
+    const context = contextFor(profile, measure, meta, cadenceOf(profile));
     const fields = crossFields(meta, measure, spec.subjectCheck);
     const snap = { snapshotId: meta.snapshot.id, rows: meta.snapshot.rows, columns: meta.snapshot.columns, ingest: meta.snapshot.ingest };
     const format = profile.period.from === "dimension" ? profile.period.format : null;
@@ -615,9 +619,9 @@ async function computeOne(db: SourceDirectClient, spec: TileSpec, metas: Map<str
     const cells = crossCells(read, measure, spec.subjectCheck);
     const table = wholeTable(meta, read);
     // a composed period is read in its own format and cadence ("Q2 2026")
-    const ctx = read.composed ? { ...context, format: read.composed.format, cadence: spec.transform === "rank" ? context.cadence : read.composed.cadence } : context;
+    const ctx = read.composed ? { ...context, format: read.composed.format, cadence: read.composed.cadence } : context;
     let result: TileResult;
-    if (spec.transform === "rank") result = computeRankTile(spec, read.composed ? { ...ctx, cadence: read.composed.cadence } : ctx, cells, table);
+    if (spec.transform === "rank") result = computeRankTile(spec, ctx, cells, table);
     else if (spec.form === "distribution") result = computeDistributionTile(spec, ctx, cells, table);
     else {
       let earlier: RankCellInput[] | null = null;
