@@ -64,11 +64,15 @@ export const hasSectionViz = (lines: VizLine[]) =>
   lines.some((l) => l.cells.filter(Boolean).length >= 2);
 
 /** A section's line with the figures of every stored identity it joins (rowCells), as the charts read it. */
-function mergedLine(l: VizLine, payload: IrPayload, row?: { ks: string[] }): PayloadSeries {
-  if (!row || row.ks.length < 2) return l.s;
+function mergedLine(
+  l: VizLine,
+  payload: IrPayload,
+  row?: { ks: string[]; at?: [number, number, number] },
+): PayloadSeries {
+  if (!row || (row.ks.length < 2 && !row.at)) return l.s;
   const byKey = new Map(payload.series.map((s) => [s.k, s]));
-  const q = rowCells(row.ks, byKey, "q").cells;
-  const y = rowCells(row.ks, byKey, "y").cells;
+  const q = rowCells(row.ks, byKey, "q", row.at).cells;
+  const y = rowCells(row.ks, byKey, "y", row.at).cells;
   return { ...l.s, q, y };
 }
 

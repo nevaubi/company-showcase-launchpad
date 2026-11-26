@@ -204,13 +204,24 @@ function snap(ends: string[], d: string, days = 6) {
 /** How far a fact's date may sit from its column: printed dates are exact, dates read from text approximate. */
 const slack = (f: Pick<IrFact, "method">) => (f.method === "text" ? 24 : 6);
 
+/** A figure read from a printed table cell (a `{t, r, c}` locator): a row of a statement section. */
+export const isTableCell = (f: Pick<IrFact, "locator">) => typeof (f.locator as { t?: unknown } | null)?.t === "number";
+
+/**
+ * The canonical pass renames, re-parents and drops lines. A drop never removes a figure printed in a table
+ * cell: such a figure is a row of the table its section prints (JPM's map dropped 20 of the 23 rows of the
+ * supplement's income statement as duplicates of the release), so it stays as read; suspect.ts and the tidy
+ * pass deal with figures that are wrong or repeated. Slide and sentence figures are still dropped.
+ */
 export function applyLabelMap(facts: IrFact[], map: Record<string, LabelMapEntry> | undefined): IrFact[] {
   if (!map) return facts;
   const out: IrFact[] = [];
   for (const f of facts) {
     const m = map[rawKey(f)];
     if (!m) out.push(f);
-    else if (!m.drop) out.push({ ...f, category: m.category, metric: m.metric, label: m.label, parent: m.parent, is_total: m.is_total });
+    else if (m.drop) {
+      if (isTableCell(f)) out.push(f);
+    } else out.push({ ...f, category: m.category, metric: m.metric, label: m.label, parent: m.parent, is_total: m.is_total });
   }
   return out;
 }

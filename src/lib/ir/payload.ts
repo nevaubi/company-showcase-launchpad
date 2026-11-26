@@ -54,6 +54,8 @@ export interface PayloadCell {
   alt?: PayloadAlt;
   /** read-time checks this figure fails (sec-check.ts, consistency.ts): shown at the figure, never applied */
   flags?: PayloadCellFlag[];
+  /** set at read time: the figure is the section table's own printing, not the line's shown cell (`rowCells`) */
+  own?: boolean;
 }
 /** A failed read-time check at one figure: what failed and the arithmetic, in words. */
 export interface PayloadCellFlag {
@@ -101,10 +103,36 @@ export interface PayloadSeries {
   /**
    * Where the line is printed, shown figure or not: [doc index, table, row] in the newest documents that print
    * it (at most `PRINTED_DOCS`), so a statement section lists every line its table prints, also one whose shown
-   * figures cite another printing of the same number.
+   * figures cite another printing of the same number. A fourth element, when present, holds what this printing
+   * gives that the line shows differently (`PrintedExtra`), so a section shows its own table's printing.
    */
-  at?: [number, number, number][];
+  at?: PayloadAt[];
 }
+
+/** One printing's figure where it differs from the shown cell: value (full units), printed column, printed text. */
+export type PrintedAt = [number, number, string];
+/** What one printing of a line gives that the line shows differently. */
+export interface PrintedExtra {
+  /** its figures that differ from the shown cells, by "q:<end>" or "y:<end>" */
+  v?: Record<string, PrintedAt>;
+  /** the name the row is printed under there, when the line shows another ("TOTAL NONINTEREST EXPENSE") */
+  n?: string;
+}
+/**
+ * Where a line is printed: [doc index, table, row], with what that printing gives differently (`PrintedExtra`).
+ * Payloads built before build format 2 carry the first three only.
+ */
+export type PayloadAt = [number, number, number] | [number, number, number, PrintedExtra];
+
+/**
+ * Version of what the build stores. 2: label-map drops keep printed table figures (kpis.ts `applyLabelMap`)
+ * and `series.at` carries each printing's differing figures. A stored payload with a lower `build` (or none)
+ * still lays out, with the rows and figures of its own build: the worker should rebuild it.
+ */
+export const BUILD_FORMAT = 2;
+
+/** Whether a stored payload predates the current build format (the worker rebuilds such companies first). */
+export const needsRebuild = (p: Pick<IrPayload, "build">) => (p.build ?? 1) < BUILD_FORMAT;
 export interface PayloadGroup {
   id: string;
   cat: string;
@@ -170,6 +198,8 @@ export interface IrPayload {
   alias?: Record<string, string>;
   /** printed captions of section tables, by "<doc index>:<table index>" (added by the build after the series) */
   tables?: Record<string, PayloadTable>;
+  /** `BUILD_FORMAT` of the build that wrote it (absent before format 2) */
+  build?: number;
 }
 export interface IrStats {
   series: number;
@@ -300,7 +330,17 @@ export function buildPayload(
   for (const [k, p] of parentOf) kids.set(p, [...(kids.get(p) ?? []), k]);
 
   // Printing positions in the line's newest documents (by filing date), one per table and row.
-  const atOf = (s: IrSeries): [number, number, number][] | undefined => {
+  // A printing's own figure for a period, when it differs from the shown cell (another printing of the line
+  // wins the shown cell: HON's segment table prints 4,926 where the release summary prints 4,929).
+  const differs = (s: IrSeries, f: IrFact): [string, PrintedAt] | null => {
+    const kind = f.months === 3 ? "q" : f.months === 12 ? "y" : null;
+    if (!kind) return null;
+    const shown = (kind === "q" ? s.cells : s.annual)[f.period_end];
+    if (!shown || shown.fact === f || shown.v === f.value) return null;
+    const l = f.locator as { c?: number; text?: string };
+    return [`${kind}:${f.period_end}`, [f.value, l.c ?? 0, l.text ?? ""]];
+  };
+  const atOf = (s: IrSeries): PayloadAt[] | undefined => {
     if (!s.printed?.length) return undefined;
     const byDoc = new Map<string, IrFact[]>();
     for (const f of s.printed) {
@@ -310,18 +350,30 @@ export function buildPayload(
     const newest = [...byDoc.values()]
       .sort((a, b) => (b[0].filed ?? "").localeCompare(a[0].filed ?? ""))
       .slice(0, PRINTED_DOCS);
-    const seen = new Set<string>();
-    const out: [number, number, number][] = [];
+    const byPos = new Map<
+      string,
+      { at: [number, number, number]; v: Record<string, PrintedAt>; n?: string }
+    >();
     for (const fs of newest)
       for (const f of fs) {
         const l = f.locator as { t: number; r: number };
         const at: [number, number, number] = [di(f), l.t, l.r];
         const id = at.join(":");
-        if (seen.has(id)) continue;
-        seen.add(id);
-        out.push(at);
+        let pos = byPos.get(id);
+        if (!pos) {
+          const name = f.label.replace(/\s*[®™©℠]+/g, "").replace(/\s{2,}/g, " ").trim();
+          byPos.set(id, (pos = { at, v: {}, n: name !== s.label ? name : undefined }));
+        }
+        const d = differs(s, f);
+        if (d && !pos.v[d[0]]) pos.v[d[0]] = d[1];
       }
-    return out;
+    return [...byPos.values()].map(({ at, v, n }) => {
+      const extra: PrintedExtra = {
+        ...(Object.keys(v).length ? { v } : {}),
+        ...(n ? { n } : {}),
+      };
+      return Object.keys(extra).length ? ([...at, extra] as PayloadAt) : at;
+    });
   };
 
   // Unit slips and other contradicted figures are held back by `holdSuspects` (suspect.ts) in the tidy pass.
@@ -428,6 +480,7 @@ export function buildPayload(
   return tidyPayload({
     v: 2,
     ticker,
+    build: BUILD_FORMAT,
     builtAt: new Date().toISOString(),
     quarters,
     years,

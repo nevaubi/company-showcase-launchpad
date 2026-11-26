@@ -6,26 +6,50 @@
 // links across documents) is stitched onto it, so one section carries the whole history of its lines.
 // Rows follow the printed row order, children are indented under the total they add up to, totals are
 // marked, and the document's own headings and spacer rows are kept where the build stored them
-// (`payload.tables`). Lines only older documents print are placed after the line they followed there.
+// (`payload.tables`). A section holds exactly the rows its anchor table prints, in printed order: a line of
+// an older copy joins only as the history of a row the anchor prints (the same printed row, or the same name,
+// unit and total in the same printed scale with no figure in conflict); lines only other copies print (an older
+// supplement, the release's version of the table) are listed apart in the "more" group ("lines only other
+// copies print"), and a figure printed at another scale never fills a row.
 import { CATEGORY_LABEL, shownLabel } from "@/lib/ir/display";
-import type { IrPayload, PayloadCell, PayloadSeries, PayloadTable } from "@/lib/ir/payload";
+import type { IrPayload, PayloadCell, PayloadSeries, PayloadTable, PrintedAt, PrintedExtra } from "@/lib/ir/payload";
 import { cellsFor, heldFor, type IrPeriodKind } from "@/lib/ir/periods";
 import { parseNumber } from "@/lib/ir/tables";
 import { capitalWords, sentenceCase, type TableCaption } from "@/lib/ir/table-captions";
 
 export type StatementRow =
   /** `k` is the line shown; `ks` every line printed in this row (the same printed cell, or the same name under the
-   *  same total with no figure in conflict: one line under two stored identities), `k` first */
-  | { kind: "line"; k: string; ks: string[]; depth: number; total: boolean }
+   *  same total with no figure in conflict: one line under two stored identities), `k` first; `at` the row's
+   *  printing in the anchor table [doc, table, row], whose own figures the row shows (`rowCells`) */
+  | {
+      kind: "line";
+      k: string;
+      ks: string[];
+      depth: number;
+      total: boolean;
+      at?: [number, number, number];
+    }
   | { kind: "head"; text: string; depth: number }
   | { kind: "gap" };
+
+/**
+ * Where a section stands on the page (`arrange`): "main", the tables of the company's newest statement document
+ * (supplement, else earnings release) in its own order; "other", tables only other documents of the same
+ * release print (release tables, presentation slides), and one compact section of the small fragments of
+ * both; "more", tables of older documents and lines only other copies of a table print, in a collapsed group.
+ */
+export type StatementGroup = "main" | "other" | "more";
 
 export interface Statement {
   /** "<doc index>:<table>" of the table it is laid out from ("12:3", or "12:p4" for a slide page) */
   id: string;
   title: string;
-  /** where the title comes from: the document's printed title, the stored table name, or the line category */
-  titleFrom: "printed" | "breakdown" | "category";
+  /** where the title comes from: the document's printed title, the stored table name, the line category, or
+   *  "merged" for the compact section of small tables (each part under its own title as a heading) */
+  titleFrom: "printed" | "breakdown" | "category" | "merged";
+  group: StatementGroup;
+  /** the kind of document it comes from, for sections outside the main document ("earnings release") */
+  source?: string;
   /** the printed scale line ("In millions, except per share data"), else one stated from the figures; "" when no money line */
   unitLine: string;
   /** divisor that turns a money figure into the section's printed scale (1e6 for "in millions") */
@@ -133,6 +157,9 @@ interface Draft {
   places: Map<string, Set<string>>;
   /** slot → its printed row in the anchor table */
   slotR: Map<string, number>;
+  /** lines only other copies print, in the order met: history of an anchor row, or listed apart */
+  extra: string[];
+  extraSet: Set<string>;
 }
 
 /** Minimum share of a table's lines another copy must share to be the same table (and at least two lines). */
@@ -174,6 +201,8 @@ function drafts(p: IrPayload): Draft[] {
         docs: new Set(),
         places: new Map(),
         slotR: new Map(t.rows),
+        extra: [],
+        extraSet: new Set(),
       };
       out.push(best);
     }
@@ -184,16 +213,17 @@ function drafts(p: IrPayload): Draft[] {
       at.add(`${t.id}:${r}`);
       best.places.set(k, at);
     }
-    // Lines this copy prints that the section lacks go right after the line they follow here.
-    let at = -1;
+    // The anchor's lines in printed order; an older copy's other lines are only candidates (`extra`): they
+    // join a row as its history, or are listed apart, never placed among the anchor's rows.
     for (const k of rows) {
-      if (best.set.has(k)) {
-        at = best.order.indexOf(k);
-        continue;
+      if (best.set.has(k) || best.extraSet.has(k)) continue;
+      if (isAnchor) {
+        best.order.push(k);
+        best.set.add(k);
+      } else {
+        best.extra.push(k);
+        best.extraSet.add(k);
       }
-      best.order.splice(at + 1, 0, k);
-      at += 1;
-      best.set.add(k);
       index.set(k, [...(index.get(k) ?? []), best]);
     }
     // The anchor's second printings of a line, at their own place in its row order.
@@ -288,8 +318,27 @@ const norm = (x: string | undefined) =>
     .replace(/[^a-z0-9%]+/g, " ")
     .trim();
 
+/** The scale a money or count line is printed at, from its cells' printed text; null when no cell tells. */
+export function knownDiv(s: PayloadSeries): number | null {
+  if (s.unit !== "usd" && s.unit !== "count") return null;
+  const ds: number[] = [];
+  for (const c of cellsOf(s)) {
+    const d = printedDiv(c);
+    if (d != null) ds.push(d);
+  }
+  return mode(ds) ?? null;
+}
+
+/** Two lines printed at different scales (millions and billions) are never one row. */
+function sameScale(a: PayloadSeries, b: PayloadSeries) {
+  const da = knownDiv(a);
+  const db = knownDiv(b);
+  return da == null || db == null || da === db;
+}
+
 /** Two lines never print different figures for the same period (within 0.5 percent). */
 function agree(a: PayloadSeries, b: PayloadSeries) {
+  if (!sameScale(a, b)) return false;
   for (const [x, y] of [
     [a.q, b.q],
     [a.y, b.y],
@@ -373,20 +422,48 @@ export function lineLabel(s: PayloadSeries): string {
   return shownLabel(s.label.replace(/:\s*second breakdown$/i, ""));
 }
 
-/** Statement sections of a payload, in the company's order. */
+/**
+ * A row's name: the name its table prints it under (`series.at`, when the line is shown under another name
+ * after merging), else the line's name.
+ */
+export function rowLabel(
+  r: { k: string; ks: string[]; at?: [number, number, number] },
+  byKey: Map<string, PayloadSeries>,
+): string {
+  const s = byKey.get(r.k)!;
+  if (r.at)
+    for (const k of r.ks) {
+      const hit = byKey
+        .get(k)
+        ?.at?.find((x) => x[0] === r.at![0] && x[1] === r.at![1] && x[2] === r.at![2]);
+      if (!hit) continue;
+      const n = (hit[3] as PrintedExtra | undefined)?.n;
+      return n ? shownLabel(n.replace(/:\s*second breakdown$/i, "")) : lineLabel(byKey.get(k)!);
+    }
+  return lineLabel(s);
+}
+
+/** Statement sections of a payload, in the company's order, arranged into groups (`arrange`). */
 export function assembleStatements(p: IrPayload): Statement[] {
   const byKey = new Map(p.series.map((s) => [s.k, s]));
   const keep = capitalWords(p.series.flatMap((s) => [s.label, s.bd ?? ""]));
+  // Payloads built with printing positions list every line a table prints; only older ones need a total
+  // printed elsewhere brought in after its parts.
+  const hasAt = p.series.some((s) => s.at?.length);
   const sections: Statement[] = [];
+  const retired: Statement[] = [];
   for (const dr of drafts(p)) {
-    closeTotals(dr, byKey);
+    if (!hasAt) closeTotals(dr, byKey);
     const slots = dr.order.filter((k) => byKey.has(slotKey(k)));
     const keys = slots.filter((x) => !x.includes(REPEAT));
     if (!keys.length) continue;
     const set = new Set(keys);
-    // Second printings stay rows of their own; the other lines are grouped into printed rows.
-    const grouped = sameRows(keys, byKey, dr.places);
-    const groupOf = new Map(grouped.map((g) => [g[0], g]));
+    const extra = dr.extra.filter((k) => byKey.has(k) && !set.has(k));
+    // Second printings stay rows of their own; the other lines are grouped into printed rows. A group led by
+    // an older copy's line (no row of the anchor table) is listed apart.
+    const grouped = sameRows([...keys, ...extra], byKey, dr.places);
+    const groupOf = new Map(grouped.filter((g) => set.has(g[0])).map((g) => [g[0], g]));
+    const gone = grouped.filter((g) => !set.has(g[0]));
     const groups: { slot: string; ks: string[] }[] = slots.flatMap((x) =>
       x.includes(REPEAT)
         ? [{ slot: x, ks: [slotKey(x)] }]
@@ -408,6 +485,7 @@ export function assembleStatements(p: IrPayload): Statement[] {
     const cap = p.tables?.[dr.anchor.id];
     const heads = new Map(cap?.heads ?? []);
     const blank = new Set(cap?.blank ?? []);
+    const onTable = !dr.anchor.t.startsWith("p");
     const rows: StatementRow[] = [];
     let prevR: number | null = null;
     for (const { slot, ks } of groups) {
@@ -443,6 +521,7 @@ export function assembleStatements(p: IrPayload): Statement[] {
         total:
           ks.some((x) => !!byKey.get(x)!.total) &&
           keys.some((o) => ks.includes(byKey.get(o)!.parent ?? "")),
+        ...(onTable && r != null ? { at: [dr.anchor.d, Number(dr.anchor.t), r] as [number, number, number] } : {}),
       });
     }
     const lines = keys.map((k) => byKey.get(k)!);
@@ -453,10 +532,11 @@ export function assembleStatements(p: IrPayload): Statement[] {
     const bd = mode(bds);
     const cat = mode(lines.map((s) => s.cat)) ?? "kpi";
     const unitText = cap?.unit?.replace(/^\(|\)$/g, "").trim();
-    sections.push({
+    const sec: Statement = {
       id: dr.anchor.id,
       title: printed || bd || CATEGORY_LABEL[cat] || cat,
       titleFrom: printed ? "printed" : bd ? "breakdown" : "category",
+      group: "main",
       unitLine: unitText
         ? unitText.charAt(0).toUpperCase() + unitText.slice(1)
         : money.length
@@ -472,17 +552,133 @@ export function assembleStatements(p: IrPayload): Statement[] {
       first: lines.reduce((m, s) => (firstEnd(s) < m ? firstEnd(s) : m), "9999"),
       cat,
       doc: dr.anchor.d,
-    });
+    };
+    sections.push(sec);
+    if (gone.length) {
+      const old = gone.map((g) => byKey.get(g[0])!);
+      retired.push({
+        ...sec,
+        id: `${sec.id}~old`,
+        title: `${sec.title}: lines only other copies print`,
+        titleFrom: sec.titleFrom,
+        group: "more",
+        rows: gone.map((g) => ({ kind: "line", k: g[0], ks: g, depth: 0, total: false })),
+        keys: gone.map((g) => g[0]),
+        last: old.reduce((m, s) => (lastEnd(s) > m ? lastEnd(s) : m), ""),
+        first: old.reduce((m, s) => (firstEnd(s) < m ? firstEnd(s) : m), "9999"),
+      });
+    }
   }
-  // Sections of the newest documents first, in the order they print them; then older ones, newest first.
-  return sections;
+  return arrange(p, sections, retired);
 }
 
-/** One row's figures for a period kind: the first line of the row that prints a period wins (newest copy first). */
+const DAY_MS = 864e5;
+/** Documents filed this close to the main document belong to the same release. */
+export const RELEASE_DAYS = 10;
+/** A section with this many lines or fewer is a fragment: listed compactly with the other fragments. */
+export const FRAGMENT_LINES = 2;
+
+const KIND_WORD: Record<string, string> = {
+  "press-release": "earnings release",
+  supplement: "supplement",
+  presentation: "presentation",
+  data: "data file",
+  other: "document",
+};
+
+/**
+ * The page order. The main document is the newest supplement (else earnings release, else the newest
+ * document), by filing date and then lines printed; its tables come first, in its own order. Tables only
+ * other documents of the same release print follow (within `RELEASE_DAYS`), by document and table order,
+ * each naming its source. Sections of at most `FRAGMENT_LINES` lines from either are folded into one compact
+ * section after them, each under its own title. Everything else (tables of older documents, lines only other
+ * copies of a table print) is in the "more" group, newest first. Nothing is dropped: every section stays reachable.
+ */
+export function arrange(p: IrPayload, sections: Statement[], retired: Statement[] = []): Statement[] {
+  const lines = new Map<number, number>();
+  for (const s of sections) lines.set(s.doc, (lines.get(s.doc) ?? 0) + s.keys.length);
+  const rankKind = (d: number) =>
+    p.docs[d]?.kind === "supplement" ? 0 : p.docs[d]?.kind === "press-release" ? 1 : 2;
+  const docs = [...lines.keys()];
+  const newest = docs.reduce((m, d) => ((p.docs[d]?.filed ?? "") > m ? (p.docs[d]?.filed ?? "") : m), "");
+  const lastDay = Date.parse(`${newest || "1970-01-01"}T00:00:00Z`);
+  const recent = (d: number) => {
+    const f = p.docs[d]?.filed;
+    return !newest || (!!f && lastDay - Date.parse(`${f}T00:00:00Z`) <= RELEASE_DAYS * DAY_MS);
+  };
+  const main = docs
+    .filter(recent)
+    .sort(
+      (a, b) =>
+        rankKind(a) - rankKind(b) ||
+        (p.docs[b]?.filed ?? "").localeCompare(p.docs[a]?.filed ?? "") ||
+        (lines.get(b) ?? 0) - (lines.get(a) ?? 0),
+    )[0];
+  const source = (d: number) => KIND_WORD[p.docs[d]?.kind ?? ""] ?? "document";
+  const lineCount = (s: Statement) => s.rows.filter((r) => r.kind === "line").length;
+  const first: Statement[] = [];
+  const other: Statement[] = [];
+  const small: Statement[] = [];
+  const more: Statement[] = [];
+  for (const s of sections) {
+    if (s.doc === main) (lineCount(s) <= FRAGMENT_LINES ? small : first).push(s);
+    else if (recent(s.doc))
+      (lineCount(s) <= FRAGMENT_LINES ? small : other).push({
+        ...s,
+        group: "other",
+        source: source(s.doc),
+      });
+    else more.push({ ...s, group: "more", source: source(s.doc) });
+  }
+  // Tables the document prints under one title over several pages read as the document's own "continued".
+  for (let i = 1; i < first.length; i++)
+    if (first[i].title.replace(/, continued$/i, "") === first[i - 1].title.replace(/, continued$/i, ""))
+      first[i] = { ...first[i], title: `${first[i - 1].title.replace(/, continued$/i, "")}, continued` };
+  const merged = small.length ? [mergeFragments(p, small, main)] : [];
+  return [...first, ...other, ...merged, ...retired, ...more];
+}
+
+/** The compact section of small tables: each fragment's lines under its own title, in page order. */
+function mergeFragments(p: IrPayload, small: Statement[], main: number | undefined): Statement {
+  const rows: StatementRow[] = [];
+  for (const s of small) {
+    if (rows.length) rows.push({ kind: "gap" });
+    rows.push({
+      kind: "head",
+      text: s.source ? `${s.title} (${s.source})` : s.title,
+      depth: 0,
+    });
+    for (const r of s.rows) if (r.kind === "line") rows.push({ ...r, depth: 0, total: false });
+  }
+  const divs = small.map((s) => s.div);
+  return {
+    id: "small",
+    title: "Smaller tables",
+    titleFrom: "merged",
+    group: "other",
+    unitLine: small.every((s) => s.unitLine === small[0].unitLine) ? small[0].unitLine : "",
+    div: mode(divs) ?? 1,
+    rows,
+    keys: small.flatMap((s) => s.keys),
+    docs: new Set(small.map((s) => s.doc)).size,
+    last: small.reduce((m, s) => (s.last > m ? s.last : m), ""),
+    first: small.reduce((m, s) => (s.first < m ? s.first : m), "9999"),
+    cat: mode(small.map((s) => s.cat)) ?? "kpi",
+    doc: main ?? small[0].doc,
+  };
+}
+
+/**
+ * One row's figures for a period kind: the first line of the row that prints a period wins (newest copy first).
+ * A row printed in a table (`at`) shows that table's own printing where the build stored a differing figure
+ * (`series.at`), marked `own`, with the shown cell kept as its other printing. A line merged into the row
+ * fills a period only in the row's printed scale: a billions figure never fills a row printed in millions.
+ */
 export function rowCells(
   ks: string[],
   byKey: Map<string, PayloadSeries>,
   freq: IrPeriodKind,
+  at?: [number, number, number],
 ): {
   cells: Record<string, PayloadCell>;
   held: Record<string, PayloadCell>;
@@ -491,20 +687,52 @@ export function rowCells(
   const cells: Record<string, PayloadCell> = {};
   const held: Record<string, PayloadCell> = {};
   const from: Record<string, string> = {};
-  for (const k of ks) {
+  const lead = byKey.get(ks[0]);
+  const rowDiv = lead ? knownDiv(lead) : null;
+  const fits = (c: PayloadCell) => {
+    if (rowDiv == null) return true;
+    const d = printedDiv(c);
+    return d == null || d === rowDiv;
+  };
+  for (const [i, k] of ks.entries()) {
     const s = byKey.get(k);
     if (!s) continue;
     for (const [e, c] of Object.entries(cellsFor(s, freq)))
-      if (!cells[e] && !held[e]) {
+      if (!cells[e] && !held[e] && (i === 0 || fits(c))) {
         cells[e] = c;
         from[e] = k;
       }
     for (const [e, c] of Object.entries(heldFor(s, freq)))
-      if (!cells[e] && !held[e]) {
+      if (!cells[e] && !held[e] && (i === 0 || fits(c))) {
         held[e] = c;
         from[e] = k;
       }
   }
+  if (at && (freq === "q" || freq === "y"))
+    for (const k of ks) {
+      const own = byKey
+        .get(k)
+        ?.at?.find((x) => x[0] === at[0] && x[1] === at[1] && x[2] === at[2] && x.length > 3);
+      const v = (own?.[3] as PrintedExtra | undefined)?.v;
+      if (!v) continue;
+      for (const [key, [val, col, text]] of Object.entries(v)) {
+        const [kind, e] = key.split(":");
+        if (kind !== freq) continue;
+        const c = cells[e];
+        if (!c || from[e] !== k || c.v === val) continue;
+        cells[e] = {
+          ...c,
+          v: val,
+          d: at[0],
+          l: [at[1], at[2], col],
+          x: text,
+          f: undefined,
+          flags: undefined,
+          own: true,
+          alt: { v: c.v, d: c.d, l: c.l, x: c.x, e: c.e, m: c.m, kind: "conflict" },
+        };
+      }
+    }
   return { cells, held, from };
 }
 

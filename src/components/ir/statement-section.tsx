@@ -3,7 +3,7 @@
 // the printed scale, a quiet tick beside totals whose parts add up, and every figure opening its source.
 // The head row and the first column stay in view: the head is a second table in a sticky strip whose
 // horizontal scroll follows the body's, both with the same fixed column widths.
-import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Check, Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,18 @@ export interface SectionView {
 
 const FIRST = "[--fc:10.5rem] sm:[--fc:17rem] lg:[--fc:20rem]";
 const COL = "5.75rem";
+/** The cell's figure, then a fixed gutter for its mark: the figure stays right-aligned beside the gutter. */
+const CELL_LAYOUT = "flex items-center justify-end pl-2 pr-1";
+const GUTTER = "ml-1 inline-flex w-3 shrink-0 items-center justify-center";
+/** Column width for a section whose longest figure has `chars` characters (figure, gutter and padding). */
+export const colWidth = (chars: number) => `max(${COL}, calc(${Math.max(chars, 1)}ch + 1.75rem))`;
+
+/** A total whose parts add up: a small drawn tick (no icon element, so long tables stay light). */
+function TieMark() {
+  return (
+    <span className="block h-2 w-1 -translate-y-px rotate-45 border-b-[1.5px] border-r-[1.5px] border-positive/80" />
+  );
+}
 
 export const StatementSection = memo(function StatementSection({
   view,
@@ -109,12 +121,23 @@ export const StatementSection = memo(function StatementSection({
     b.scrollLeft = b.scrollWidth;
     sync();
   }, [cols.length, mode, sync]);
-  const minWidth = `calc(var(--fc) + ${cols.length} * ${COL})`;
+  // Columns fit the section's longest figure, with the mark gutter beside it, so nothing overlaps at any width.
+  const widest = useMemo(
+    () =>
+      rows.reduce(
+        (m, r) =>
+          r.kind === "line" ? r.cells.reduce((n, x) => Math.max(n, x?.text.length ?? 0), m) : m,
+        0,
+      ),
+    [rows],
+  );
+  const col = colWidth(widest);
+  const minWidth = `calc(var(--fc) + ${cols.length} * var(--col))`;
   const colgroup = (
     <colgroup>
       <col style={{ width: "var(--fc)" }} />
       {cols.map((e) => (
-        <col key={e} style={{ width: COL }} />
+        <col key={e} style={{ width: "var(--col)" }} />
       ))}
     </colgroup>
   );
@@ -130,6 +153,7 @@ export const StatementSection = memo(function StatementSection({
       aria-labelledby={titleId}
       data-statement={sec.id}
       className={cn("min-w-0 scroll-mt-28 pt-5", FIRST)}
+      style={{ "--col": col } as CSSProperties}
     >
       <header className="flex flex-col gap-x-3 gap-y-2 px-4 pb-3 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
@@ -137,7 +161,12 @@ export const StatementSection = memo(function StatementSection({
             {sec.title}
           </h3>
           <p className={IR.caption}>
-            {[sec.unitLine, span, sec.docs > 1 ? `${sec.docs} documents` : "1 document"]
+            {[
+              sec.source ? `From the ${sec.source}` : "",
+              sec.unitLine,
+              span,
+              sec.docs > 1 ? `${sec.docs} documents` : "1 document",
+            ]
               .filter(Boolean)
               .join(" · ")}
             {view.hidden > 0 &&
@@ -264,7 +293,7 @@ export const StatementSection = memo(function StatementSection({
                   {heads.map((h, i) => (
                     <th
                       key={cols[i]}
-                      className="whitespace-nowrap px-3 py-1.5 text-right align-bottom font-normal"
+                      className="whitespace-nowrap py-1.5 pl-2 pr-5 text-right align-bottom font-normal"
                       title={periodLong(cols[i], freq)}
                     >
                       <span className="num block text-[11px] font-medium text-foreground">
@@ -348,7 +377,7 @@ export const StatementSection = memo(function StatementSection({
                             <td
                               key={e}
                               className={cn(
-                                "px-3 py-1 transition-colors duration-150 group-hover:bg-secondary/60",
+                                "py-1 pl-2 pr-5 transition-colors duration-150 group-hover:bg-secondary/60",
                                 IR.num,
                                 IR.missing,
                                 rule,
@@ -374,16 +403,13 @@ export const StatementSection = memo(function StatementSection({
                               className={cn(
                                 IR.cellButton,
                                 IR.num,
-                                "pr-[18px]",
+                                CELL_LAYOUT,
                                 r.total && IR.total,
                                 x.held && "text-muted-foreground",
                               )}
                             >
                               <span className={cn(x.c.f && IR.derived)}>{x.text}</span>
-                              <span
-                                aria-hidden
-                                className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center"
-                              >
+                              <span aria-hidden data-gutter className={GUTTER}>
                                 {x.held ? (
                                   <HeldMark />
                                 ) : off || x.c.flags?.length ? (
@@ -391,7 +417,7 @@ export const StatementSection = memo(function StatementSection({
                                 ) : x.c.alt ? (
                                   <AltMark />
                                 ) : tied ? (
-                                  <Check className="size-3 text-positive/80" strokeWidth={2.5} />
+                                  <TieMark />
                                 ) : null}
                               </span>
                               {(off || x.held || x.c.flags?.length) && (

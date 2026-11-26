@@ -3,7 +3,7 @@
 // Controls: current or all series, quarterly or annual, 8Q / 20Q / all, a category filter, line search,
 // a jump list, Excel and per-section downloads. Sections render as they come near the screen, so a bank's
 // page lays out quickly; nothing scrolls inside the page except a wide table sideways.
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   ChevronDown,
@@ -42,7 +42,9 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -68,6 +70,7 @@ import {
   printedFigure,
   printedSuffix,
   printsIn,
+  rowLabel,
   rowCells,
   scaleNote,
   unplacedLines,
@@ -93,8 +96,10 @@ const SPANS: Record<Freq, { v: string; l: string }[]> = {
 };
 const DEFAULT_SPAN: Record<Freq, string> = { q: "8", y: "5" };
 const FREQ_FILE: Record<Freq, string> = { q: "quarterly", y: "annual" };
-/** Sections laid out on first paint; the rest mount as they come within about two screens. */
-const EAGER = 3;
+/** Sections laid out on first paint; the rest mount as they come within about one screen. */
+const EAGER = 1;
+/** How far below the screen a section starts to mount. */
+const MOUNT_MARGIN = "600px 0px";
 const ROW_PX = 28;
 
 const KIND_NAME: Record<string, string> = {
@@ -122,6 +127,7 @@ function textSection(p: IrPayload, sections: Statement[]): Statement | null {
     id: "text",
     title: "Figures stated in the text of releases",
     titleFrom: "category",
+    group: "more",
     unitLine: "Dollar figures in millions",
     div: 1e6,
     rows,
@@ -195,7 +201,7 @@ function sectionView(
     (r): r is Extract<StatementRow, { kind: "line" }> => r.kind === "line",
   );
   if (!lineRows.length) return null;
-  const merged = new Map(lineRows.map((r) => [r, rowCells(r.ks, byKey, o.freq)]));
+  const merged = new Map(lineRows.map((r) => [r, rowCells(r.ks, byKey, o.freq, r.at)]));
   const present = new Set<string>();
   for (const m of merged.values())
     for (const e of [...Object.keys(m.cells), ...Object.keys(m.held)]) present.add(e);
@@ -223,8 +229,10 @@ function sectionView(
       if (!c) return null;
       const isHeld = !m.cells[e];
       const owner = byKey.get(m.from[e]) ?? s;
-      // Only a total the section prints with its parts carries the tie-out mark.
-      const chk = r.total && owner.total ? checks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
+      // Only a total the section prints with its parts carries the tie-out mark, and only on the figure the
+      // check was made on (not on the table's own differing printing).
+      const chk =
+        r.total && owner.total && !c.own ? checks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
       if (chk && !chk.partial) {
         tieN++;
         if (chk.ok) tieOk++;
@@ -254,7 +262,7 @@ function sectionView(
       s,
       depth: r.depth,
       total: r.total,
-      label: lineLabel(s),
+      label: rowLabel(r, byKey),
       note,
       match: !!match?.(s),
       cells,
@@ -292,7 +300,7 @@ function Lazy({
   useEffect(() => {
     if (on || !ref.current) return;
     const io = new IntersectionObserver((es) => es.some((x) => x.isIntersecting) && setOn(true), {
-      rootMargin: "1600px 0px",
+      rootMargin: MOUNT_MARGIN,
     });
     io.observe(ref.current);
     return () => io.disconnect();
@@ -342,6 +350,8 @@ export function IrStatements({
   const [dim, setDim] = useState("all");
   const [query, setQuery] = useState("");
   const [exporting, setExporting] = useState<string | null>(null);
+  // Tables of older documents and lines only other copies print: collapsed, opened by the reader, a search or a jump.
+  const [moreOpen, setMoreOpen] = useState(false);
   const [scale] = useUnitScale();
   const { open } = useSource();
   const company = useCompany(ticker);
@@ -423,7 +433,10 @@ export function IrStatements({
     setDim("all");
     setQuery("");
     openIrCell(open, ticker, payload, s, focus.period, focus.freq, c);
-    if (sec) jumpTo(sec.id);
+    if (sec) {
+      if (sec.group === "more") setMoreOpen(true);
+      jumpTo(sec.id);
+    }
     onFocusDone?.();
   }, [focus, byKey, payload, sections, open, ticker, onFocusDone]);
 
@@ -536,10 +549,10 @@ export function IrStatements({
         if (r.kind !== "line") continue;
         const s = byKey.get(r.k);
         if (!s) continue;
-        const m = rowCells(r.ks, byKey, freq);
+        const m = rowCells(r.ks, byKey, freq, r.at);
         out.push(
           [
-            esc(`${"  ".repeat(r.depth)}${lineLabel(s)}`),
+            esc(`${"  ".repeat(r.depth)}${rowLabel(r, byKey)}`),
             s.unit,
             ...cols.map((c) => (m.cells[c] ? String(m.cells[c].v) : "")),
           ].join(","),
@@ -554,7 +567,30 @@ export function IrStatements({
   );
 
   const lines = views.out.reduce((n, v) => n + v.rows.filter((r) => r.kind === "line").length, 0);
-  const jump = (id: string) => jumpTo(id);
+  const front = views.out.filter((v) => v.sec.group !== "more");
+  const more = views.out.filter((v) => v.sec.group === "more");
+  // A search shows its matches wherever they are.
+  const moreShown = moreOpen || !!q;
+  const jump = (id: string) => {
+    if (more.some((v) => v.sec.id === id)) setMoreOpen(true);
+    jumpTo(id);
+  };
+  const slot = (v: SectionView, i: number) => (
+    <Lazy key={v.sec.id} id={v.sec.id} eager={i < EAGER} estimate={88 + v.rows.length * ROW_PX}>
+      <StatementSection
+        view={v}
+        ticker={ticker}
+        payload={payload}
+        freq={freq as IrPeriodKind}
+        scale={scale}
+        exporting={exporting === v.sec.id}
+        onExcel={onExcel}
+        onCsv={onCsv}
+        onChecks={onChecks}
+        openCell={openCell}
+      />
+    </Lazy>
+  );
 
   return (
     <IrPanel
@@ -657,11 +693,21 @@ export function IrStatements({
               <SelectValue placeholder="Go to a section" />
             </SelectTrigger>
             <SelectContent className="max-h-80">
-              {views.out.map((v) => (
+              {front.map((v) => (
                 <SelectItem key={v.sec.id} value={v.sec.id} className="text-xs">
                   {v.sec.title}
                 </SelectItem>
               ))}
+              {more.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-[11px]">More tables</SelectLabel>
+                  {more.map((v) => (
+                    <SelectItem key={v.sec.id} value={v.sec.id} className="text-xs">
+                      {v.sec.title}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
             </SelectContent>
           </Select>
           <div className="relative w-full sm:w-56">
@@ -748,27 +794,47 @@ export function IrStatements({
         </p>
       ) : (
         <div className="grid grid-cols-1 pb-4">
-          {views.out.map((v, i) => (
-            <Lazy
-              key={v.sec.id}
-              id={v.sec.id}
-              eager={i < EAGER}
-              estimate={88 + v.rows.length * ROW_PX}
-            >
-              <StatementSection
-                view={v}
-                ticker={ticker}
-                payload={payload}
-                freq={freq as IrPeriodKind}
-                scale={scale}
-                exporting={exporting === v.sec.id}
-                onExcel={onExcel}
-                onCsv={onCsv}
-                onChecks={onChecks}
-                openCell={openCell}
-              />
-            </Lazy>
+          {front.map((v, i) => (
+            <Fragment key={v.sec.id}>
+              {v.sec.group === "other" && front[i - 1]?.sec.group !== "other" && (
+                <p
+                  data-statement-group="other"
+                  className={cn("border-t bg-secondary/40 px-4 py-1.5", IR.caption)}
+                >
+                  Tables only other documents of this release print
+                </p>
+              )}
+              {slot(v, i)}
+            </Fragment>
           ))}
+          {more.length > 0 && (
+            <div
+              data-statement-group="more"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2.5"
+            >
+              <button
+                type="button"
+                aria-expanded={moreShown}
+                onClick={() => setMoreOpen((o) => !o)}
+                disabled={!!q}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+              >
+                <ChevronDown
+                  aria-hidden
+                  className={cn(
+                    "size-3.5 transition-transform duration-150 motion-reduce:transition-none",
+                    moreShown && "rotate-180",
+                  )}
+                />
+                {moreShown ? "Hide" : "Show"} {more.length.toLocaleString()} more table
+                {more.length === 1 ? "" : "s"}
+              </button>
+              <span className={IR.caption}>
+                Tables of older documents and lines only other copies of a table print
+              </span>
+            </div>
+          )}
+          {moreShown && more.map((v, i) => slot(v, front.length + i))}
         </div>
       )}
     </IrPanel>

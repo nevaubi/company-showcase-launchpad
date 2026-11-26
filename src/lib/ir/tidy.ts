@@ -14,7 +14,7 @@
 // number or invents one.
 import { mergeTwinEnds } from "@/lib/ir/twins";
 import { METRIC_LABEL, groupTitle } from "@/lib/ir/display";
-import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
+import type { IrPayload, PayloadAt, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries, PrintedAt, PrintedExtra } from "@/lib/ir/payload";
 import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 import { holdSuspects } from "@/lib/ir/suspect";
 import { splitTrailing, trailingLine } from "@/lib/ir/ttm";
@@ -281,6 +281,40 @@ export function trailing(s: Pick<PayloadSeries, "label" | "bd" | "sc">): boolean
 }
 
 /**
+ * A printing position of an absorbed line b, with b's figures printed there that differ from what the kept
+ * line a now shows for the period (kept beside the figures the build already recorded for that position).
+ */
+function ownFigures(x: PayloadAt, b: PayloadSeries, a: PayloadSeries): PayloadAt {
+  const was = x[3] as PrintedExtra | undefined;
+  const v: Record<string, PrintedAt> = { ...(was?.v ?? {}) };
+  for (const [kind, cb, ca] of [
+    ["q", b.q, a.q],
+    ["y", b.y, a.y],
+  ] as const)
+    for (const [e, cell] of Object.entries(cb)) {
+      const l = cell.l;
+      if (cell.d !== x[0] || !Array.isArray(l) || l[0] !== x[1] || l[1] !== x[2]) continue;
+      const shown = ca[e];
+      if (!shown || shown.v === cell.v || v[`${kind}:${e}`]) continue;
+      v[`${kind}:${e}`] = [cell.v, l[2], cell.x ?? ""];
+    }
+  // The name b is printed under there (b's own name, unless the build recorded the printed one).
+  const n = was?.n ?? b.label;
+  const extra: PrintedExtra = { ...(Object.keys(v).length ? { v } : {}), ...(n !== a.label ? { n } : {}) };
+  return Object.keys(extra).length ? [x[0], x[1], x[2], extra] : [x[0], x[1], x[2]];
+}
+
+/** The kept line takes another name: its own printings keep the name they are printed under. */
+function keepPrintedNames(a: PayloadSeries, was: string) {
+  if (!a.at?.length || was === a.label) return;
+  a.at = a.at.map((x) => {
+    const extra = x[3] as PrintedExtra | undefined;
+    if (extra?.n) return extra.n === a.label ? [x[0], x[1], x[2], { ...extra, n: undefined }] : x;
+    return [x[0], x[1], x[2], { ...(extra ?? {}), n: was }];
+  });
+}
+
+/**
  * Copy b's cells into a where a has none (a printed cell beats a calculated one), then retire b.
  * With `keep`, a's own cells are never replaced: b only fills periods a does not print. Folds that rest
  * on the two lines printing identical numbers use it, so a printed total is never overwritten by a part.
@@ -299,11 +333,15 @@ function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries, keep = false) {
       if (!ca[e] || (!keep && ((ca[e].f && !cell.f) || (ca[e].w && !cell.w && !cell.f) || (!cell.f && !cell.w && finer(cell.v, ca[e].v))))) ca[e] = cell;
   }
   if (b.total) a.total = true;
-  // Where the absorbed line is printed stays known (statement layout): its positions join the kept line's.
+  // Where the absorbed line is printed stays known (statement layout): its positions join the kept line's,
+  // with the figures it prints there that the kept line shows differently (HON's segment table prints sales of
+  // 4,926 where the summary the kept line shows prints 4,929), so its table still shows its own printing.
   if (b.at?.length)
     a.at = [
       ...(a.at ?? []),
-      ...b.at.filter((x) => !a.at?.some((y) => y[0] === x[0] && y[1] === x[1] && y[2] === x[2])),
+      ...b.at
+        .filter((x) => !a.at?.some((y) => y[0] === x[0] && y[1] === x[1] && y[2] === x[2]))
+        .map((x) => ownFigures(x, b, a)),
     ];
   for (const k of [a.parent, b.parent, a.k, b.k]) if (k) c.touched.add(k);
   periodCache.delete(a);
@@ -311,6 +349,7 @@ function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries, keep = false) {
   valueIdCache.delete(a);
   const was = a.label;
   a.label = label;
+  keepPrintedNames(a, was);
   if (label !== was) c.renamed.set(was, label);
   if (b.label !== label) c.renamed.set(b.label, label);
   // A merged line now spans several years: a year that was only its column header goes.
@@ -686,7 +725,9 @@ function foldSoleChildren(c: Ctx, g: PayloadGroup) {
     if (allCells(k).some(([kind, cells]) => Object.entries(cells).some(([e, x]) => cellsByKind(p, kind)[e] && cellsByKind(p, kind)[e].v !== x.v))) continue;
     const label = p.label;
     absorb(c, p, k, true);
+    const merged = p.label;
     p.label = label;
+    keepPrintedNames(p, merged);
   }
 }
 
@@ -1440,7 +1481,9 @@ function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[])
       const name = piece ? cleanMember(piece) || m!.name : m?.name;
       if (name && s.label !== name) {
         c.renamed.set(s.label, name);
+        const was = s.label;
         s.label = name;
+        keepPrintedNames(s, was);
       }
       s.parent = root?.k ?? null;
       s.sc = undefined;
