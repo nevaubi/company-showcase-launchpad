@@ -55,6 +55,11 @@ export type MeasureSpec = {
   grouping?: "," | "none";
   /** Disclosure or missing-value markers the publisher documents for this field. They are gaps, never zeros. */
   markers?: readonly string[];
+  /**
+   * "leading-spaces" where the publisher right-aligns figures with spaces in a fixed-width file (SEC N-MFP): a cell such
+   * as "   1234.5" is then read as 1234.5 (`numbers.ts`, `readNative`); the stored cell is shown as stored.
+   */
+  padding?: "leading-spaces" | "none";
 };
 
 /**
