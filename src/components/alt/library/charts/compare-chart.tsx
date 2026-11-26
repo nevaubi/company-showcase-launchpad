@@ -112,11 +112,11 @@ function Overlay({ lines, label, recordHref, onOpen, height, axis }: Props) {
   };
   const keys = (e: KeyboardEvent) => {
     const at = hover ?? times.length - 1;
-    if (e.key === "ArrowLeft") (e.preventDefault(), setHover(Math.max(0, at - 1)));
-    else if (e.key === "ArrowRight") (e.preventDefault(), setHover(Math.min(times.length - 1, at + 1)));
-    else if (e.key === "Home") (e.preventDefault(), setHover(0));
-    else if (e.key === "End") (e.preventDefault(), setHover(times.length - 1));
-    else if (e.key === "Enter") (e.preventDefault(), open(at));
+    if (e.key === "ArrowLeft") { e.preventDefault(); setHover(Math.max(0, at - 1)); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); setHover(Math.min(times.length - 1, at + 1)); }
+    else if (e.key === "Home") { e.preventDefault(); setHover(0); }
+    else if (e.key === "End") { e.preventDefault(); setHover(times.length - 1); }
+    else if (e.key === "Enter") { e.preventDefault(); open(at); }
   };
   const dateLabel = (p: TilePoint) => p.label;
   return (
@@ -239,9 +239,9 @@ function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
             aria-label={`${l.label}, ${l.plotUnit}${end ? `, ${end.display} in ${end.label}` : ""}`}
             onKeyDown={(e) => {
               const cur = hover ?? times.length - 1;
-              if (e.key === "ArrowLeft") (e.preventDefault(), setHover(Math.max(0, cur - 1)));
-              else if (e.key === "ArrowRight") (e.preventDefault(), setHover(Math.min(times.length - 1, cur + 1)));
-              else if (e.key === "Enter" && end) (e.preventDefault(), onOpen(recordHref(l, (at ?? end).row)));
+              if (e.key === "ArrowLeft") { e.preventDefault(); setHover(Math.max(0, cur - 1)); }
+              else if (e.key === "ArrowRight") { e.preventDefault(); setHover(Math.min(times.length - 1, cur + 1)); }
+              else if (e.key === "Enter" && end) { e.preventDefault(); onOpen(recordHref(l, (at ?? end).row)); }
             }}
             onBlur={() => setHover(null)}
           >

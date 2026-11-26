@@ -6,7 +6,7 @@ import { computeSeriesTile } from "@/lib/sources/boards/compute";
 import { computeCompareTile, type LineInput } from "@/lib/sources/boards/compute-forms";
 import type { CompareTileSpec, TileResult } from "@/lib/sources/boards/types";
 import { recordHref } from "@/lib/sources/links";
-import type { CompareSeries, MeasureSpec, Profile, SeriesAddress } from "@/lib/sources/profiles";
+import { addressMatches, type CompareSeries, type MeasureSpec, type Profile, type SeriesAddress } from "@/lib/sources/profiles";
 import { sourceQueries } from "@/lib/sources/queries";
 import { SERIES_SURE_LIMIT, type SourcePoint } from "@/lib/sources/read-types";
 import type { SourceSnapshot } from "@/lib/sources/schema";
@@ -81,6 +81,12 @@ export function SeriesView({
     const ctx = tileContext(profile, measure, datasetId, snapshot.id, snapshot.columns);
     if (!ctx.ok) return { ok: false, reason: ctx.reason };
     const cells = seriesCells(profile, snapshot.columns, measure, plan, byPos);
+    const read = byPos.get(plan.measureAt)?.length ?? 0;
+    if (read > 0 && cells.length === 0 && plan.local.length) {
+      // every record of the key failed a field the profile fixes: name it rather than say nothing matched
+      const fixed = addressMatches(address).map((m) => `${m.field} "${m.value}"`).join(" and ");
+      return { ok: false, reason: `None of the ${count(read)} records read for this ${"by" in address ? address.key : "series"} has ${fixed}, which the profile's unit needs.` };
+    }
     const unit = ctx.unit ?? (cells.find((c) => c.unit)?.unit ?? "");
     return computeSeriesTile(levelSpec(datasetId, collection, measure, address, unit), ctx.context, cells);
   }, [plan, pending, failed, reads, profile, measure, datasetId, snapshot.id, snapshot.columns, collection, address]);

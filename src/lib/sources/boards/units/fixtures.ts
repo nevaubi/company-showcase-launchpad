@@ -37,8 +37,11 @@ const UNIT_FIXTURES: readonly { unit: string; tables: UnitFixture }[] = [
 ];
 
 /**
- * The core tables with every unit's rows added after them: a dataset, snapshot or record (by snapshot and row number)
- * already held is kept as it is, so the core rows win and an earlier unit wins over a later one.
+ * The core tables with every unit's rows added after them. A snapshot or a record (by snapshot and row number) already
+ * held is kept as it is: snapshots are immutable, so the core rows win and an earlier unit wins over a later one. A
+ * dataset's row is its pointer to the published snapshot: a unit read production later than the core fixtures, so the
+ * first unit that holds a dataset moves its pointer to the snapshot that unit read (the core tests read the core
+ * tables alone and keep their own snapshots).
  */
 export function withUnitFixtures(core: FixtureTables, units: readonly { unit: string; tables: UnitFixture }[] = UNIT_FIXTURES): FixtureTables & { facets: FixtureFacets } {
   const out: FixtureTables & { facets: FixtureFacets } = {
@@ -50,12 +53,30 @@ export function withUnitFixtures(core: FixtureTables, units: readonly { unit: st
   const datasets = new Set(out.source_datasets.map((d) => String(d.id)));
   const snapshots = new Set(out.source_snapshots.map((s) => String(s.id)));
   const records = new Set(out.source_records.map((r) => `${String(r.snapshot_id)}|${String(r.row_number)}`));
+  const moved = new Set<string>();
   for (const { tables } of units) {
-    for (const d of tables.source_datasets ?? []) if (!datasets.has(String(d.id))) (datasets.add(String(d.id)), out.source_datasets.push(d));
-    for (const s of tables.source_snapshots ?? []) if (!snapshots.has(String(s.id))) (snapshots.add(String(s.id)), out.source_snapshots.push(s));
+    for (const d of tables.source_datasets ?? []) {
+      const id = String(d.id);
+      if (!datasets.has(id)) {
+        datasets.add(id);
+        moved.add(id);
+        out.source_datasets.push(d);
+      } else if (!moved.has(id)) {
+        moved.add(id);
+        out.source_datasets = out.source_datasets.map((x) => (String(x.id) === id ? d : x));
+      }
+    }
+    for (const s of tables.source_snapshots ?? [])
+      if (!snapshots.has(String(s.id))) {
+        snapshots.add(String(s.id));
+        out.source_snapshots.push(s);
+      }
     for (const r of tables.source_records ?? []) {
       const key = `${String(r.snapshot_id)}|${String(r.row_number)}`;
-      if (!records.has(key)) (records.add(key), out.source_records.push(r));
+      if (!records.has(key)) {
+        records.add(key);
+        out.source_records.push(r);
+      }
     }
     for (const [key, facet] of Object.entries(tables.facets ?? {})) if (!out.facets[key]) out.facets[key] = facet;
   }
