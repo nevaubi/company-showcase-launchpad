@@ -10,15 +10,11 @@ import { Check, Clock3, FileStack, Loader2, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import type { IrFocus } from "@/components/ir/breakdowns";
 import { IrChecksDrawer } from "@/components/ir/checks-drawer";
-import { IrFinancialMap } from "@/components/ir/financial-map";
 import { CheckDot } from "@/components/ir/marks";
 import { IrPanel } from "@/components/ir/panel";
 import { IrStandardKpis } from "@/components/ir/standard-kpis";
 import { IrStatements, type StatementsSummary } from "@/components/ir/statements";
-import { IrTopViz } from "@/components/ir/viz-slots";
 import { FilingDetailView } from "@/components/financials/filing-detail";
-import { useUnitScale } from "@/hooks/use-preference";
-import { assembleStatements } from "@/lib/ir/statements";
 import { DASH, IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -174,8 +170,8 @@ function IrPage() {
 }
 
 /**
- * The loaded IR page; the route only fetches. Standardized KPIs, the chart strip, the statements (every
- * printed table over its history), then the financial map, the filings' XBRL breakdowns and the documents.
+ * The loaded IR page; the route only fetches. Standardized KPIs, the statements (every printed table
+ * over its history), then the filings' XBRL breakdowns and the documents.
  * The audit detail lives in the checks panel opened from the tie-out badge.
  */
 export function IrPageView({
@@ -195,11 +191,6 @@ export function IrPageView({
   const [checks, setChecks] = useState<{ open: boolean; section?: string }>({ open: false });
   const [tie, setTie] = useState<StatementsSummary | null>(null);
   const openChecks = useCallback((section?: string) => setChecks({ open: true, section }), []);
-  const [scale] = useUnitScale();
-  const sections = useMemo(
-    () => (data.payload ? assembleStatements(data.payload) : []),
-    [data.payload],
-  );
   return (
     <div className="grid grid-cols-1 gap-6">
       <IrSummary
@@ -213,9 +204,6 @@ export function IrPageView({
         onChecks={openChecks}
       />
       <IrStandardKpis ticker={ticker} />
-      {hasSeries && (
-        <IrTopViz ticker={ticker} payload={data.payload!} sections={sections} scale={scale} />
-      )}
       {hasSeries ? (
         <IrStatements
           key={ticker}
@@ -238,7 +226,6 @@ export function IrPageView({
           </div>
         </IrPanel>
       )}
-      {hasSeries && <IrFinancialMap ticker={ticker} payload={data.payload!} />}
       <IrXbrlBreakdowns ticker={ticker} />
       <IrDocuments ticker={ticker} documents={data.documents} images={data.images} store={store} />
       {data.payload && (
