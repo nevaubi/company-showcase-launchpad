@@ -18,9 +18,9 @@ import {
 } from "@/components/ui/sheet";
 import type { ConsistencySummary } from "@/lib/ir/consistency";
 import { periodLong } from "@/lib/ir/display";
-import type { IrPayload, PayloadCell, PayloadSeries } from "@/lib/ir/payload";
+import type { IrPayload, PayloadCell, PayloadCheck, PayloadSeries } from "@/lib/ir/payload";
 import type { SecCheck } from "@/lib/ir/sec-check";
-import { assembleStatements, lineLabel } from "@/lib/ir/statements";
+import { assembleStatements, lineLabel, sectionChecks, type Statement } from "@/lib/ir/statements";
 import { cn } from "@/lib/utils";
 
 /** Items per list before the rest is counted. */
@@ -46,6 +46,21 @@ const amount = (v: number, unit: string) =>
   unit === "usd"
     ? `${v < 0 ? "−" : ""}$${(Math.abs(v) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 1 })}M`
     : v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+/**
+ * The tie-out checks the panel lists: a total a statement section prints with its parts is checked against
+ * those parts (`sectionChecks`, as the section's marks are); other stored checks as the build made them.
+ */
+function tableChecks(payload: IrPayload, byKey: Map<string, PayloadSeries>, sec?: Statement): PayloadCheck[] {
+  const secs = sec ? [sec] : assembleStatements(payload);
+  const out = new Map<string, PayloadCheck>();
+  const covered = new Set<string>();
+  for (const s of secs) {
+    for (const r of s.rows) if (r.kind === "line" && r.total) for (const k of r.ks) covered.add(k);
+    for (const [key, c] of sectionChecks(s, byKey, payload.checks)) out.set(key, c);
+  }
+  return [...out.values(), ...payload.checks.filter((c) => !covered.has(c.k))];
+}
 
 export function IrChecksDrawer({
   open,
@@ -81,7 +96,7 @@ export function IrChecksDrawer({
     const keys = sec ? new Set(sec.keys) : null;
     const byKey = new Map(payload.series.map((s) => [s.k, s]));
     const failed: Item[] = [];
-    for (const ck of payload.checks) {
+    for (const ck of tableChecks(payload, byKey, sec)) {
       if (ck.ok || ck.partial || (keys && !keys.has(ck.k))) continue;
       const s = byKey.get(ck.k);
       const kind = ck.kind === "fy" ? "y" : "q";

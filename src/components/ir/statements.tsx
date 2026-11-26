@@ -74,6 +74,7 @@ import {
   rowCells,
   scaleNote,
   unplacedLines,
+  sectionChecks,
   visibleRows,
   type Statement,
   type StatementRow,
@@ -209,6 +210,7 @@ function sectionView(
   const cols = o.span === "all" ? inGrid : inGrid.slice(-Number(o.span));
   if (!cols.length) return null;
   const headMap = uniqueHeads(cols, o.freq, o.fy);
+  const tableChecks = sectionChecks(sec, byKey, checks);
   let tieOk = 0;
   let tieN = 0;
   let failing = 0;
@@ -229,10 +231,8 @@ function sectionView(
       if (!c) return null;
       const isHeld = !m.cells[e];
       const owner = byKey.get(m.from[e]) ?? s;
-      // Only a total the section prints with its parts carries the tie-out mark, and only on the figure the
-      // check was made on (not on the table's own differing printing).
-      const chk =
-        r.total && owner.total && !c.own ? checks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
+      // Only a total the section prints with its parts carries the tie-out mark, checked against those parts.
+      const chk = r.total ? tableChecks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
       if (chk && !chk.partial) {
         tieN++;
         if (chk.ok) tieOk++;
