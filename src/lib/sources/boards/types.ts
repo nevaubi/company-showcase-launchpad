@@ -559,6 +559,8 @@ export type TileSource = {
   /** When the stored copy was retrieved from the publisher (ISO time), and when it was published in the store. */
   retrievedAt: string | null;
   publishedAt: string | null;
+  /** The other tables a multi-series tile reads (compare, mix, curve), after its own. */
+  also?: { datasetId: string; table: string; code?: string }[];
 };
 
 /** A computed tile as a board serves it. */

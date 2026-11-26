@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { FakeSourceDb } from "../read.fake";
 import { resetReadState } from "../read.server";
-import { readBoard, resetBoardCache } from "./board.server";
+import { BOARD_READ_BUDGET, crossRead, latestParsedPeriod, readBoard, readTiles, resetBoardCache } from "./board.server";
 import { fixtureTables } from "./fixtures";
-import { BOARDS, TILES } from "./specs";
-import type { Board } from "./types";
+import { CORE_BOARDS, CORE_TILES } from "./specs";
+import type { Board, CompareTileSpec, TileSpec } from "./types";
 
 /** Every board computed through the real read layer, on a fake member client that holds the fixture rows. */
 
@@ -43,8 +43,10 @@ function productionShaped() {
   }
   return t;
 }
+/** The tiles of round 4 on a board: the fixtures hold their rows (units' tiles have their own checks). */
+const coreTiles = (id: string) => CORE_BOARDS.find((b) => b.id === id)?.tiles ?? [];
 const board = async (id: string, db = new FakeSourceDb(tables)): Promise<Board> => {
-  const read = await readBoard(db, id, Date.UTC(2026, 10, 25, 21));
+  const read = await readBoard(db, id, Date.UTC(2026, 10, 25, 21), coreTiles(id));
   if (!read.ok) throw new Error(read.message);
   return read.data;
 };
@@ -55,13 +57,14 @@ beforeEach(() => {
 });
 
 describe("boards on the fixture rows", () => {
-  it("computes every tile of every board, none refused", async () => {
-    for (const spec of BOARDS) {
+  it("computes every tile of every core board, none refused or deferred", async () => {
+    for (const spec of CORE_BOARDS) {
       const b = await board(spec.id);
       expect(b.refused, spec.id).toEqual([]);
+      expect(b.deferred, spec.id).toBeUndefined();
       expect(b.tiles.map((t) => t.id)).toEqual(spec.tiles);
     }
-    expect(new Set(BOARDS.flatMap((b) => b.tiles))).toEqual(new Set(TILES.map((t) => t.id)));
+    expect(new Set(CORE_BOARDS.flatMap((b) => b.tiles))).toEqual(new Set(CORE_TILES.map((t) => t.id)));
   });
 
   it("serves the library board with its source lines", async () => {
@@ -126,11 +129,11 @@ describe("boards on the fixture rows", () => {
   it("after ten minutes reads only each dataset's pointer and keeps the computed tiles of an unchanged snapshot", async () => {
     const db = new FakeSourceDb(productionShaped());
     const start = Date.UTC(2026, 10, 25, 21);
-    await readBoard(db, "library", start);
+    await readBoard(db, "library", start, coreTiles("library"));
     const cold = db.calls.length;
-    await readBoard(db, "library", start + 5 * 60_000);
+    await readBoard(db, "library", start + 5 * 60_000, coreTiles("library"));
     expect(db.calls.length).toBe(cold);
-    await readBoard(db, "library", start + 11 * 60_000);
+    await readBoard(db, "library", start + 11 * 60_000, coreTiles("library"));
     const later = db.calls.slice(cold);
     expect(later).toHaveLength(9);
     expect(later.every((c) => c.table === "source_datasets" && !c.columns.includes("latest:"))).toBe(true);
@@ -152,7 +155,138 @@ describe("boards on the fixture rows", () => {
     expect(b.tiles).toHaveLength(3);
   });
 
-  it("answers not-found for an unknown board", async () => {
+  it("answers not-found for an unknown board and refuses a tile that is not on the board", async () => {
     expect(await readBoard(new FakeSourceDb(tables), "nope")).toMatchObject({ ok: false, reason: "not-found" });
+    expect(await readBoard(new FakeSourceDb(tables), "01_financials", Date.now(), ["unemployment-rate"])).toMatchObject({ ok: false, reason: "invalid" });
+  });
+});
+
+describe("the read budget of a board request", () => {
+  it("defers the tiles past the budget and serves them in the next request, no request past its budget", async () => {
+    const db = new FakeSourceDb(productionShaped());
+    const now = Date.UTC(2026, 10, 25, 21);
+    const first = await readBoard(db, "library", now, coreTiles("library"), 10);
+    if (!first.ok) throw new Error(first.message);
+    expect(db.calls.length).toBeLessThanOrEqual(10);
+    expect(first.data.deferred?.length).toBeGreaterThan(0);
+    const seen = new Set(first.data.tiles.map((t) => t.id));
+    let left = first.data.deferred ?? [];
+    for (let round = 0; left.length && round < 8; round += 1) {
+      const before = db.calls.length;
+      const next = await readBoard(db, "library", now, left, 10);
+      if (!next.ok) throw new Error(next.message);
+      expect(db.calls.length - before).toBeLessThanOrEqual(10);
+      next.data.tiles.forEach((t) => seen.add(t.id));
+      expect(next.data.refused).toEqual([]);
+      left = next.data.deferred ?? [];
+    }
+    expect(left).toEqual([]);
+    expect([...seen].sort()).toEqual([...coreTiles("library")].sort());
+  });
+
+  it("keeps the whole library board inside one budget of 40 selects", async () => {
+    const db = new FakeSourceDb(productionShaped());
+    await board("library", db);
+    expect(db.calls.length).toBeLessThanOrEqual(BOARD_READ_BUDGET);
+  });
+});
+
+describe("tiles of several tables", () => {
+  const UNRATE = "official_00_universal_raw_fred_unrate_3286ca8718";
+  const FEDFUNDS = "official_00_universal_raw_fred_fedfunds_60a510e6af";
+  const compare: CompareTileSpec = {
+    id: "t-compare",
+    collection: "00_universal",
+    datasetId: UNRATE,
+    measure: "UNRATE",
+    title: "Unemployment and the funds rate",
+    subject: "The unemployment rate",
+    unit: "Percent",
+    decimals: 2,
+    form: "compare",
+    transform: "level",
+    headline: "spread",
+    spread: { of: 0, less: 1 },
+    window: 24,
+    lines: [
+      { label: "Unemployment rate", subject: "the unemployment rate", series: { whole: true } },
+      { datasetId: FEDFUNDS, measure: "FEDFUNDS", label: "Federal funds rate", subject: "the effective federal funds rate", series: { whole: true } },
+    ],
+  };
+
+  it("reads each series on its own table and names the other tables in the source", async () => {
+    const db = new FakeSourceDb(tables);
+    const b = await readTiles(db, [compare as TileSpec], Date.UTC(2026, 10, 25, 21));
+    expect(b.refused).toEqual([]);
+    const t = b.tiles[0];
+    expect(t.result.ok && t.result.headline).toBe("The unemployment rate was 0.22 percentage points above the effective federal funds rate in Oct 2026.");
+    expect(t.source.datasetId).toBe(UNRATE);
+    expect(t.source.also?.map((a) => a.datasetId)).toEqual([FEDFUNDS]);
+    expect(t.selection).toEqual({ lines: [{ datasetId: UNRATE, series: { whole: true } }, { datasetId: FEDFUNDS, series: { whole: true } }] });
+    // two datasets, one page of each series
+    expect(db.calls.length).toBe(4);
+  });
+});
+
+/** A synthetic state table: one record per state and year, EIA's footer stored as a record, 1,200 records a year. */
+function stateTable(opts: { years: string[]; perYear: number; footer?: boolean; rows?: number }) {
+  const records: Record<string, unknown>[] = [];
+  let row = 0;
+  for (const year of opts.years)
+    for (let i = 0; i < opts.perYear; i += 1) {
+      row += 1;
+      records.push({ snapshot_id: "s1", row_number: row, period: year, geo_code: `K${i}`, values: [year, `K${i}`, String(i), i % 2 ? "a" : "b"] });
+    }
+  if (opts.footer) records.push({ snapshot_id: "s1", row_number: row + 1, period: "Source: U.S. Energy Information Administration", values: ["Source: U.S. Energy Information Administration", null, null, null] });
+  const columns = ["Year", "State", "Value", "Kind"].map((label, i) => ({ key: `col${i}`, label, type: "string" }));
+  const tables = {
+    source_datasets: [{ id: "d1", source_id: "T", latest_snapshot_id: "s1", name: "t", sector: "05_utilities", agency: "a", source_url: null, grain: "g" }],
+    source_snapshots: [{ id: "s1", dataset_id: "d1", status: "ready", columns, ingest: { dimensions: { period: 0, geo_code: 1 } }, retrieved_at: "2026-11-24T09:00:00Z", published_at: null, loaded_rows: opts.rows ?? records.length, column_count: 4, file_sha256: "x" }],
+    source_records: records,
+  };
+  return { tables, meta: { snapshotId: "s1", rows: opts.rows ?? records.length, columns, ingest: { dimensions: { period: 0, geo_code: 1 } } } };
+}
+
+describe("cross-sections", () => {
+  it("take the greatest period of the declared format, passing over a footer stored as a record and counting it", async () => {
+    const { tables } = stateTable({ years: ["2024", "2025"], perYear: 3, footer: true });
+    const db = new FakeSourceDb(tables as never);
+    expect(await latestParsedPeriod(db, "s1", "year")).toEqual({ period: "2025", skipped: [{ period: "Source: U.S. Energy Information Administration", records: 1, atLeast: false }] });
+  });
+
+  it("read one period in pages, complete only when it ends inside five", async () => {
+    const { tables, meta } = stateTable({ years: ["2025"], perYear: 2500 });
+    const db = new FakeSourceDb(tables as never);
+    const read = await crossRead(db, meta as never, { by: "geo_code", period: "latest" }, [2], "year");
+    expect(read.cells).toHaveLength(2500);
+    expect(read.period).toBe("2025");
+    // a probe, then three pages
+    expect(db.calls.length).toBe(4);
+    const big = stateTable({ years: ["2025"], perYear: 5001 });
+    await expect(crossRead(new FakeSourceDb(big.tables as never), big.meta as never, { by: "geo_code", period: "2025" }, [2], "year")).rejects.toThrow(
+      "The period 2025 has more than 5,000 records; a part is never ranked or drawn as the whole.",
+    );
+  });
+
+  it("filter by a field inside the select on a small snapshot and after the read on a large one", async () => {
+    const small = stateTable({ years: ["2025"], perYear: 10 });
+    const db = new FakeSourceDb(small.tables as never);
+    const a = await crossRead(db, small.meta as never, { by: "geo_code", period: "2025", where: [{ field: "Kind", value: "a" }] }, [2], "year");
+    expect(a.cells.map((c) => c.key)).toEqual(["K1", "K3", "K5", "K7", "K9"]);
+    expect(db.calls[0].filters).toContain("values->>3=eq");
+    const large = stateTable({ years: ["2025"], perYear: 10, rows: 60_000 });
+    const db2 = new FakeSourceDb(large.tables as never);
+    const b = await crossRead(db2, large.meta as never, { by: "geo_code", period: "2025", where: [{ field: "Kind", value: "a" }] }, [2], "year");
+    expect(b.cells.map((c) => c.key)).toEqual(["K1", "K3", "K5", "K7", "K9"]);
+    expect(db2.calls[0].filters).not.toContain("values->>3=eq");
+  });
+
+  it("read a whole small table only when it has no period dimension", async () => {
+    const { tables, meta } = stateTable({ years: ["2025"], perYear: 4 });
+    await expect(crossRead(new FakeSourceDb(tables as never), meta as never, { by: "geo_code", period: "table" }, [2], "year")).rejects.toThrow("The table has periods");
+    const flat = { ...meta, ingest: { dimensions: { geo_code: 1 } } };
+    const read = await crossRead(new FakeSourceDb(tables as never), flat as never, { by: "geo_code", period: "table" }, [2], null);
+    expect(read).toMatchObject({ table: true, period: null });
+    expect(read.cells).toHaveLength(4);
   });
 });

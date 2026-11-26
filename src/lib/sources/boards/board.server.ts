@@ -12,24 +12,26 @@
  */
 import { describeDataset } from "../catalog";
 import { addressMatches, addressRefusal, cadenceOf, locateField, measureOf, profileStatus, unitOf } from "../profiles";
-import type { MeasureSpec, Profile, SeriesAddress } from "../profiles/types";
-import { readSourceCrossSection, readSourceSeriesFields, type SourceDirectClient, type SourceSnapshotKnown } from "../read.server";
-import { SERIES_SURE_LIMIT, type SourceCellMatch, type SourceSeriesAddress } from "../read-types";
+import type { FieldMatch, IndexedDimension, MeasureSpec, Profile, SeriesAddress } from "../profiles/types";
+import { parsePeriod, type PeriodFormat } from "../periods";
+import { hasDimension, readSourceFacets, readSourceSeriesFields, type SourceDirectClient, type SourceSnapshotKnown } from "../read.server";
+import { READ_LIMITS, SERIES_SURE_LIMIT, type SourceCellMatch, type SourceFacets, type SourceSeriesAddress } from "../read-types";
 import type { SourceColumn, SourceIngest } from "../schema";
-import { computeRankTile, computeSeriesTile, isClassicSpec, type CellInput, type RankCellInput, type TileContext } from "./compute";
+import { computeRankTile, computeSeriesTile, type CellInput, type RankCellInput, type TileContext, type WholeTable } from "./compute";
+import {
+  computeCompareTile,
+  computeCurveTile,
+  computeDistributionTile,
+  computeMapTile,
+  computeMixTile,
+  computeRecordsTile,
+  computeStatTile,
+  yearEarlierText,
+  type CountInput,
+  type LineInput,
+} from "./compute-forms";
 import { boardSpec, tileSpec } from "./specs";
-import type {
-  Board,
-  BoardRead,
-  BoardTile,
-  RankTileSpec,
-  SeriesTileSpec,
-  ShareTileSpec,
-  TileResult,
-  TileSeriesSpec,
-  TileSource,
-  TileSpec,
-} from "./types";
+import type { Board, BoardRead, BoardTile, CrossSpec, SeriesTileSpec, TileResult, TileSeriesSpec, TileSource, TileSpec } from "./types";
 
 type DatasetMeta = {
   dataset: { id: string; source_id: string | null; name: string; sector: string; agency: string; source_url: string | null; grain: string };
@@ -201,21 +203,32 @@ function contextFor(profile: Profile, measure: MeasureSpec, meta: DatasetMeta, c
   };
 }
 
-async function seriesCells(
+/** A whole-snapshot series of a profile that reads its latest rows (a FRED daily file) reads this many from the end. */
+function lastRows(profile: Profile, address: SeriesAddress, window: number): number | undefined {
+  return profile.addressing.scan === "latest" && "whole" in address ? Math.max(1, Math.min(SERIES_ROW_LIMIT, window)) : undefined;
+}
+
+/**
+ * The records of one series as cells: the measure and every field beside it (its unit column, a subject check, the
+ * fields of a composed period, the field matches applied after a keyed read) on the same selects.
+ */
+async function lineCells(
   db: SourceDirectClient,
   meta: DatasetMeta,
   profile: Profile,
   measure: MeasureSpec,
-  spec: SeriesTileSpec,
+  address: SeriesAddress,
+  check: FieldMatch | undefined,
+  last: number | undefined,
 ): Promise<CellInput[]> {
   const columns = meta.snapshot.columns;
-  const refusal = addressRefusal(profile, spec.series);
+  const refusal = addressRefusal(profile, address);
   if (refusal) stop(refusal);
-  const { read, local } = readAddress(columns, spec.series);
+  const { read, local } = readAddress(columns, address);
   const measureAt = position(columns, measure.field);
   const want = new Set<number>();
   if (measure.unit.from === "column") want.add(position(columns, measure.unit.column));
-  if (spec.subjectCheck) want.add(position(columns, spec.subjectCheck.field));
+  if (check) want.add(position(columns, check.field));
   if (profile.period.from === "field") want.add(position(columns, profile.period.field));
   if (profile.period.from === "fields") for (const f of profile.period.fields) want.add(position(columns, f));
   for (const m of local) want.add(m.position);
@@ -223,11 +236,15 @@ async function seriesCells(
 
   // the measure and every field beside it on the same selects
   const fields = [measureAt, ...want];
-  const got = await readSourceSeriesFields(db, { datasetId: meta.dataset.id, snapshotId: meta.snapshot.id, fields, address: read, limit: SERIES_ROW_LIMIT }, known(meta));
+  const got = await readSourceSeriesFields(
+    db,
+    { datasetId: meta.dataset.id, snapshotId: meta.snapshot.id, fields, address: read, limit: last ?? SERIES_ROW_LIMIT, ...(last !== undefined ? { last } : {}) },
+    known(meta),
+  );
   if (!got.ok) stop(got.reason === "unavailable" ? "The series read is not available yet." : got.message);
   const series = got.ok ? got.data : null;
   if (!series) return [];
-  if (series.next !== null) stop(`The series has more than ${SERIES_ROW_LIMIT.toLocaleString("en-US")} records; a tile reads at most that many.`);
+  if (series.next !== null && last === undefined) stop(`The series has more than ${SERIES_ROW_LIMIT.toLocaleString("en-US")} records; a tile reads at most that many.`);
   const slot = new Map(fields.map((at, i) => [at, i] as const));
   const cells: CellInput[] = [];
   for (const point of series.points) {
@@ -244,29 +261,203 @@ async function seriesCells(
       period,
       text: cellAt(measureAt),
       unit: measure.unit.from === "column" ? cellAt(position(columns, measure.unit.column)) : undefined,
-      check: spec.subjectCheck ? cellAt(position(columns, spec.subjectCheck.field)) : undefined,
+      check: check ? cellAt(position(columns, check.field)) : undefined,
     });
   }
   return cells;
 }
 
-async function rankCells(db: SourceDirectClient, meta: DatasetMeta, measure: MeasureSpec, spec: RankTileSpec): Promise<RankCellInput[]> {
-  const read = await readSourceCrossSection(db, {
-    datasetId: meta.dataset.id,
-    snapshotId: meta.snapshot.id,
-    field: position(meta.snapshot.columns, measure.field),
-    period: spec.across.period === "latest" ? undefined : spec.across.period,
-  }, known(meta));
-  if (!read.ok) stop(read.reason === "unavailable" ? "The cross-section read is not available yet." : read.message);
-  const data = read.ok ? read.data : null;
-  if (!data) return [];
-  if (!data.complete) stop("The period has more than 1,000 records; a part is never ranked as the whole.");
-  if (data.periodRule === "none") stop("The table has no period dimension to rank one period by.");
-  return data.rows.map((r) => {
-    const key = spec.across.by === "entity_id" ? r.entityId : spec.across.by === "entity_name" ? r.entityName : spec.across.by === "geo_code" ? r.geoCode : r.geoName;
-    return { row: r.row, key: key ?? `row ${r.row}`, name: r.entityName ?? r.geoName, period: data.period, text: r.text };
-  });
+// ---------------------------------------------------------------- cross-sections
+
+/** Pages of one period (or of a whole small table) a cross-section reads at most, of 1,000 records each. */
+export const CROSS_PAGES = 5;
+/** Probes of the period index a "latest" period takes at most, from the greatest period string down. */
+export const LATEST_PROBES = 5;
+
+/** A period of the index that is not of the declared format: its text and the records that carry it. */
+export type SkippedPeriod = { period: string; records: number; atLeast: boolean };
+
+export type CrossRead = {
+  /** The period read, as stored; null for a whole table. */
+  period: string | null;
+  cells: RankCellInput[];
+  /** Greater period strings passed over because they are not of the declared format, with their records counted. */
+  skipped: SkippedPeriod[];
+  /** True when the whole table was read (a snapshot without a period dimension). */
+  table: boolean;
+};
+
+const cellPath = (at: number) => `values->>${at}`;
+const rowOf = (r: Record<string, unknown>) => (typeof r.row_number === "number" ? r.row_number : Number(r.row_number));
+
+async function selectRows(q: PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<Record<string, unknown>[]> {
+  const got = await q;
+  if (got.error) stop(`The records could not be read (${got.error.message}).`);
+  return Array.isArray(got.data) ? (got.data as Record<string, unknown>[]) : [];
 }
+
+/**
+ * The greatest period of the index that is of the declared format: probes from the greatest period string down,
+ * passing over strings that do not parse (a publisher's footer stored as a record), each counted with one select of
+ * its records. A format whose strings do not sort as their dates (text) has no latest period.
+ */
+export async function latestParsedPeriod(
+  db: SourceDirectClient,
+  snapshotId: string,
+  format: PeriodFormat,
+): Promise<{ period: string; skipped: SkippedPeriod[] }> {
+  if (format === "text") stop("The period of this table is text: no period is the latest.");
+  const skipped: SkippedPeriod[] = [];
+  let below: string | null = null;
+  for (let probe = 0; probe < LATEST_PROBES; probe += 1) {
+    let q = db.from("source_records").select("row_number,period").eq("snapshot_id", snapshotId).not("period", "is", null);
+    if (below !== null) q = q.lt("period", below);
+    const found = await selectRows(q.order("period", { ascending: false }).order("row_number", { ascending: false }).limit(1));
+    const value = typeof found[0]?.period === "string" ? (found[0].period as string) : null;
+    if (value === null) break;
+    if (parsePeriod(value, format)) return { period: value, skipped };
+    const of = await selectRows(db.from("source_records").select("row_number").eq("snapshot_id", snapshotId).eq("period", value).order("row_number", { ascending: true }).limit(READ_LIMITS.page));
+    skipped.push({ period: value, records: of.length, atLeast: of.length >= READ_LIMITS.page });
+    below = value;
+  }
+  stop(
+    skipped.length
+      ? `No period of the declared format (${format}) among the ${skipped.length} greatest periods of the index (${skipped.map((s) => `"${s.period.slice(0, 40)}"`).join(", ")}).`
+      : "The table has no period to read.",
+  );
+  throw new Error("unreachable");
+}
+
+/**
+ * One period across entities or places, or a whole small table, in at most five selects of 1,000 records in row
+ * order, complete only when it ends inside them. Field matches filter inside the select on a snapshot of at most
+ * 50,000 records and after the read above that. `fields` are read beside the measure (`values->>N` paths).
+ */
+export async function crossRead(
+  db: SourceDirectClient,
+  meta: { snapshotId: string; rows: number; columns: readonly SourceColumn[]; ingest: SourceIngest },
+  across: CrossSpec,
+  fields: readonly number[],
+  format: PeriodFormat | null,
+): Promise<CrossRead> {
+  const table = across.period === "table";
+  const periodic = hasDimension(meta.ingest, "period");
+  let period: string | null = null;
+  let skipped: SkippedPeriod[] = [];
+  if (table) {
+    if (periodic) stop("The table has periods; a whole table is read only when it has none.");
+  } else if (!periodic) {
+    stop("The table has no period dimension; a tile reads a whole small table with the period \"table\".");
+  } else if (across.period === "latest") {
+    if (!format) stop("The period format of this table is not declared, so no period is the latest.");
+    ({ period, skipped } = await latestParsedPeriod(db, meta.snapshotId, format!));
+  } else period = across.period;
+
+  const matches = (across.where ?? []).map((m) => ({ position: position(meta.columns, m.field), value: m.value }));
+  const inSelect = meta.rows <= READ_LIMITS.cellFilterRows;
+  const extra = [...new Set([...fields, ...(inSelect ? [] : matches.map((m) => m.position))])];
+  const select = `row_number,period,entity_id,entity_name,geo_code,geo_name${extra.map((at, i) => `,c${i}:${cellPath(at)}`).join("")}`;
+  const slot = new Map(extra.map((at, i) => [at, `c${i}`] as const));
+  const base = () => {
+    let q = db.from("source_records").select(select).eq("snapshot_id", meta.snapshotId);
+    if (period !== null) q = q.eq("period", period);
+    if (inSelect) for (const m of matches) q = q.eq(cellPath(m.position), m.value);
+    return q;
+  };
+  const got: Record<string, unknown>[] = [];
+  let after = 0;
+  let complete = false;
+  for (let page = 0; page < CROSS_PAGES; page += 1) {
+    const rows = await selectRows(base().gt("row_number", after).order("row_number", { ascending: true }).limit(READ_LIMITS.page));
+    got.push(...rows);
+    if (rows.length < READ_LIMITS.page) {
+      complete = true;
+      break;
+    }
+    after = rowOf(rows[rows.length - 1]);
+  }
+  if (!complete) {
+    const more = await selectRows(base().gt("row_number", after).order("row_number", { ascending: true }).limit(1));
+    if (more.length > 0)
+      stop(`${table ? "The table" : `The period ${period}`} has more than ${(CROSS_PAGES * READ_LIMITS.page).toLocaleString("en-US")} records; a part is never ranked or drawn as the whole.`);
+  }
+  const key = (r: Record<string, unknown>) => {
+    const v = across.by === "entity_id" ? r.entity_id : across.by === "entity_name" ? r.entity_name : across.by === "geo_code" ? r.geo_code : r.geo_name;
+    return typeof v === "string" ? v : null;
+  };
+  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  const cells: RankCellInput[] = [];
+  for (const r of got) {
+    if (!inSelect && matches.some((m) => str(r[slot.get(m.position)!]) !== m.value)) continue;
+    const row = rowOf(r);
+    cells.push({
+      row,
+      key: key(r) ?? `row ${row}`,
+      name: str(r.entity_name) ?? str(r.geo_name),
+      period: str(r.period),
+      text: fields.length ? str(r[slot.get(fields[0])!]) : null,
+      unit: fields.length > 1 ? str(r[slot.get(fields[1])!]) : undefined,
+      check: fields.length > 2 ? str(r[slot.get(fields[2])!]) : undefined,
+    });
+  }
+  return { period, cells, skipped, table };
+}
+
+/** The measure, its unit column and a subject check as the fields of a cross-section, in that order. */
+function crossFields(meta: DatasetMeta, measure: MeasureSpec, check: FieldMatch | undefined): number[] {
+  const out = [position(meta.snapshot.columns, measure.field)];
+  const unitAt = measure.unit.from === "column" ? position(meta.snapshot.columns, measure.unit.column) : null;
+  const checkAt = check ? position(meta.snapshot.columns, check.field) : null;
+  if (unitAt !== null || checkAt !== null) out.push(unitAt ?? out[0]);
+  if (checkAt !== null) out.push(checkAt);
+  return out;
+}
+
+/** A cross-section's cells with the unit and check cells only where the profile and the spec read them. */
+function crossCells(read: CrossRead, measure: MeasureSpec, check: FieldMatch | undefined): RankCellInput[] {
+  return read.cells.map((c) => ({ ...c, unit: measure.unit.from === "column" ? c.unit : undefined, check: check ? c.check : undefined }));
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2026-11-24T09:58:23Z" as "24 Nov 2026" (UTC): the day the stored copy was retrieved. */
+export function retrievedDay(iso: string | null): string | null {
+  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : null;
+}
+
+function wholeTable(meta: DatasetMeta, read: CrossRead): WholeTable | undefined {
+  return read.table ? { retrieved: retrievedDay(meta.snapshot.retrievedAt) ?? "an unknown day" } : undefined;
+}
+
+/** The caption a tile adds when "latest" passed over periods that are not of the declared format. */
+function skippedNote(skipped: readonly SkippedPeriod[]): string | null {
+  if (!skipped.length) return null;
+  return skipped
+    .map((s) => `${s.atLeast ? "At least " : ""}${s.records.toLocaleString("en-US")} ${s.records === 1 && !s.atLeast ? "record" : "records"} whose period reads "${s.period.slice(0, 60)}" ${s.records === 1 && !s.atLeast ? "is" : "are"} not of the declared format and left out.`)
+    .join(" ");
+}
+
+// ---------------------------------------------------------------- counts
+
+async function facetCounts(db: SourceDirectClient, meta: DatasetMeta, dimension: IndexedDimension | "period"): Promise<CountInput> {
+  const got = await readSourceFacets(db, { datasetId: meta.dataset.id, snapshotId: meta.snapshot.id, dimension, limit: READ_LIMITS.page });
+  if (!got.ok) stop(got.reason === "unavailable" ? "The store's counts are not available yet." : got.message);
+  const data = (got as { data: SourceFacets }).data;
+  return { from: "facets", values: data.values, complete: data.complete };
+}
+
+async function cellCounts(db: SourceDirectClient, meta: DatasetMeta, field: string): Promise<CountInput> {
+  if (meta.snapshot.rows > SERIES_ROW_LIMIT)
+    stop(`The table has ${meta.snapshot.rows.toLocaleString("en-US")} records; a count by a cell reads a whole table of at most ${SERIES_ROW_LIMIT.toLocaleString("en-US")}.`);
+  const at = position(meta.snapshot.columns, field);
+  const got = await readSourceSeriesFields(db, { datasetId: meta.dataset.id, snapshotId: meta.snapshot.id, fields: [at], address: { whole: true }, limit: SERIES_ROW_LIMIT }, known(meta));
+  if (!got.ok) stop(got.reason === "unavailable" ? "The table read is not available yet." : got.message);
+  const data = (got as { data: { points: { cells: (string | null)[] }[]; next: number | null } }).data;
+  if (data.next !== null) stop(`The table has more than ${SERIES_ROW_LIMIT.toLocaleString("en-US")} records.`);
+  return { from: "cells", cells: data.points.map((p) => p.cells[0] ?? null) };
+}
+
+// ---------------------------------------------------------------- tiles
 
 /** The rows behind a tile's chart, for its "Open records" link. */
 export function selectionOf(spec: TileSpec): BoardTile["selection"] {
@@ -278,6 +469,19 @@ export function selectionOf(spec: TileSpec): BoardTile["selection"] {
   if (spec.form === "mix") return { lines: [line(spec.whole), ...spec.parts.map(line)] };
   if (spec.form === "curve") return { lines: spec.categories.map(line) };
   return { series: spec.series };
+}
+
+/** The datasets a tile reads: its own first, then those its series name, each once. */
+export function datasetsOf(spec: TileSpec): string[] {
+  const ids = [spec.datasetId];
+  const add = (l: TileSeriesSpec) => {
+    const id = l.datasetId ?? spec.datasetId;
+    if (!ids.includes(id)) ids.push(id);
+  };
+  if (spec.transform !== "records" && spec.form === "compare") spec.lines.forEach(add);
+  if (spec.transform !== "records" && spec.form === "mix") [spec.whole, ...spec.parts].forEach(add);
+  if (spec.transform !== "records" && spec.form === "curve") spec.categories.forEach(add);
+  return ids;
 }
 
 function boardTile(spec: TileSpec, source: TileSource, result: TileResult): BoardTile {
@@ -295,59 +499,174 @@ function boardTile(spec: TileSpec, source: TileSource, result: TileResult): Boar
   };
 }
 
-const refusedBy = (spec: TileSpec, error: unknown): Outcome => ({
-  refused: { id: spec.id, title: spec.title, reason: error instanceof TileStop ? error.message : "The tile could not be computed." },
-});
-
-/** Computes one tile on a dataset's snapshot and keeps the outcome; never rejects. */
-async function buildTile(db: SourceDirectClient, spec: TileSpec, meta: DatasetMeta, key: string): Promise<Outcome> {
-  try {
-    if (!isClassicSpec(spec)) stop("This chart form is computed by the next version of the boards.");
-    const classic = spec as SeriesTileSpec | ShareTileSpec | RankTileSpec;
-    const status = profileStatus(meta.dataset, meta.snapshot.columns);
-    if (status.state === "none") stop("No reviewed profile covers this table.");
-    if (status.state === "off") stop(status.reason);
-    const profile = (status as { profile: Profile }).profile;
-    const measure = measureOf(profile, classic.measure);
-    if (!measure) stop(`${classic.measure} is not a measure of the ${profile.family} profile.`);
-    let result: TileResult;
-    if (classic.transform === "rank") {
-      const context = contextFor(profile, measure!, meta, "day");
-      result = computeRankTile(classic, context, await rankCells(db, meta, measure!, classic));
-    } else if (classic.transform === "share") {
-      result = { ok: false, reason: "Share tiles are not served by this board." };
-    } else {
-      const context = contextFor(profile, measure!, meta);
-      result = computeSeriesTile(classic, context, await seriesCells(db, meta, profile, measure!, classic));
-    }
-    const outcome: Outcome = result.ok
-      ? { tile: boardTile(spec, sourceOf(meta), result) }
-      : { refused: { id: spec.id, title: spec.title, reason: result.reason } };
-    tileCache.set(key, outcome);
-    if (tileCache.size > TILE_CACHE_LIMIT) tileCache.delete(tileCache.keys().next().value as string);
-    return outcome;
-  } catch (error) {
-    return refusedBy(spec, error);
-  }
+/** The profile and measure a tile reads on one dataset, or a stop with the reason. */
+function profiled(meta: DatasetMeta, field: string): { profile: Profile; measure: MeasureSpec } {
+  const status = profileStatus({ ...meta.dataset, retrievedAt: meta.snapshot.retrievedAt }, meta.snapshot.columns);
+  if (status.state === "none") stop("No reviewed profile covers this table.");
+  if (status.state === "off") stop(status.reason);
+  const profile = (status as { profile: Profile }).profile;
+  const measure = measureOf(profile, field);
+  if (!measure) stop(`${field} is not a measure of the ${profile.family} profile.`);
+  return { profile, measure: measure! };
 }
 
-async function computeTile(db: SourceDirectClient, spec: TileSpec, now: number): Promise<Outcome> {
-  let meta: DatasetMeta;
+/** One series of a multi-series tile: its dataset's profile, context and cells. */
+async function lineInput(db: SourceDirectClient, metas: Map<string, DatasetMeta>, spec: TileSpec & { datasetId: string; measure: string }, line: TileSeriesSpec, window: number): Promise<LineInput> {
+  const meta = metas.get(line.datasetId ?? spec.datasetId)!;
+  const { profile, measure } = profiled(meta, line.measure ?? spec.measure);
+  const context = contextFor(profile, measure, meta);
+  return { context, cells: await lineCells(db, meta, profile, measure, line.series, line.subjectCheck, lastRows(profile, line.series, window)) };
+}
+
+async function computeOne(db: SourceDirectClient, spec: TileSpec, metas: Map<string, DatasetMeta>): Promise<TileResult> {
+  const meta = metas.get(spec.datasetId)!;
+  if (spec.transform === "records") {
+    const per = spec.per;
+    const input = "field" in per ? await cellCounts(db, meta, per.field) : await facetCounts(db, meta, per.dimension);
+    return computeRecordsTile(spec, input, { datasetId: meta.dataset.id, snapshotId: meta.snapshot.id, retrieved: retrievedDay(meta.snapshot.retrievedAt) });
+  }
+  if (spec.form === "compare") {
+    const lines: LineInput[] = [];
+    for (const line of spec.lines) lines.push(await lineInput(db, metas, spec, line, spec.window));
+    return computeCompareTile(spec, lines);
+  }
+  if (spec.form === "mix") {
+    const whole = await lineInput(db, metas, spec, spec.whole, spec.window);
+    const parts: LineInput[] = [];
+    for (const part of spec.parts) parts.push(await lineInput(db, metas, spec, part, spec.window));
+    return computeMixTile(spec, whole, parts);
+  }
+  if (spec.form === "curve") {
+    const categories: LineInput[] = [];
+    for (const c of spec.categories) categories.push(await lineInput(db, metas, spec, c, ALL_ROWS));
+    return computeCurveTile(spec, categories);
+  }
+  const { profile, measure } = profiled(meta, spec.measure);
+  if (spec.form === "map" || spec.form === "distribution" || spec.transform === "rank") {
+    const cadence = spec.transform === "rank" ? ("day" as const) : cadenceOf(profile);
+    const context = contextFor(profile, measure, meta, cadence);
+    const fields = crossFields(meta, measure, spec.subjectCheck);
+    const snap = { snapshotId: meta.snapshot.id, rows: meta.snapshot.rows, columns: meta.snapshot.columns, ingest: meta.snapshot.ingest };
+    const format = profile.period.from === "dimension" ? profile.period.format : null;
+    const read = await crossRead(db, snap, spec.across, fields, format);
+    const cells = crossCells(read, measure, spec.subjectCheck);
+    const table = wholeTable(meta, read);
+    let result: TileResult;
+    if (spec.transform === "rank") result = computeRankTile(spec, context, cells, table);
+    else if (spec.form === "distribution") result = computeDistributionTile(spec, context, cells, table);
+    else {
+      let earlier: RankCellInput[] | null = null;
+      if (spec.transform === "change-12m") {
+        const before = read.period === null || !format ? null : yearEarlierText(read.period, format, context.cadence);
+        if (!before) stop(`The period a year before ${read.period ?? "this one"} cannot be written in the declared format.`);
+        earlier = crossCells(await crossRead(db, snap, { ...spec.across, period: before! }, fields, format), measure, spec.subjectCheck);
+      }
+      result = computeMapTile(spec, context, cells, earlier, table);
+    }
+    const note = skippedNote(read.skipped);
+    return result.ok && note ? { ...result, sourceNote: [result.sourceNote, note].filter(Boolean).join(" ") } : result;
+  }
+  const context = contextFor(profile, measure, meta);
+  if (spec.form === "stat") {
+    const window = spec.window ?? 24;
+    return computeStatTile(spec, context, await lineCells(db, meta, profile, measure, spec.series, spec.subjectCheck, lastRows(profile, spec.series, window)));
+  }
+  if (spec.transform === "share") return { ok: false, reason: "Share tiles are not served by this board." };
+  const series = spec as SeriesTileSpec;
+  return computeSeriesTile(series, context, await lineCells(db, meta, profile, measure, series.series, series.subjectCheck, lastRows(profile, series.series, series.window)));
+}
+
+/** Reading a curve's categories in whole: each is short (a FRED monthly file) or read from its end. */
+const ALL_ROWS = SERIES_ROW_LIMIT;
+
+class BudgetSpent extends Error {}
+
+/** The selects one board request may send cold (COMMON6): tiles past it are deferred to another request. */
+export const BOARD_READ_BUDGET = 40;
+
+type Meter = { used: number; limit: number };
+
+/** The caller's client, counting every select and call; past the limit a read stops the tile (it is deferred). */
+function metered(db: SourceDirectClient, meter: Meter): SourceDirectClient {
+  const spend = () => {
+    if (meter.used >= meter.limit) throw new BudgetSpent("budget");
+    meter.used += 1;
+  };
+  return {
+    from: (table) => ({
+      select: (columns) => {
+        spend();
+        return db.from(table).select(columns);
+      },
+    }),
+    rpc: (fn, args) => {
+      spend();
+      return db.rpc(fn, args);
+    },
+  };
+}
+
+/** The most selects a tile's reads take, from what the cache knows before any is sent. */
+export function estimateSelects(spec: TileSpec, metas: Map<string, DatasetMeta | undefined>): number {
+  const pages = (rows: number | undefined) => (rows === undefined ? CROSS_PAGES : Math.min(CROSS_PAGES, Math.floor(rows / READ_LIMITS.page) + 1));
+  let total = 0;
+  for (const id of datasetsOf(spec)) if (!metas.get(id)) total += 1;
+  const rowsOf = (id: string) => metas.get(id)?.snapshot.rows;
+  if (spec.transform === "records") return total + ("field" in spec.per ? pages(rowsOf(spec.datasetId)) : 1);
+  // a probe of the period index and one page, typically; a change map reads a second period
+  if (spec.transform === "rank" || spec.form === "map" || spec.form === "distribution") return total + 3 + (spec.form === "map" && spec.transform === "change-12m" ? 3 : 0);
+  const lines = spec.form === "compare" ? spec.lines : spec.form === "mix" ? [spec.whole, ...spec.parts] : spec.form === "curve" ? spec.categories : null;
+  if (lines) return total + lines.reduce((s, l) => s + pages(rowsOf(l.datasetId ?? spec.datasetId)), 0);
+  return total + pages(rowsOf(spec.datasetId));
+}
+
+/** Computes one tile on its datasets' snapshots and keeps the outcome per snapshot; deferred when the budget runs out. */
+async function computeTile(db: SourceDirectClient, spec: TileSpec, now: number): Promise<Outcome | "deferred"> {
+  const metas = new Map<string, DatasetMeta>();
   try {
-    meta = await sharedMeta(db, spec.datasetId, now);
+    for (const id of datasetsOf(spec)) metas.set(id, await sharedMeta(db, id, now));
   } catch (error) {
+    if (error instanceof BudgetSpent) return "deferred";
     return refusedBy(spec, error);
   }
-  const key = `${spec.id}:${meta.snapshot.id}`;
+  const key = `${spec.id}:${[...metas.values()].map((m) => m.snapshot.id).join(",")}`;
   const cached = tileCache.get(key);
   if (cached) return cached;
   let flight = tileFlight.get(key);
   if (!flight) {
-    flight = buildTile(db, spec, meta, key).finally(() => tileFlight.delete(key));
+    flight = (async (): Promise<Outcome> => {
+      try {
+        const result = await computeOne(db, spec, metas);
+        const lead = metas.get(spec.datasetId)!;
+        const source = sourceOf(lead);
+        const also = [...metas.values()].filter((m) => m !== lead).map((m) => {
+          const s = sourceOf(m);
+          return { datasetId: s.datasetId, table: s.table, ...(s.code ? { code: s.code } : {}) };
+        });
+        const outcome: Outcome = result.ok
+          ? { tile: boardTile(spec, also.length ? { ...source, also } : source, result) }
+          : { refused: { id: spec.id, title: spec.title, reason: result.reason } };
+        tileCache.set(key, outcome);
+        if (tileCache.size > TILE_CACHE_LIMIT) tileCache.delete(tileCache.keys().next().value as string);
+        return outcome;
+      } catch (error) {
+        if (error instanceof BudgetSpent) throw error;
+        return refusedBy(spec, error);
+      }
+    })().finally(() => tileFlight.delete(key));
     tileFlight.set(key, flight);
   }
-  return flight;
+  try {
+    return await flight;
+  } catch (error) {
+    if (error instanceof BudgetSpent) return "deferred";
+    return refusedBy(spec, error);
+  }
 }
+
+const refusedBy = (spec: TileSpec, error: unknown): Outcome => ({
+  refused: { id: spec.id, title: spec.title, reason: error instanceof TileStop ? error.message : "The tile could not be computed." },
+});
 
 /** Runs `work` over `items` with at most `width` at a time, keeping the order of `items` in the answer. */
 async function pooled<T, R>(items: readonly T[], width: number, work: (item: T) => Promise<R>): Promise<R[]> {
@@ -364,18 +683,85 @@ async function pooled<T, R>(items: readonly T[], width: number, work: (item: T) 
   return out;
 }
 
-/** One board, every tile computed or refused with its reason. */
-export async function readBoard(db: SourceDirectClient, id: string, now = Date.now()): Promise<BoardRead> {
+/**
+ * One board, or the tiles of it named in `tiles` (a section loading as it scrolls into view), every tile computed,
+ * refused with its reason, or deferred: a request sends at most `BOARD_READ_BUDGET` selects, a tile starts only while
+ * its estimated reads fit what is left, and a tile whose reads would pass the budget is left for the next request
+ * (the client asks again; tiles computed so far are kept per snapshot). A tile that cannot fit even a fresh budget is
+ * refused.
+ */
+export async function readBoard(db: SourceDirectClient, id: string, now = Date.now(), tiles?: readonly string[], budget = BOARD_READ_BUDGET): Promise<BoardRead> {
   const board = boardSpec(id);
   if (!board) return { ok: false, reason: "not-found", message: `No board ${id}.` };
-  const specs = board.tiles.map((t) => tileSpec(t)).filter((t): t is TileSpec => t !== null);
-  const outcomes = await pooled(specs, 3, (spec) => computeTile(db, spec, now));
+  if (tiles && tiles.some((t) => !board.tiles.includes(t))) return { ok: false, reason: "invalid", message: `A tile asked for is not on board ${id}.` };
+  const wanted = tiles ? board.tiles.filter((t) => tiles.includes(t)) : board.tiles;
+  const specs = wanted.map((t) => tileSpec(t)).filter((t): t is TileSpec => t !== null);
+  const data = await readTiles(db, specs, now, budget);
+  return { ok: true, data: { ...data, id: board.id, title: board.title } };
+}
+
+/** Tiles of any spec (a board's, or a test's) under one read budget, in their order. */
+export async function readTiles(db: SourceDirectClient, specs: readonly TileSpec[], now = Date.now(), budget = BOARD_READ_BUDGET): Promise<Board> {
+  const meter: Meter = { used: 0, limit: budget };
+  const client = metered(db, meter);
+  let reserved = 0;
+  const outcomes = await pooled(specs, 3, async (spec): Promise<Outcome | "deferred"> => {
+    const fresh = new Map(datasetsOf(spec).map((d) => {
+      const hit = metaCache.get(d);
+      return [d, hit && now - hit.at < META_TTL_MS ? hit.meta : undefined] as const;
+    }));
+    const estimate = estimateSelects(spec, fresh);
+    const startedEmpty = meter.used + reserved === 0;
+    if (!startedEmpty && meter.used + reserved + estimate > meter.limit) return "deferred";
+    reserved += estimate;
+    try {
+      const outcome = await computeTile(client, spec, now);
+      if (outcome === "deferred" && startedEmpty) return { refused: { id: spec.id, title: spec.title, reason: `The tile needs more than ${budget} reads.` } };
+      return outcome;
+    } finally {
+      reserved -= estimate;
+    }
+  });
   const data: Board = {
-    id: board.id,
-    title: board.title,
-    tiles: outcomes.flatMap((o) => ("tile" in o ? [o.tile] : [])),
-    refused: outcomes.flatMap((o) => ("refused" in o ? [o.refused] : [])),
+    id: "tiles",
+    title: "",
+    tiles: outcomes.flatMap((o) => (o !== "deferred" && "tile" in o ? [o.tile] : [])),
+    refused: outcomes.flatMap((o) => (o !== "deferred" && "refused" in o ? [o.refused] : [])),
     computedAt: new Date(now).toISOString(),
   };
-  return { ok: true, data };
+  const deferred = specs.filter((_, i) => outcomes[i] === "deferred").map((s) => s.id);
+  if (deferred.length) data.deferred = deferred;
+  return data;
+}
+
+// ---------------------------------------------------------------- first looks
+
+export type LookCrossInput = {
+  datasetId: string;
+  snapshotId: string;
+  /** The measure's field label (the profile's). */
+  field: string;
+  by: IndexedDimension;
+  period: "latest" | "table" | string;
+  where?: FieldMatch[];
+};
+
+export type LookCross = { snapshotId: string; period: string | null; table: boolean; cells: RankCellInput[]; skipped: SkippedPeriod[]; retrieved: string | null };
+
+/**
+ * One period of a table for a table page's ranking or map, read as a rank tile reads it: the greatest period of the
+ * profile's format when "latest", up to five pages, complete or refused. The dataset's profile must apply.
+ */
+export async function readLookCross(db: SourceDirectClient, input: LookCrossInput, now = Date.now()): Promise<{ ok: true; data: LookCross } | { ok: false; reason: string }> {
+  try {
+    const meta = await sharedMeta(db, input.datasetId, now);
+    if (meta.snapshot.id !== input.snapshotId) stop("The snapshot asked for is not the published one.");
+    const { profile, measure } = profiled(meta, input.field);
+    const format = profile.period.from === "dimension" ? profile.period.format : null;
+    const snap = { snapshotId: meta.snapshot.id, rows: meta.snapshot.rows, columns: meta.snapshot.columns, ingest: meta.snapshot.ingest };
+    const read = await crossRead(db, snap, { by: input.by, period: input.period, where: input.where }, crossFields(meta, measure, undefined), format);
+    return { ok: true, data: { snapshotId: meta.snapshot.id, period: read.period, table: read.table, cells: crossCells(read, measure, undefined), skipped: read.skipped, retrieved: retrievedDay(meta.snapshot.retrievedAt) } };
+  } catch (error) {
+    return { ok: false, reason: error instanceof TileStop ? error.message : "The period could not be read." };
+  }
 }
