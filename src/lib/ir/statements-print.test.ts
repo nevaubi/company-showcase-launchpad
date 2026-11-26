@@ -16,6 +16,7 @@ import {
   rowCells,
   rowLabel,
   sameRows,
+  tableTitle,
   withCaptions,
   type Statement,
   type StatementRow,
@@ -239,5 +240,14 @@ describe("printed scale", () => {
     const by = new Map([millions, billions].map((s) => [s.k, s]));
     expect(sameRows(["m", "b"], by, new Map())).toEqual([["m"], ["b"]]);
     expect(Object.keys(rowCells(["m", "b"], by, "q").cells)).toEqual(["2026-09-30"]);
+  });
+});
+
+describe("table titles", () => {
+  it("a release's highlight sentence above a table is not its title", () => {
+    expect(tableTitle("CONSOLIDATED STATEMENTS OF INCOME")).toBe(true);
+    expect(tableTitle("Credit-related information, continued")).toBe(true);
+    expect(tableTitle("Positive operating leverage of 5.3% yoy")).toBe(false);
+    expect(tableTitle("• Wealth fees increased $16 million, primarily from growth in AUM.")).toBe(false);
   });
 });

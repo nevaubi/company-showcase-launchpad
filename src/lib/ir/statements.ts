@@ -443,6 +443,21 @@ export function rowLabel(
   return lineLabel(s);
 }
 
+/**
+ * Whether a caption read above a table can be its title: not a bullet or a sentence carrying figures
+ * (a release's "Positive operating leverage of 5.3% yoy" or "• Wealth fees increased $16 million, ..."),
+ * which name a highlight rather than the table; the section then keeps its stored table name.
+ */
+export function tableTitle(t: string): boolean {
+  const x = t.trim();
+  return (
+    x.length > 0 &&
+    x.length <= 90 &&
+    !/^[•·▪◦‣*-]/.test(x) &&
+    !/\d\s*%|\$\s*\d|\d\s*(bps|basis points)\b/i.test(x)
+  );
+}
+
 /** Statement sections of a payload, in the company's order, arranged into groups (`arrange`). */
 export function assembleStatements(p: IrPayload): Statement[] {
   const byKey = new Map(p.series.map((s) => [s.k, s]));
@@ -528,7 +543,7 @@ export function assembleStatements(p: IrPayload): Statement[] {
     const money = lines.filter((s) => s.unit === "usd");
     const div = mode(money.map(lineDiv)) ?? 1;
     const bds = lines.map((s) => s.bd).filter((x): x is string => !!x);
-    const printed = cap?.title ? sentenceCase(cap.title, keep) : "";
+    const printed = cap?.title && tableTitle(cap.title) ? sentenceCase(cap.title, keep) : "";
     const bd = mode(bds);
     const cat = mode(lines.map((s) => s.cat)) ?? "kpi";
     const unitText = cap?.unit?.replace(/^\(|\)$/g, "").trim();

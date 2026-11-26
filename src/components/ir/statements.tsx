@@ -729,7 +729,8 @@ export function IrStatements({
         )}
       >
         <span className="num">
-          {views.out.length.toLocaleString()} section{views.out.length === 1 ? "" : "s"} ·{" "}
+          {front.length.toLocaleString()} section{front.length === 1 ? "" : "s"}
+          {more.length ? ` and ${more.length.toLocaleString()} more` : ""} ·{" "}
           {lines.toLocaleString()} lines
         </span>
         {tieN > 0 && (
