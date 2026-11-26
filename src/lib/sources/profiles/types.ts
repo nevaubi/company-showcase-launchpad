@@ -93,7 +93,15 @@ export type SeriesAddressing = {
   note: string;
 };
 
-export type FirstLook = "series" | "ranking" | "places" | "none";
+/**
+ * The first look of a table page: one series over time, the latest period ranked, the latest period by place (the
+ * US state grid where the places are states), several series of one unit on one chart (`compare`, the series named by
+ * the profile's `compareSeries`), or none.
+ */
+export type FirstLook = "series" | "ranking" | "places" | "compare" | "none";
+
+/** One series of a compare first look: its name on the chart and its address under the profile. */
+export type CompareSeries = { label: string; series: SeriesAddress };
 
 /**
  * How the periods of a series follow each other: it decides how a period is said ("Oct 2026", "Q3 2026",
@@ -150,6 +158,11 @@ export type Profile = {
   addressing: SeriesAddressing;
   /** The series a first look opens on, or null when the table has no natural default. */
   defaultSeries?(dataset: ProfileDataset): SeriesAddress | null;
+  /**
+   * For `firstLook: "compare"`: two to six series of the table in one unit of the first measure (the parts a table lists
+   * beside its total, the same series in several places), drawn together. Null or fewer than two falls back to `series`.
+   */
+  compareSeries?(dataset: ProfileDataset): readonly CompareSeries[] | null;
   firstLook: FirstLook;
   proof: ProfileProof;
 };

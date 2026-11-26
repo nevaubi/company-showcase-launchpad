@@ -708,7 +708,7 @@ export function computeCurveTile(spec: CurveTileSpec, read: readonly LineInput[]
     gaps,
     derivation: { formula, inputs },
     refs: { datasetId: lastContext.datasetId, snapshotId: lastContext.snapshotId, rows: [last.row], field: lastContext.field },
-    shape: { kind: "curve", latestLabel, earlierLabel, latest, earlier },
+    shape: { kind: "curve", latestLabel, earlierLabel, latest, earlier, sources: categories.map((c) => ({ datasetId: c.context.datasetId, snapshotId: c.context.snapshotId })) },
   };
 }
 

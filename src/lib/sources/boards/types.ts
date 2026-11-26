@@ -110,6 +110,11 @@ export type CrossSpec = {
    * that they are applied after the read, to the records of the period read in its five pages.
    */
   where?: readonly FieldMatch[];
+  /**
+   * A dictionary label whose cell is read beside the measure and written after each record's name ("Harrison, MO"),
+   * where names repeat across places. A rank whose bars would still carry one label twice is refused.
+   */
+  labelWith?: string;
 };
 
 /** Entities or places ranked by the measure at one period. */
@@ -479,6 +484,8 @@ export type TileShape =
       /** One point per category, in category order; `label` is the category's. */
       latest: TilePoint[];
       earlier: TilePoint[] | null;
+      /** The table and snapshot of each category, in category order (each may be its own table). */
+      sources: { datasetId: string; snapshotId: string }[];
     }
   | {
       kind: "stat";
