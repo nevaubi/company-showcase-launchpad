@@ -74,6 +74,16 @@ export const SCALE_UNITS: readonly ScaleUnit[] = [
     },
   },
   {
+    // FR Y-9C (snapshot eaa74358: BHCK2170, BHCK3210, BHCK4340) and the FDIC SOD bank totals (snapshot 5f256d95):
+    // dollar amounts in thousands, as each dictionary states (checked on production 26 Nov 2026) and as the FR Y-9C
+    // instructions (GEN-5) and the SOD instructions ("Report all amounts in thousands") say.
+    unit: "USD thousands",
+    exponent: 3,
+    base: { currency: "$" },
+    axis: { one: "USD", million: "USD millions", billion: "USD billions", trillion: "USD trillions" },
+    requested: "company",
+  },
+  {
     // CMS Medicare Part D spending by drug (CMS_PARTD_2024): whole dollars, as the dictionary of snapshot ad25a8c7 states
     // the unit of Tot_Spndng (checked on production 26 Nov 2026).
     unit: "USD nominal gross drug spending",

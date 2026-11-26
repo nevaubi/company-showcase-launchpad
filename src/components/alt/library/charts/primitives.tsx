@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import * as d3 from "d3";
 
 /**
  * Shared pieces of the round 6 charts: a width observer that measures before paint, the reduced-motion preference,
@@ -40,9 +41,13 @@ export function useReducedMotion(): boolean {
 
 /**
  * The categorical slots in their fixed order (the app's chart tokens). A series keeps its slot by its place in the
- * spec, never by its rank. `--chart-5` is the low-chroma de-emphasis grey and is not a slot.
+ * spec, never by its rank. `--chart-5` is the low-chroma de-emphasis grey and is not a slot. The order was chosen with
+ * the dataviz validator over every order that keeps `--chart-1` first: blue, red-orange, teal, amber, green has the
+ * best worst adjacent pair under colour-vision deficiency (Delta E 14.6 light, 9.7 dark) and under normal vision
+ * (25.5, 18.9). The tokens' own lightness and chroma, and amber's contrast on the light card (2.15:1), are relieved by
+ * the direct labels, legends and table views every multi-series chart carries.
  */
-export const SLOTS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-6)"] as const;
+export const SLOTS = ["var(--chart-1)", "var(--chart-4)", "var(--chart-6)", "var(--chart-2)", "var(--chart-3)"] as const;
 /** The quiet line of a comparison (a year earlier) and other context marks. */
 export const QUIET = "var(--chart-5)";
 
@@ -122,5 +127,33 @@ export function SeriesReadout({
         </p>
       ))}
     </div>
+  );
+}
+
+/** Time-axis ticks: one per year (every two or five on long spans) from two years on, months below. */
+export function timeTicks(x: d3.ScaleTime<number, number>, width: number): { ticks: Date[]; format: (d: Date) => string } {
+  const [a, b] = x.domain();
+  const span = (b.getTime() - a.getTime()) / 86_400_000;
+  if (span > 700) {
+    const every = span > 3700 ? 5 : span > 1900 ? 2 : 1;
+    return { ticks: x.ticks(d3.utcYear.every(every) as d3.TimeInterval), format: d3.utcFormat("%Y") };
+  }
+  return { ticks: x.ticks(width < 360 ? 3 : 4), format: d3.utcFormat(span > 120 ? "%b %Y" : "%b %d") };
+}
+
+/** A UTC date of an ISO day. */
+export const day = (iso: string | undefined) => new Date(`${iso ?? "1970-01-01"}T00:00:00Z`);
+
+/** The legend of a multi-series chart: a short line key (or a swatch for fills) beside each name, in spec order. */
+export function SeriesLegend({ items, fill = false }: { items: { key: string; label: string; color: string }[]; fill?: boolean }) {
+  return (
+    <ul className="mb-1 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground" aria-label="Legend">
+      {items.map((i) => (
+        <li key={i.key} className="flex min-w-0 items-center gap-1.5">
+          <span aria-hidden className={fill ? "inline-block size-2 shrink-0 rounded-[2px]" : "inline-block h-0.5 w-3 shrink-0 rounded-full"} style={{ background: i.color }} />
+          <span className="truncate">{i.label}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
