@@ -227,13 +227,13 @@ function Summary({ ticker, alt }: { ticker: string; alt: CompanyAlt }) {
           <h2 className="text-[14px] font-semibold">Datasets on file</h2>
           <p className="text-[11px] text-muted-foreground">{alt.views.length} of 17 public datasets cover {ticker}; newest record {fmtDay(alt.latest)}</p>
         </header>
-        <table className="w-full text-[13px]">
+        <table className="w-full table-fixed text-[13px]">
           <tbody>
             {alt.themes.flatMap((t) => t.views.map((v, i) => (
               <tr key={v.dataset} className={cn("h-7", i === 0 ? "border-t first:border-t-0" : "")}>
                 <td className="w-[30%] truncate pl-3.5 pr-2 text-[11px] text-muted-foreground sm:w-[34%]" title={t.label}>{i === 0 ? t.short : ""}</td>
                 <td className="truncate"><SectionLink to={panelId(v.dataset)} className="hover:underline">{v.label}</SectionLink>{v.flag && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" aria-label="unusual" />}</td>
-                <td className="num whitespace-nowrap pl-2 pr-3.5 text-right text-[11px] text-muted-foreground">{fmtDay(v.latest)}</td>
+                <td className="num w-[6.5rem] whitespace-nowrap pl-2 pr-3.5 text-right text-[11px] text-muted-foreground">{fmtDay(v.latest)}</td>
               </tr>
             )))}
           </tbody>

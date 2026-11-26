@@ -255,7 +255,7 @@ function ParentLine({ entry, child }: { entry: CatalogEntry; child: SourceDatase
     <p className="text-[13px] leading-5 text-muted-foreground">
       <span className="text-foreground">{entry.kind === "projection" ? "A view of" : "Derived from"}</span>{" "}
       <HrefLink href={datasetHref(parentId)} className={cn(LINK, "underline")}>
-        {title ?? parentId}
+        {title ?? <span className="break-all">{parentId}</span>}
       </HrefLink>
       .{" "}
       {stale && parent ? (
