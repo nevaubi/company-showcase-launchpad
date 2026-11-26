@@ -363,7 +363,7 @@ const nhtsaMakerClaims = (d: ProfileDataset) => d.source_id === "NHTSA_RECALLS" 
 
 const nhtsaMeasure: MeasureSpec = {
   field: "Distinct campaigns",
-  label: "Recall campaigns",
+  label: "Recall campaign count",
   unit: { from: "constant", text: NHTSA_UNIT, evidence: NHTSA_EVIDENCE },
   grouping: "none",
 };
