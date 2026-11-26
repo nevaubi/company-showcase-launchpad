@@ -6,8 +6,9 @@ import { MINUS } from "@/components/alt/library/charts/primitives";
 import type { VizChange, VizPoint, VizSeries, VizUnit } from "./types";
 
 /** A figure in its unit, with the printed unit word for lines "as printed" ("51 days"). */
-export function fmtValue(v: number, unit: VizUnit, scale: Scale, printedUnit?: string): string {
-  const s = fmtIr(v, unit, scale).replace(/^-/, MINUS);
+export function fmtValue(v: number, unit: VizUnit, scale: Scale, printedUnit?: string, decimals?: number): string {
+  const keep = decimals != null && (unit === "pct" || unit === "ratio" || unit === "other" || unit === "usdPerShare");
+  const s = fmtIr(v, unit, scale, keep ? { decimals } : {}).replace(/^-/, MINUS);
   if (unit === "usd") {
     const suffix = scale === "full" ? "" : scale;
     return s.startsWith(MINUS) ? `${MINUS}$${s.slice(1)}${suffix}` : `$${s}${suffix}`;
@@ -51,6 +52,12 @@ export function asFiled(p: VizPoint): string {
 }
 
 /** The change line of a tooltip: "YoY +3.2% (vs Sep ’24)". */
-export function changeLine(label: "YoY" | "QoQ", c: VizChange | null): string | null {
+export function changeLine(label: "YoY" | "QoQ" | "MoM", c: VizChange | null): string | null {
   return c ? `${label} ${fmtChange(c)} (vs ${c.base.short})` : null;
+}
+
+/** The decimals the document prints a figure with ("2.48" has two), so a ratio is never shown rounder than filed. */
+export function decimalsOf(p: VizPoint): number | undefined {
+  if (!p.printed || !/\d/.test(p.printed)) return undefined;
+  return p.printed.match(/\.(\d+)/)?.[1].length ?? 0;
 }

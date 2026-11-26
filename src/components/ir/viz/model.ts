@@ -302,3 +302,27 @@ export function valueDomain(values: number[], includeZero: boolean): [number, nu
   if (lo === hi) hi = lo + 1;
   return [lo, hi];
 }
+
+/**
+ * At most `max` parts keep their own colour: the largest `max - 1` by their latest tied figure stay in the company's
+ * order and the rest fold into one "Other lines" part (their sum in each tied period, which has no single source).
+ * A ninth hue is never generated.
+ */
+export function foldParts(parts: VizParts, max = 5): VizParts {
+  if (parts.parts.length <= max) return parts;
+  const last = parts.ties.at(-1);
+  const size = (s: VizSeries) => Math.abs((last && pointAt(s, last)?.value) || s.points.at(-1)?.value || 0);
+  const keep = new Set([...parts.parts].sort((a, b) => size(b) - size(a)).slice(0, max - 1).map((s) => s.key));
+  const kept = parts.parts.filter((s) => keep.has(s.key));
+  const rest = parts.parts.filter((s) => !keep.has(s.key));
+  const names = rest.map((s) => s.label).join(", ");
+  const points: VizPoint[] = parts.ties.flatMap((e) => {
+    const t = pointAt(parts.total, e)!;
+    const ps = rest.map((s) => pointAt(s, e));
+    if (ps.some((p) => !p)) return [];
+    const value = rest.reduce((a, s, i) => a + (parts.subtracted.includes(s.key) ? -ps[i]!.value : ps[i]!.value), 0);
+    return [{ period: e, periodLabel: t.periodLabel, short: t.short, value, note: `Sum of ${rest.length} printed lines: ${names}` }];
+  });
+  const other: VizSeries = { key: "__other", label: `Other lines (${rest.length})`, unit: parts.unit, cadence: parts.cadence, points };
+  return { ...parts, parts: [...kept, other], subtracted: parts.subtracted.filter((k) => keep.has(k)) };
+}
