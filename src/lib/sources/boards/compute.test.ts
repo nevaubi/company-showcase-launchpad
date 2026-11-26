@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PeriodFormat } from "../periods";
-import { computeRankTile, computeSeriesTile, computeShareTile, periodId, yearEarlierId, type CellInput, type TileContext } from "./compute";
+import { computeRankTile, computeSeriesTile, computeShareTile, isRankSpec, isSeriesSpec, periodId, yearEarlierId, type CellInput, type TileContext } from "./compute";
 import { fdicCrossSection, fdicSummaryCells, fhfaCells, fredCells, merCells } from "./fixtures";
 import { tileSpec } from "./specs";
 import type { Cadence, RankTileSpec, SeriesTileSpec, TileResult } from "./types";
@@ -9,12 +9,12 @@ import type { Cadence, RankTileSpec, SeriesTileSpec, TileResult } from "./types"
 
 const series = (id: string) => {
   const spec = tileSpec(id);
-  if (!spec || spec.transform === "rank" || spec.transform === "share") throw new Error(`no series tile ${id}`);
+  if (!spec || !isSeriesSpec(spec)) throw new Error(`no series tile ${id}`);
   return spec;
 };
 const rank = (id: string) => {
   const spec = tileSpec(id);
-  if (!spec || spec.transform !== "rank") throw new Error(`no rank tile ${id}`);
+  if (!spec || !isRankSpec(spec)) throw new Error(`no rank tile ${id}`);
   return spec;
 };
 

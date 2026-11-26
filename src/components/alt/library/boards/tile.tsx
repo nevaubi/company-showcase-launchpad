@@ -23,12 +23,15 @@ export function collectedOn(iso: string | null): string | null {
 /** The records behind a tile: its snapshot pinned and, where the address allows, the series filter set. */
 export function recordsSearch(tile: BoardTile): DatasetSearch {
   const search: DatasetSearch = { snapshot: tile.source.snapshotId ?? undefined };
-  if ("across" in tile.selection) {
+  const selection = tile.selection;
+  if ("across" in selection) {
     const period = tile.result.ok ? tile.result.derivation?.inputs[0]?.period : undefined;
     if (period) search.period = period;
     return search;
   }
-  const series = tile.selection.series;
+  if ("records" in selection) return search;
+  const series = "lines" in selection ? selection.lines[0]?.series : selection.series;
+  if (!series) return search;
   if ("by" in series) {
     if (series.by === "geo_code" || series.by === "geo_name") search.geography = series.key;
     else search.entity = series.key;
@@ -103,7 +106,7 @@ export function Tile({ tile, className, focusable }: { tile: BoardTile; classNam
           <>
             <p className="mb-1 text-[11px] text-muted-foreground">{axisTitle}</p>
             <TileChart
-              form={tile.form}
+              form={tile.form === "bars" || tile.form === "ranked-bars" ? tile.form : "line"}
               points={result.points}
               unit={result.plotUnit}
               label={`${tile.title}, ${isRank ? result.asOf : `${result.points[0]?.label ?? ""} to ${result.points[result.points.length - 1]?.label ?? ""}`}, ${axisTitle}`}
