@@ -1,63 +1,62 @@
 import { describe, expect, it } from "vitest";
+import { US_PLACES } from "@/lib/sources/geo/us-states";
 import type { SourceFacetValue } from "@/lib/sources/read-types";
-import { placeBars, readStates, stateBars, stateCaption, type StateLookup } from "./places-model";
+import { placeBars, readStates, stateBars, stateCaption, stateMapPlaces } from "./places-model";
 
-// a part of the postal table, enough for the rule (the app's table is the forms unit's)
-const TABLE: [string, string][] = [
-  ["AK", "Alaska"], ["AL", "Alabama"], ["AR", "Arkansas"], ["AZ", "Arizona"], ["CA", "California"], ["CO", "Colorado"],
-  ["CT", "Connecticut"], ["DE", "Delaware"], ["FL", "Florida"], ["GA", "Georgia"], ["GU", "Guam"], ["PR", "Puerto Rico"],
-  ["TX", "Texas"], ["WY", "Wyoming"],
-];
-const lookup: StateLookup = (value) => {
-  const hit = TABLE.find(([code, name]) => code === value || name.toLowerCase() === value.toLowerCase());
-  return hit ? { code: hit[0], name: hit[1] } : null;
-};
 const v = (value: string, rows: number, label: string | null = null, exact = true): SourceFacetValue => ({ value, label, rows, exact });
+const STATES = US_PLACES.filter((p) => p.kind === "state");
 
 describe("readStates", () => {
-  it("reads postal codes, territories included, most records first", () => {
-    const facets = TABLE.map(([code], i) => v(code, 10 + i));
-    const reading = readStates(facets, lookup)!;
-    expect(reading.states).toHaveLength(14);
-    expect(reading.states[0]).toEqual({ code: "WY", name: "Wyoming", value: "WY", rows: 23, exact: true });
-    expect(reading.others).toEqual([]);
+  it("reads the postal codes of an MSHA-like place field, territories included, most records first", () => {
+    const facets = US_PLACES.map((p, i) => v(p.code, 10 + i));
+    const reading = readStates(facets)!;
+    expect(reading.kind).toBe("postal");
+    expect(reading.states).toHaveLength(US_PLACES.length);
+    expect(reading.states[0].rows).toBe(9 + US_PLACES.length);
+    expect(stateCaption(reading)).toMatch(/^[\d,]+ records in \d+ states and territories; most in .+, [\d,]+\.$/);
   });
 
-  it("reads names whatever their case, and a code's stored name when the code is not a state", () => {
-    const names = TABLE.map(([, name], i) => v(name.toUpperCase(), i + 1));
-    expect(readStates(names, lookup)!.states.map((s) => s.code)).toContain("PR");
-    const labelled = TABLE.map(([, name], i) => v(String(i + 1).padStart(2, "0"), 5, name));
-    expect(readStates(labelled, lookup)!.states[0]).toMatchObject({ value: "01", name: "Alaska" });
+  it("reads names whatever their case, and a code's stored name when the codes are not states", () => {
+    const names = STATES.slice(0, 12).map((p, i) => v(p.name.toUpperCase(), i + 1));
+    expect(readStates(names)!.kind).toBe("name");
+    const labelled = STATES.slice(0, 12).map((p, i) => v(`R${i}`, 5, p.name));
+    const reading = readStates(labelled)!;
+    expect(reading.by).toBe("label");
+    expect(reading.states.map((s) => s.value)).toContain("R0");
   });
 
-  it("allows a few places that are not states and lists them", () => {
-    const facets = [...TABLE.map(([code]) => v(code, 5)), v("US", 70)];
-    const reading = readStates(facets, lookup)!;
-    expect(reading.others).toEqual([{ value: "US", label: "US", rows: 70, exact: true }]);
-    expect(stateCaption(reading)).toBe("70 records in 14 states and territories; most in Alaska, 5. 1 other place holds 70 records.");
+  it("leaves national totals aside and says how many records they hold", () => {
+    const facets = [...STATES.slice(0, 10).map((p) => v(p.code, 5)), v("US", 70)];
+    const reading = readStates(facets)!;
+    expect(reading.national).toEqual([{ value: "US", label: "US", rows: 70, exact: true }]);
+    expect(stateCaption(reading)).toBe(`50 records in 10 states; most in ${reading.states[0].place.name}, 5. 70 more records are national totals.`);
   });
 
-  it("refuses fewer than 10 states, a share under 90% and two values for one state", () => {
-    expect(readStates(TABLE.slice(0, 9).map(([code]) => v(code, 5)), lookup)).toBeNull();
-    const countries = [...TABLE.map(([code]) => v(code, 5)), v("MX", 5), v("FR", 5)];
-    expect(readStates(countries, lookup)).toBeNull();
-    expect(readStates([...TABLE.map(([code]) => v(code, 5)), v("Texas", 1)], lookup)).toBeNull();
-    expect(readStates([], lookup)).toBeNull();
+  it("refuses fewer than 10 states, any key that is not a state, and two keys for one state", () => {
+    expect(readStates(STATES.slice(0, 9).map((p) => v(p.code, 5)))).toBeNull();
+    expect(readStates([...STATES.slice(0, 20).map((p) => v(p.code, 5)), v("Unknown", 1)])).toBeNull();
+    expect(readStates([...STATES.slice(0, 12).map((p) => v(p.code, 5)), v(STATES[0].name, 1)])).toBeNull();
+    // census divisions numbered 01 to 09 are not FIPS states
+    expect(readStates(Array.from({ length: 9 }, (_, i) => v(`0${i + 1}`, 3)))).toBeNull();
+    expect(readStates([])).toBeNull();
   });
 });
 
-describe("place bars", () => {
-  it("ranks places by records and keeps the stored value as the filter key", () => {
+describe("place marks", () => {
+  it("gives the grid one place per state with the stored value as its filter", () => {
+    const reading = readStates(STATES.slice(0, 10).map((p, i) => v(p.code, i + 1, null, i !== 0)))!;
+    const places = stateMapPlaces(reading);
+    expect(places[0]).toEqual({ code: STATES[9].code, name: STATES[9].name, key: STATES[9].code, value: 10, display: "10", text: null, row: null, filter: { geography: STATES[9].code } });
+    expect(places.find((p) => p.code === STATES[0].code)!.display).toBe("at least 1");
+    expect(stateBars(reading)[0]).toMatchObject({ key: STATES[9].code, label: STATES[9].name, sub: STATES[9].code, text: "10" });
+  });
+
+  it("ranks other places by records and keeps the stored value as the filter key", () => {
     const bars = placeBars([v("06001", 4, "Alameda County"), v("06003", 9, null, false), v("", 2)], 2);
     expect(bars).toEqual([
       { key: "06003", label: "06003", value: 9, text: "9 or more", title: "06003: at least 9 records. Opens its records.", sub: undefined },
       { key: "06001", label: "Alameda County", sub: "06001", value: 4, text: "4", title: "Alameda County: 4 records. Opens its records." },
     ]);
     expect(placeBars([v("", 2)], 5)[0].label).toBe("(empty)");
-  });
-
-  it("names a state by its name with the stored code beside it", () => {
-    const reading = readStates(TABLE.map(([code]) => v(code, 3)), lookup)!;
-    expect(stateBars(reading)[0]).toEqual({ key: "AK", label: "Alaska", sub: "AK", value: 3, text: "3", title: "Alaska: 3 records. Opens its records." });
   });
 });
