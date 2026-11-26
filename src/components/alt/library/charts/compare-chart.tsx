@@ -2,6 +2,7 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import * as d3 from "d3";
 import type { ScaleAxis } from "@/lib/sources/boards/scale";
 import type { TileLine, TilePoint } from "@/lib/sources/boards/types";
+import { estimateTextWidth } from "../boards/ranked-layout";
 import { tickFormat } from "../boards/tile-chart";
 import { SeriesLegend, SeriesReadout, dashOf, day, slot, tickAnchor, timeTicks, useWidth } from "./primitives";
 
@@ -251,10 +252,7 @@ function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
             }}
             onBlur={() => setHover(null)}
           >
-            <text x={margin.left} y={10} className="fill-muted-foreground text-[10px]">
-              <tspan className="fill-foreground font-medium">{l.label}</tspan>
-              <tspan>{`  ${l.plotUnit}`}</tspan>
-            </text>
+            <PanelTitle x={margin.left} label={l.label} unit={l.plotUnit} room={width - margin.left - 4} />
             <g transform={`translate(${margin.left},${HEAD})`}>
               {ticks.map((v) => (
                 <g key={v} transform={`translate(0,${y(v)})`}>
@@ -320,5 +318,25 @@ function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * A small panel's name and unit on one line: the unit is left to the tooltip and the panel's label when the line would
+ * run past the chart, and a name longer than the room is cut with an ellipsis (the full name is its title).
+ */
+function PanelTitle({ x, label, unit, room }: { x: number; label: string; unit: string; room: number }) {
+  const both = estimateTextWidth(`${label}  ${unit}`, 10) <= room;
+  let name = label;
+  if (!both && estimateTextWidth(name, 10) > room) {
+    while (name.length > 1 && estimateTextWidth(`${name}…`, 10) > room) name = name.slice(0, -1);
+    name = `${name.trimEnd()}…`;
+  }
+  return (
+    <text x={x} y={10} className="fill-muted-foreground text-[10px]">
+      <title>{`${label}, ${unit}`}</title>
+      <tspan className="fill-foreground font-medium">{name}</tspan>
+      {both && <tspan>{`  ${unit}`}</tspan>}
+    </text>
   );
 }
