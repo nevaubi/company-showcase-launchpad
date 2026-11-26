@@ -52,13 +52,29 @@ export function axisText(v: number, axis: Axis): string {
 
 const COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
-/** Tick text with as many decimals as the step needs, a true minus, digits grouped. */
-function tickNumber(v: number, step: number, compact: boolean): string {
+const COMPACT_STEPS: readonly [number, string][] = [
+  [1e12, "T"],
+  [1e9, "B"],
+  [1e6, "M"],
+  [1e3, "K"],
+];
+
+/** Decimal places that tell ticks `step` apart. */
+const placesFor = (step: number) => (step >= 1 ? 0 : Math.min(4, Math.ceil(-Math.log10(step) - 1e-9)));
+
+/**
+ * Tick text with as many decimals as the step needs, a true minus, digits grouped. With `compact` (a stored-unit axis
+ * whose ticks reach 10,000), one suffix for the whole axis, chosen by its largest tick, so no two ticks read alike.
+ */
+function tickNumber(v: number, step: number, compact: { div: number; suffix: string } | null): string {
   if (v === 0) return "0";
   const sign = v < 0 ? MINUS : "";
   const a = Math.abs(v);
-  if (compact && a >= 10_000) return sign + COMPACT.format(a);
-  const places = step >= 1 ? 0 : Math.min(4, Math.ceil(-Math.log10(step) - 1e-9));
+  if (compact) {
+    const places = placesFor(step / compact.div);
+    return `${sign}${(a / compact.div).toLocaleString("en-US", { minimumFractionDigits: places, maximumFractionDigits: places })}${compact.suffix}`;
+  }
+  const places = placesFor(step);
   return sign + a.toLocaleString("en-US", { minimumFractionDigits: places, maximumFractionDigits: places });
 }
 
@@ -71,12 +87,15 @@ export function valueAxis(values: number[], unit: string, opts: { reader?: Reade
   const divisor = opts.reader ? opts.reader.axis.divisor : 1;
   const d = niceDomain(values.map(v => v / divisor), opts.includeZero ?? unit.startsWith("USD"));
   const step = d.ticks.length > 1 ? Math.abs(d.ticks[1] - d.ticks[0]) : 1;
+  const largest = Math.max(...d.ticks.map(t => Math.abs(t)));
+  const unitStep = opts.reader || largest < 10_000 ? null : COMPACT_STEPS.find(([div]) => largest >= div) ?? null;
+  const compact = unitStep ? { div: unitStep[0], suffix: unitStep[1] } : null;
   return {
     title: opts.reader ? opts.reader.axis.title : (opts.asFiled ?? unit),
     divisor,
     min: d.min * divisor,
     max: d.max * divisor,
-    ticks: d.ticks.map(t => ({ value: t * divisor, text: tickNumber(t, step, !opts.reader) })),
+    ticks: d.ticks.map(t => ({ value: t * divisor, text: tickNumber(t, step, compact) })),
     decimals: opts.reader ? opts.reader.axis.decimals : null,
   };
 }

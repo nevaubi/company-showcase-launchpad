@@ -63,7 +63,9 @@ describe("Insured banks charts", () => {
     const d = await load("WFC");
     render(<InsuredBanks data={d} selected={null} onSelect={() => {}} pending={false} />);
     const deposits = document.querySelector('[data-section="Charter deposits by state"]') as HTMLElement;
-    expect(within(deposits).getByText("1,554,614,000")).toBeTruthy();
+    expect(within(deposits).getByText("$1.555 trillion")).toBeTruthy();
+    expect(within(deposits).getByText("1,554,614,000 USD thousands as filed")).toBeTruthy();
+    expect(within(deposits).getByText("USD billions · branches")).toBeTruthy();
     expect(within(deposits).getByText("4,157")).toBeTruthy();
     expect(within(deposits).getByText(/in 40 states and territories/)).toBeTruthy();
     const first = within(deposits).getAllByRole("listitem")[0];

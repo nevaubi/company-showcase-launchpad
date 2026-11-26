@@ -38,7 +38,9 @@ const jpm: BankHistory = {
 describe("readerOf and valueAxis", () => {
   it("prints a whitelisted level in reader scale with the stored figure as filed, and leaves any other unit as filed", () => {
     expect(readerOf(MONEY, cellOf("4091315000"))).toMatchObject({ figure: "$4.091 trillion", filed: "4,091,315,000 USD thousands (monetary measures) as filed", axis: { title: "USD trillions", divisor: 1e9 } });
-    expect(readerOf("USD thousands", cellOf("5091545000"))).toBeNull();
+    // FR Y-9C and Summary of Deposits amounts (on the whitelist since forms 7206e8a)
+    expect(readerOf("USD thousands", cellOf("5091545000"))).toMatchObject({ figure: "$5.092 trillion", filed: "5,091,545,000 USD thousands as filed" });
+    expect(readerOf("Percent", cellOf("13.9676"))).toBeNull();
     expect(readerOf(MONEY, cellOf("N/A"))).toBeNull();
     expect(readerOf(MONEY, cellOf(""))).toBeNull();
   });
@@ -48,9 +50,11 @@ describe("readerOf and valueAxis", () => {
     expect(a.title).toBe("USD trillions");
     expect(a.ticks.map(t => t.text)).toEqual(["0", "1", "2", "3", "4", "5"]);
     expect(a.ticks[1].value).toBe(1e9);
-    const b = valueAxis([4900475000, 5091545000], "USD thousands");
-    expect(b.title).toBe("USD thousands");
+    const b = valueAxis([4900475000, 5091545000], "Index, as filed", { includeZero: true });
+    expect(b.title).toBe("Index, as filed");
     expect(b.ticks.map(t => t.text)).toEqual(["0", "2B", "4B", "6B"]);
+    // ticks close together carry the decimals that tell them apart, under one suffix
+    expect(valueAxis([4900475000, 5091545000], "Index, as filed").ticks.map(t => t.text)).toEqual(["4.90B", "4.95B", "5.00B", "5.05B", "5.10B"]);
     const pct = valueAxis([6.5297, 17.1592], "Percent", { asFiled: "%", includeZero: true });
     expect(pct.ticks.map(t => t.text)).toEqual(["0", "5", "10", "15", "20"]);
     expect(pct.title).toBe("%");
@@ -113,10 +117,10 @@ describe("y9cCharts", () => {
   };
   it("charts total assets, equity and year-to-date net income as filed, and the percent ratios on one axis", () => {
     const { amounts, ratios } = y9cCharts(report);
-    expect(amounts.map(a => [a.field, a.basis, a.latest?.cell.text, a.reader])).toEqual([
-      ["BHCK2170", "balance", "5091545000", null],
-      ["BHCK3210", "balance", "372368000", null],
-      ["BHCK4340", "ytd", "52954000", null],
+    expect(amounts.map(a => [a.field, a.basis, a.latest?.cell.text, a.reader?.figure])).toEqual([
+      ["BHCK2170", "balance", "5091545000", "$5.092 trillion"],
+      ["BHCK3210", "balance", "372368000", "$372.4 billion"],
+      ["BHCK4340", "ytd", "52954000", "$52.95 billion"],
     ]);
     expect(amounts[2].points.map(p => p.ref.row)).toEqual([17, 497, 4077]);
     expect(ratios.map(r => [r.field, r.points.map(p => p.value)])).toEqual([["BHCAP793", [14.2769, 14.1913, 13.9676]]]);
@@ -152,7 +156,7 @@ describe("depositsView", () => {
     expect(v.states[0].ref).toEqual({ dataset: SOD.dataset, snapshot: SOD.snapshot, row: 69, field: "branch_deposits_USD_thousands" });
     expect(v.states[3].value).toBeNull();
     expect(v.totalsRef?.row).toBe(1);
-    expect(v.reader).toBeNull(); // "USD thousands" is not on the reader-scale whitelist
+    expect(v.reader).toMatchObject({ figure: "$2.227 trillion", filed: "2,226,790,000 USD thousands as filed" });
   });
   it("writes counts only from whole numbers", () => {
     expect(countText(cellOf("5141"))).toBe("5,141");

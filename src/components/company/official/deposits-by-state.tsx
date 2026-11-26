@@ -3,7 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 import { Segmented } from "@/components/app/segmented";
 import { StateGrid } from "@/components/alt/library/charts/state-grid";
 import type { MapPlace } from "@/lib/sources/boards/types";
-import { axisText, countText, depositsView, valueAxis } from "@/lib/sources/company/charts";
+import { axisText, countText, depositsView, readerOf, valueAxis } from "@/lib/sources/company/charts";
 import { showCell, unitLabel } from "@/lib/sources/company/present";
 import { SOD_DOCUMENTATION } from "@/lib/sources/company/sod-fields";
 import type { DepositsByState } from "@/lib/sources/company/types";
@@ -36,7 +36,10 @@ export function DepositsByStateView({ data }: { data: DepositsByState }) {
   const year = data.totals?.surveyYear ?? null;
   const branches = countText(data.totals?.branches);
   const states = countText(data.totals?.states);
-  const axisMax = valueAxis([v.max], unit);
+  // the ranked bars' labels take the reader scale of the largest state (scale.ts); the grid, its legend and every
+  // tooltip keep the stored figures in the unit as filed
+  const top = v.states.find(s => s.value != null) ?? null;
+  const axisMax = valueAxis([v.max], unit, { reader: top ? readerOf(unit, top.deposits) : null, asFiled: unitLabel(unit) });
   return (
     <div data-section="Charter deposits by state" className="min-w-0 border-t px-3.5 pb-2.5 pt-2.5">
       <div className="flex flex-wrap items-start gap-2">
@@ -70,7 +73,7 @@ export function DepositsByStateView({ data }: { data: DepositsByState }) {
               territories={territories}
               scale="sequential"
               domain={[0, v.max || 1]}
-              rangeLabels={["0", axisText(v.max, axisMax)]}
+              rangeLabels={["0", top ? showCell(top.deposits, unit).text : "0"]}
               unit={unitLabel(unit)}
               period={year ? `${year} survey` : undefined}
               label={`Deposits by branch state, ${unitLabel(unit)}`}
@@ -80,7 +83,7 @@ export function DepositsByStateView({ data }: { data: DepositsByState }) {
           <div className="min-w-0">
             <p className="mb-1 flex text-[11px] text-muted-foreground">
               <span>Largest states</span>
-              <span className="ml-auto">{unitLabel(unit)} · branches</span>
+              <span className="ml-auto">{axisMax.title} · branches</span>
             </p>
             <ol className="space-y-1">
               {ranked.map(s => {
@@ -139,7 +142,7 @@ export function DepositsByStateView({ data }: { data: DepositsByState }) {
         <p className="text-[11px] text-muted-foreground">
           The bank's own branches, summed by branch state as stored; a state with no colour has no branch record of this bank in the survey.
           {unplaced.length > 0 && ` Branch states not on the grid: ${unplaced.join(", ")}.`}
-          {!v.reader && " Amounts as filed, in USD thousands."}
+          {v.reader ? " The grid and its tooltips give the amounts as filed." : " Amounts as filed, in USD thousands."}
         </p>
         <SourceLine source={data.source} extra={<> <OutLink href={SOD_DOCUMENTATION} className="text-foreground">About the survey</OutLink></>}>
           FDIC Summary of Deposits{year ? `, ${year} survey` : ""}, FDIC 500 cohort
