@@ -242,3 +242,121 @@ describe("Taiwan monthly revenue families", () => {
     });
   });
 });
+
+const WB_FULL_FIELDS = fields("indicator_code", "indicator_name", "source_country_iso3", "source_country_id", "wb_country_code", "country_name", "is_aggregate", "year", "value", "source_unit", "obs_status", "decimal", "source_last_updated");
+const WB_SHORT_FIELDS = fields("indicator_code", "wb_country_code", "source_country_id", "is_aggregate", "year", "value", "obs_status");
+const CMS_FIELDS: SourceColumn[] = [
+  ["brand_name", ""],
+  ["generic_name", ""],
+  ["manufacturer_scope", ""],
+  ["manufacturer_count", ""],
+  ["year", ""],
+  ["Tot_Spndng", "USD nominal gross drug spending"],
+  ["Tot_Dsg_Unts", "dosage units"],
+  ["Tot_Clms", "claims"],
+  ["Tot_Benes", "beneficiaries; suppressed values blank"],
+  ["Avg_Spnd_Per_Dsg_Unt_Wghtd", "USD per dosage unit"],
+  ["Avg_Spnd_Per_Clm", "USD per claim"],
+  ["Avg_Spnd_Per_Bene", "USD per beneficiary"],
+  ["Outlier_Flag", ""],
+].map(([label, unit], i) => ({ key: `col${String(i + 1).padStart(4, "0")}`, label, type: "string", ...(unit ? { unit } : {}) }));
+
+describe("World Bank technology indicators", () => {
+  it("draws one indicator per table, fixed in every address, with the unit the World Bank names", () => {
+    const full = on({ id: "official_02_technology_csv_wb_tech_annual_full_7471fc676b", source_id: null }, WB_FULL_FIELDS);
+    expect(full.family).toBe("wb-tech");
+    expect(full.fixed).toEqual([{ field: "indicator_code", value: "TX.VAL.TECH.MF.ZS" }]);
+    expect(full.measures[0].unit).toMatchObject({ from: "constant", text: "% of manufactured exports" });
+    const short = on({ id: "official_02_technology_csv_wb_tech_annual_22be3f4568", source_id: null }, WB_SHORT_FIELDS);
+    expect(short.fixed).toEqual([{ field: "indicator_code", value: "TX.VAL.ICTG.ZS.UN" }]);
+    expect(short.measures[0].unit).toMatchObject({ from: "constant", text: "% of total goods exports" });
+    expect(addressRefusal(full, { where: [{ field: "wb_country_code", value: "KOR" }] })).toBe(
+      'The wb-tech profile states its unit only for series with indicator_code "TX.VAL.TECH.MF.ZS".',
+    );
+    expect(full.defaultSeries?.({ id: "official_02_technology_csv_wb_tech_annual_full_7471fc676b", source_id: null })).toEqual({
+      where: [
+        { field: "indicator_code", value: "TX.VAL.TECH.MF.ZS" },
+        { field: "wb_country_code", value: "WLD" },
+      ],
+    });
+  });
+
+  it("claims only the two technology tables registered without a source id", () => {
+    expect(profileStatus({ id: "official_10_communications_csv_wb_telecom_annual_full_c578033483", source_id: null }, WB_FULL_FIELDS)).toEqual({ state: "none" });
+  });
+});
+
+describe("CMS Part D spending", () => {
+  it("reads every unit from the dictionary and opens on Eliquis", () => {
+    const cms = on({ id: "official_03_healthcare_csv_partd_overall_annual_654675dedc", source_id: "CMS_PARTD_2024" }, CMS_FIELDS);
+    expect(cms.family).toBe("cms-partd");
+    expect(cms.measures.map((m) => (m.unit.from === "dictionary" ? m.unit.text : ""))).toEqual([
+      "USD nominal gross drug spending",
+      "claims",
+      "beneficiaries; suppressed values blank",
+      "USD per claim",
+    ]);
+    const measure = measureOf(cms, "Tot_Spndng");
+    expect(measure && unitOf(measure, CMS_FIELDS)).toEqual({ ok: true, text: "USD nominal gross drug spending" });
+    expect(cms.defaultSeries?.({ id: "official_03_healthcare_csv_partd_overall_annual_654675dedc", source_id: "CMS_PARTD_2024" })).toEqual({
+      where: [
+        { field: "brand_name", value: "Eliquis" },
+        { field: "generic_name", value: "Apixaban" },
+      ],
+    });
+  });
+
+  it("does not claim the wide all-manufacturer table, whose years sit in its field names", () => {
+    expect(profileStatus({ id: "official_03_healthcare_csv_cms_partd_2024_full_b8c75686a9", source_id: "CMS_PARTD_2024" }, CMS_FIELDS)).toEqual({ state: "none" });
+  });
+
+  it("computes the spending change of Eliquis from the stored rows", () => {
+    const context: TileContext = {
+      datasetId: "official_03_healthcare_csv_partd_overall_annual_654675dedc",
+      snapshotId: "ad25a8c762a4f2f5515ef93ef2d81dda4ec9c1a96c1b48bf45495573632a4bd8",
+      field: "Tot_Spndng",
+      unit: { from: "fixed", text: "USD nominal gross drug spending" },
+      format: "year",
+      cadence: "year",
+      grouping: "none",
+    };
+    const cells: CellInput[] = [
+      { row: 5036, period: "2020", text: "9936069813.8" },
+      { row: 5037, period: "2021", text: "12575145852" },
+      { row: 5038, period: "2022", text: "15219812294" },
+      { row: 5039, period: "2023", text: "18273451967" },
+      { row: 5040, period: "2024", text: "20774929225" },
+    ];
+    const spec: SeriesTileSpec = {
+      id: "test-eliquis",
+      collection: "03_healthcare",
+      datasetId: context.datasetId,
+      measure: "Tot_Spndng",
+      title: "Eliquis",
+      subject: "Part D spending on Eliquis",
+      unit: "USD nominal gross drug spending",
+      decimals: 0,
+      form: "bars",
+      transform: "level",
+      changeAs: "percent",
+      headline: "level",
+      series: { where: [{ field: "brand_name", value: "Eliquis" }, { field: "generic_name", value: "Apixaban" }] },
+      window: 5,
+    };
+    const result = computeSeriesTile(spec, context, cells);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 100 x (20774929225 / 18273451967 - 1) = 13.689...
+    expect(result.headline).toBe("Part D spending on Eliquis was 20,774,929,225 USD nominal gross drug spending in 2024, 13.7% above 2023.");
+  });
+});
+
+describe("Drugs@FDA original submissions by year", () => {
+  it("counts records, by a cell filter on type and status, the year read from its field", () => {
+    const counts = on({ id: "official_03_healthcare_csv_fda_original_by_year_b0807c7bff", source_id: null }, fields("status_year", "application_type", "submission_status", "original_submission_record_count"));
+    expect(counts.family).toBe("fda-original-counts");
+    expect(counts.period).toEqual({ from: "field", field: "status_year", format: "year" });
+    expect(counts.measures[0].unit).toMatchObject({ from: "constant", text: "records" });
+    expect(counts.addressing).toMatchObject({ by: null, where: ["application_type", "submission_status"], rowsScanned: 369 });
+  });
+});
