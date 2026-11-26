@@ -32,6 +32,8 @@ import {
   computeChange,
   computeSeriesTile,
   crossValues,
+  decimalOfReading,
+  readingOf,
   emptyGaps,
   figureUnitOf,
   named,
@@ -81,8 +83,7 @@ const integer = (n: number) => n.toLocaleString("en-US");
 
 /** The cell of a point as an exact decimal, through the same reading the compute used. */
 function decimalOf(text: string | null, context: TileContext): Decimal | null {
-  const reading = readNative(text, { markers: context.markers, grouping: context.grouping });
-  return reading.kind === "number" ? parseDecimal(reading.text.replace(/,/g, "")) : null;
+  return decimalOfReading(readNative(text, readingOf(context)), context);
 }
 
 /** A series of a multi-series tile as a series tile, so it is read and checked as one. */
@@ -150,7 +151,7 @@ function trimTrailing(input: LineInput): { input: LineInput; dropped: TileGaps }
     .sort((a, b) => a.parsed.order - b.parsed.order);
   const drop = new Set<CellInput>();
   for (let i = placed.length - 1; i >= 0; i -= 1) {
-    const reading = readNative(placed[i].cell.text, { markers: input.context.markers, grouping: input.context.grouping });
+    const reading = readNative(placed[i].cell.text, readingOf(input.context));
     if (reading.kind === "number") break;
     drop.add(placed[i].cell);
     dropped.count += 1;

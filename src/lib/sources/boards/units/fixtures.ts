@@ -57,16 +57,26 @@ export function withUnitFixtures(core: FixtureTables, units: readonly { unit: st
   for (const { tables } of units) {
     for (const d of tables.source_datasets ?? []) {
       const id = String(d.id);
-      if (!datasets.has(id)) (datasets.add(id), moved.add(id), out.source_datasets.push(d));
-      else if (!moved.has(id)) {
+      if (!datasets.has(id)) {
+        datasets.add(id);
+        moved.add(id);
+        out.source_datasets.push(d);
+      } else if (!moved.has(id)) {
         moved.add(id);
         out.source_datasets = out.source_datasets.map((x) => (String(x.id) === id ? d : x));
       }
     }
-    for (const s of tables.source_snapshots ?? []) if (!snapshots.has(String(s.id))) (snapshots.add(String(s.id)), out.source_snapshots.push(s));
+    for (const s of tables.source_snapshots ?? [])
+      if (!snapshots.has(String(s.id))) {
+        snapshots.add(String(s.id));
+        out.source_snapshots.push(s);
+      }
     for (const r of tables.source_records ?? []) {
       const key = `${String(r.snapshot_id)}|${String(r.row_number)}`;
-      if (!records.has(key)) (records.add(key), out.source_records.push(r));
+      if (!records.has(key)) {
+        records.add(key);
+        out.source_records.push(r);
+      }
     }
     for (const [key, facet] of Object.entries(tables.facets ?? {})) if (!out.facets[key]) out.facets[key] = facet;
   }

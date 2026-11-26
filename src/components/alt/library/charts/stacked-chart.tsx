@@ -79,11 +79,11 @@ export function StackedChart({ parts, whole, draw, share, label, recordHref, onO
   };
   const keys = (e: KeyboardEvent) => {
     const at = hover ?? periods.length - 1;
-    if (e.key === "ArrowLeft") (e.preventDefault(), setHover(Math.max(0, at - 1)));
-    else if (e.key === "ArrowRight") (e.preventDefault(), setHover(Math.min(periods.length - 1, at + 1)));
+    if (e.key === "ArrowLeft") { e.preventDefault(); setHover(Math.max(0, at - 1)); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); setHover(Math.min(periods.length - 1, at + 1)); }
     else if (e.key === "Enter") {
       const p = periods[at]?.layers[0];
-      if (p) (e.preventDefault(), onOpen(recordHref(parts[p.part], p.p.row)));
+      if (p) { e.preventDefault(); onOpen(recordHref(parts[p.part], p.p.row)); }
     }
   };
   const area = (part: number) =>

@@ -111,7 +111,7 @@ function Histogram({ bins, median, unit, label, periodHref, onOpen, height }: Pr
               onBlur={() => setHover(null)}
               onClick={() => onOpen(periodHref)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") (e.preventDefault(), onOpen(periodHref));
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(periodHref); }
               }}
             />
           ))}
@@ -155,7 +155,10 @@ function Strip({ points, median, unit, label, recordHref, onOpen, height }: Prop
     let dist = Infinity;
     for (const d of placed) {
       const dd = Math.hypot(x(d.p.value as number) - mx, laneY(d.lane) - my);
-      if (dd < dist) (dist = dd), (best = d);
+      if (dd < dist) {
+        dist = dd;
+        best = d;
+      }
     }
     return dist < 24 ? best : null;
   };

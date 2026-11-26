@@ -455,3 +455,31 @@ describe("rank wording by the profile's cadence", () => {
     expect(r).toEqual({ ok: false, reason: 'Two bars would both read "Harrison" (rows 1 and 2); the tile must name a field that tells them apart (labelWith).' });
   });
 });
+
+describe("figures right-aligned with spaces", () => {
+  const spec: StatTileSpec = {
+    ...base,
+    id: "padded",
+    datasetId: "nmfp",
+    measure: "TOTALVALUE",
+    subject: "Total value",
+    unit: "USD",
+    decimals: 1,
+    form: "stat",
+    transform: "level",
+    headline: "level",
+    series: { whole: true },
+    changeAs: "percent",
+  };
+  // Jan 2025 to Jan 2026, as a fixed-width file writes them
+  const texts = ["   1000.0", "   1100.0", "", "  1200.5", "", "", "", "", "", "", "", "", "   1260.5"];
+  const cells: CellInput[] = texts.map((text, i) => ({ row: i + 1, period: `${2025 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`, text }));
+
+  it("are read when the measure declares the padding, and stay text when it does not", () => {
+    const padded = ok(computeStatTile(spec, { ...ctx("nmfp", "TOTALVALUE", "USD"), padding: "leading-spaces" }, cells));
+    expect(padded.figure).toBe("1,260.5");
+    expect(padded.shape).toMatchObject({ kind: "stat", change: { display: "+26.1", unit: "%" } });
+    expect(padded.points.find((p) => p.key === "2025-04-01")?.text).toBe("  1200.5");
+    expect(computeStatTile(spec, ctx("nmfp", "TOTALVALUE", "USD"), cells)).toMatchObject({ ok: false });
+  });
+});
