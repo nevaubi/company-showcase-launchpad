@@ -85,8 +85,9 @@ export function parsePeriod(text: string, format: PeriodFormat): ParsedPeriod | 
       m = /^(\d{4})(\d{2})$/.exec(text);
       return m ? month(Number(m[1]), Number(m[2])) : null;
     case "quarter": {
-      // "2026Q2" (BEA, FDIC derived tables), "2026-Q2" and "2026 Q2" (EIA).
-      m = /^(\d{4})[- ]?[Qq]([1-4])$/.exec(text);
+      // "2026Q2" (BEA, FDIC derived tables), "2026-Q2" and "2026 Q2" (EIA), "2026:Q2" (Federal Reserve Board
+      // release files such as Z.1 and the DDP packages).
+      m = /^(\d{4})[-: ]?[Qq]([1-4])$/.exec(text);
       if (!m) return null;
       const year = Number(m[1]);
       const quarter = Number(m[2]);

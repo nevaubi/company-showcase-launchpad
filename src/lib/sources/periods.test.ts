@@ -16,6 +16,8 @@ describe("parsePeriod", () => {
     expect(parsePeriod("202602", "yyyymm")).toMatchObject({ start: "2026-02-01", end: "2026-02-28", label: "Feb 2026" });
     expect(parsePeriod("202402", "yyyymm")).toMatchObject({ end: "2024-02-29" });
     expect(parsePeriod("2026Q2", "quarter")).toMatchObject({ start: "2026-04-01", end: "2026-06-30", label: "Q2 2026" });
+    expect(parsePeriod("2026:Q2", "quarter")).toMatchObject({ start: "2026-04-01", end: "2026-06-30", label: "Q2 2026" });
+    expect(detectPeriodFormat(["1945:Q4", "2026:Q2"])).toBe("quarter");
     expect(parsePeriod("2026-Q4", "quarter")).toMatchObject({ start: "2026-10-01", end: "2026-12-31", label: "Q4 2026" });
     expect(parsePeriod("2026 Q1", "quarter")).toMatchObject({ end: "2026-03-31" });
     expect(parsePeriod("2025", "year")).toMatchObject({ start: "2025-01-01", end: "2025-12-31", label: "2025" });
@@ -41,7 +43,7 @@ describe("parsePeriod", () => {
       ["202600", "yyyymm"],
       ["2026Q5", "quarter"],
       ["Q2 2026", "quarter"],
-      ["2026:Q2", "quarter"],
+      ["2026::Q2", "quarter"],
       ["26", "year"],
       ["0999", "year"],
       ["2026", "yyyymm"],
