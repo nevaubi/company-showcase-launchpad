@@ -18,11 +18,11 @@ describe("categoryCandidates", () => {
 
   it("skips the parts of a composed period and stops at the maximum", () => {
     expect(categoryCandidates(columns, { dimensions: {}, composites: { period: { indices: [2, 3], separator: "-", format: "year_month" } } }, roles, fills)).toEqual([1, 8]);
-    expect(categoryCandidates(columns, {}, roles, fills, 2)).toEqual([1, 2]);
+    expect(categoryCandidates(columns, { dimensions: {} }, roles, fills, 2)).toEqual([1, 2]);
   });
 
   it("takes fields in dictionary order when no blank counts are stored", () => {
-    expect(categoryCandidates(columns, {}, roles, null)).toEqual([1, 2, 3, 6, 7, 8]);
+    expect(categoryCandidates(columns, { dimensions: {} }, roles, null)).toEqual([1, 2, 3, 6, 7, 8]);
   });
 });
 
