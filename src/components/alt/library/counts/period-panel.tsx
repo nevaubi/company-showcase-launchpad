@@ -39,7 +39,10 @@ export function PeriodPanel({
   view: "chart" | "table";
   onPeriod: (period: string) => void;
 }) {
-  const [base, setBase] = useState<"recent" | "all">(() => openingWindow(facets.values, format));
+  // null until the reader picks: the opening window follows the format, which can arrive after the counts
+  const [picked, setBase] = useState<"recent" | "all" | null>(null);
+  const opening = useMemo(() => openingWindow(facets.values, format), [facets.values, format]);
+  const base = picked ?? opening;
   const [zoom, setZoom] = useState<PeriodWindow | null>(null);
   const chart = useMemo(() => periodChart(facets.values, format, zoom ?? { kind: base }), [facets.values, format, zoom, base]);
   const caption = useMemo(() => periodCaption(facets.values, format, total, facets.complete), [facets.values, format, total, facets.complete]);

@@ -60,10 +60,14 @@ export function CollectionHolds({ rows, lib, names, onPublisher }: { rows: reado
         .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, "en")),
     [publishers, rows],
   );
+  const viewsOnly = publishers.filter((p) => !records.some((r) => r.key === p.key));
+  const publisherCaption =
+    `${n(records.length)} ${records.length === 1 ? "publisher" : "publishers"}; records of views repeat their tables and are not added.` +
+    (viewsOnly.length ? ` ${viewsOnly.map((p) => `${p.label} has only views here (${p.text} ${p.value === 1 ? "table" : "tables"})`).join("; ")}.` : "");
   if (!rows.length) return null;
   return (
     <LibrarySection name="What the collection holds" title="What the collection holds" meta="Tables and records as stored; counts, not measures" actions={<ViewToggle value={view} onChange={setView} />}>
-      <div className="grid min-w-0 grid-cols-1 gap-3 @5xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid min-w-0 grid-cols-1 items-start gap-3 @5xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         {periods.pending ? (
           <CountPanel name="Tables over time" title="Tables over time">
             <ColumnChartSkeleton />
@@ -79,7 +83,7 @@ export function CollectionHolds({ rows, lib, names, onPublisher }: { rows: reado
             )}
           </CountPanel>
         )}
-        <CountPanel name="Records by publisher" title="Records by publisher" caption={`${n(records.length)} ${records.length === 1 ? "publisher" : "publishers"}; records of views repeat their tables and are not added.`}>
+        <CountPanel name="Records by publisher" title="Records by publisher" caption={publisherCaption}>
           {view === "chart" ? (
             <BarList bars={records} label="Records by publisher" labelWidth="minmax(0,8rem)" onSelect={(b) => onPublisher(b.key)} />
           ) : (
@@ -116,22 +120,7 @@ export function LibraryHolds({ lib, names, onPublisher, now = new Date() }: { li
     : [];
   return (
     <LibrarySection name="What the library holds" title="What the library holds" meta="Tables and records as stored; counts, not measures" actions={<ViewToggle value={view} onChange={setView} />}>
-      <div className="grid min-w-0 grid-cols-1 gap-3 @4xl:grid-cols-2 @7xl:grid-cols-3">
-        <CountPanel name="Records by collection" title="Records by collection" caption="Records of the tables in each collection; views repeat their tables and are not added.">
-          {view === "chart" ? (
-            <BarList
-              bars={collections}
-              label="Records by collection"
-              labelWidth="minmax(0,10rem)"
-              onSelect={(b) => {
-                const href = collections.find((c) => c.key === b.key)?.href;
-                if (href) void router.navigate({ href });
-              }}
-            />
-          ) : (
-            <CountTable head={["Collection", "Records"]} rows={collections.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} />
-          )}
-        </CountPanel>
+      <div className="grid min-w-0 grid-cols-1 gap-3">
         {periods.pending ? (
           <CountPanel name="Tables by latest period" title="Tables by the year of their latest period">
             <ColumnChartSkeleton />
@@ -157,13 +146,30 @@ export function LibraryHolds({ lib, names, onPublisher, now = new Date() }: { li
             )}
           </CountPanel>
         )}
-        <CountPanel name="Publishers by tables" title="Publishers with the most tables" caption={`The ${n(publishers.length)} with the most tables of ${n(new Set(storeRows(lib).map((r) => r.publisherId)).size)} publishers.`}>
-          {view === "chart" ? (
-            <BarList bars={publishers} label="Publishers by tables" labelWidth="minmax(0,9rem)" onSelect={(b) => onPublisher(b.key)} />
-          ) : (
-            <CountTable head={["Publisher", "Tables"]} rows={publishers.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} />
-          )}
-        </CountPanel>
+        <div className="grid min-w-0 grid-cols-1 items-start gap-3 @4xl:grid-cols-2">
+          <CountPanel name="Records by collection" title="Records by collection" caption="Records of the tables in each collection; views repeat their tables and are not added.">
+            {view === "chart" ? (
+              <BarList
+                bars={collections}
+                label="Records by collection"
+                labelWidth="minmax(0,10rem)"
+                onSelect={(b) => {
+                  const href = collections.find((c) => c.key === b.key)?.href;
+                  if (href) void router.navigate({ href });
+                }}
+              />
+            ) : (
+              <CountTable head={["Collection", "Records"]} rows={collections.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} />
+            )}
+          </CountPanel>
+          <CountPanel name="Publishers by tables" title="Publishers with the most tables" caption={`The ${n(publishers.length)} with the most tables of ${n(new Set(storeRows(lib).map((r) => r.publisherId)).size)} publishers.`}>
+            {view === "chart" ? (
+              <BarList bars={publishers} label="Publishers by tables" labelWidth="minmax(0,9rem)" onSelect={(b) => onPublisher(b.key)} />
+            ) : (
+              <CountTable head={["Publisher", "Tables"]} rows={publishers.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} />
+            )}
+          </CountPanel>
+        </div>
       </div>
     </LibrarySection>
   );

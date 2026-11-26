@@ -15,6 +15,13 @@ import { CategoryPanel, FillPanel } from "./counts/value-panels";
 import { readData } from "./dataset-queries";
 import { QuietLine } from "./ui/primitives";
 
+/** The last chart of the grid takes the columns its row leaves free, so no row ends in an empty frame. */
+function lastSpan(cells: number): string {
+  const two = cells > 1 && cells % 2 === 1 ? "@3xl:col-span-2" : "";
+  const three = cells > 2 ? (cells % 3 === 1 ? "@6xl:col-span-3" : cells % 3 === 2 ? "@6xl:col-span-2" : "@6xl:col-span-1") : "";
+  return cn(two, three);
+}
+
 /** Shown wherever counts need the next database update (migration 0069). */
 export const AWAITS_UPDATE = "Counts by period and by entity arrive with the next database update.";
 
@@ -98,12 +105,21 @@ export function CoverageView({
   const failed = (reason: string | null, what: string) => (reason === "unavailable" ? AWAITS_UPDATE : `${what} could not be counted.`);
   const gridCells: ReactNode[] = [];
 
-  if (placeDim) {
+  // a dimension that holds one value is said in a line, not drawn as one bar
+  const only = (read: { data: { values: { value: string; label: string | null }[]; complete: boolean } | null }) =>
+    read.data && read.data.complete && read.data.values.length === 1 ? read.data.values[0] : null;
+  const onePlace = only(places);
+  const oneEntity = only(ents);
+  const named = (v: { value: string; label: string | null }) => (v.label && v.label !== v.value ? `${v.label} (${v.value})` : v.value);
+  if (onePlace) notes.push(`Every record is of one place, ${named(onePlace)}.`);
+  if (oneEntity) notes.push(`Every record is of one ${entityNoun?.one ?? "entity"}, ${named(oneEntity)}.`);
+
+  if (placeDim && !onePlace) {
     if (placeQuery.isPending) gridCells.push(<PanelSkeleton key="place" name="Records by place" title="Records by place" height={BARS_HEIGHT} />);
     else if (places.data) gridCells.push(<PlacePanel key="place" facets={places.data} view={view} onGeography={onGeography} />);
     else gridCells.push(<PanelNote key="place" name="Records by place" title="Records by place">{failed(places.reason, "Records by place")}</PanelNote>);
   }
-  if (entityDim) {
+  if (entityDim && !oneEntity) {
     const title = `Records per ${entityNoun?.one ?? "entity"}`;
     if (entityQuery.isPending) gridCells.push(<PanelSkeleton key="entity" name="Records per entity" title={title} height={BARS_HEIGHT} />);
     else if (ents.data)
@@ -129,7 +145,15 @@ export function CoverageView({
         ) : (
           <PanelNote name="Records per period" title="Records per period">{failed(periods.reason, "Records per period")}</PanelNote>
         ))}
-      {gridCells.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-3", gridCells.length > 1 && "@3xl:grid-cols-2", gridCells.length > 2 && "@6xl:grid-cols-3")}>{gridCells}</div>}
+      {gridCells.length > 0 && (
+        <div className={cn("grid min-w-0 grid-cols-1 gap-3", gridCells.length > 1 && "@3xl:grid-cols-2", gridCells.length > 2 && "@6xl:grid-cols-3")}>
+          {gridCells.map((cell, i) => (
+            <div key={i} className={cn("grid min-w-0 grid-cols-1", i === gridCells.length - 1 && lastSpan(gridCells.length))}>
+              {cell}
+            </div>
+          ))}
+        </div>
+      )}
       {!fillInGrid && <FillPanel fills={fills} columns={snapshot.columns} view={view} />}
     </div>
   );

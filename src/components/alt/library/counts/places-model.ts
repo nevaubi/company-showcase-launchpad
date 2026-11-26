@@ -20,6 +20,8 @@ export type StateReading = {
   states: StateCount[];
   /** Keys that name the whole country (left aside by the rule, counted in the caption). */
   national: PlaceCount[];
+  /** Records whose place is an empty string. */
+  empty: number;
 };
 
 const labelOf = (v: SourceFacetValue) => (v.label && v.label !== v.value ? v.label : v.value);
@@ -49,7 +51,7 @@ export function readStates(values: readonly SourceFacetValue[]): StateReading | 
     }
     states.sort((a, b) => b.rows - a.rows || (a.place.code < b.place.code ? -1 : 1));
     national.sort(order);
-    return { kind, by, states, national };
+    return { kind, by, states, national, empty: values.filter((v) => v.value === "").reduce((sum, v) => sum + v.rows, 0) };
   };
   return tryKeys("value") ?? tryKeys("label");
 }
@@ -66,6 +68,7 @@ export function stateCaption(reading: StateReading): string {
   const where = reading.states.some((s) => s.place.kind === "territory") ? "states and territories" : reading.states.some((s) => s.place.kind === "district") ? "states and DC" : "states";
   const most = tied > 1 ? `${n(tied)} hold the most, ${n(top.rows)} each` : `most in ${top.place.name}, ${n(top.rows)}`;
   let line = `${exact ? "" : "At least "}${n(total)} records in ${n(reading.states.length)} ${where}; ${most}`;
+  if (reading.empty) line += `. ${n(reading.empty)} ${reading.empty === 1 ? "record has" : "records have"} an empty place`;
   if (reading.national.length) {
     const rows = reading.national.reduce((s, v) => s + v.rows, 0);
     line += `. ${n(rows)} more ${rows === 1 ? "record is" : "records are"} national totals`;
