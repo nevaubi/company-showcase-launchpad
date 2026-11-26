@@ -16,9 +16,9 @@ export type GridFill = {
   hue: string | null;
   /** Share of the hue in the mix, 0 to 100. */
   percent: number;
-  /** The label inside the fill takes the surface ink (light on dark) in the light theme. */
+  /** The label inside the fill is light (the fill is dark) in the light theme. */
   lightInkLight: boolean;
-  /** The label inside the fill takes the surface ink (dark on light) in the dark theme. */
+  /** The label inside the fill is light (the fill is dark) in the dark theme. */
   lightInkDark: boolean;
 };
 
@@ -70,6 +70,16 @@ export function gridFill(value: number | null, scale: GridScale, domain: [number
     lightInkLight: mixL("light", hue, percent) < INK_FLIP_L,
     lightInkDark: mixL("dark", hue, percent) < INK_FLIP_L,
   };
+}
+
+/**
+ * The ink of a label inside a fill, in both themes: a light label on a dark fill, a dark one on a light fill. A light
+ * label is the card's colour in the light theme and the foreground's in the dark one; a dark label the other way
+ * round. A state without a figure (hatched) takes the muted ink.
+ */
+export function inkClass(fill: GridFill): string {
+  if (!fill.hue) return "text-muted-foreground";
+  return `${fill.lightInkLight ? "text-card" : "text-foreground"} ${fill.lightInkDark ? "dark:text-foreground" : "dark:text-card"}`;
 }
 
 /** The CSS background of a fill. */

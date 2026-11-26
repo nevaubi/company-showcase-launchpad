@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GRID_PLACES } from "@/lib/sources/geo/us-states";
-import { gridFill, gridNeighbor, gridWidthFor } from "./state-grid-model";
+import { gridFill, gridNeighbor, gridWidthFor, inkClass } from "./state-grid-model";
 
 describe("grid fills", () => {
   it("run one hue from the low end to the high end of a sequential domain", () => {
@@ -44,5 +44,17 @@ describe("grid keys", () => {
 
   it("fit eleven columns by eight rows into a height", () => {
     expect(gridWidthFor(200, 2)).toBe(275);
+  });
+});
+
+describe("grid ink", () => {
+  it("writes a light label on a dark fill and a dark one on a light fill, in each theme", () => {
+    // the low end: a pale fill in the light theme, a dark one (near the muted surface) in the dark theme
+    const low = gridFill(0, "sequential", [0, 100]);
+    expect(inkClass(low)).toBe("text-foreground dark:text-foreground");
+    // the high end: the dark blue of the light theme, the light blue of the dark theme
+    const high = gridFill(100, "sequential", [0, 100]);
+    expect(inkClass(high)).toBe("text-card dark:text-card");
+    expect(inkClass(gridFill(null, "sequential", [0, 100]))).toBe("text-muted-foreground");
   });
 });
