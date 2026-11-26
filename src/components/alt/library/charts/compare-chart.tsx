@@ -193,6 +193,9 @@ function Overlay({ lines, label, recordHref, onOpen, height, axis }: Props) {
   );
 }
 
+/** The band at the top of a small panel that holds its series' name and unit, above the plot, so no line crosses them. */
+const HEAD = 15;
+
 /** One small panel per series, its own axis and unit, on the shared time axis. */
 function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
   const [ref, width] = useWidth(220);
@@ -217,7 +220,7 @@ function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
         const values = l.points.map((p) => p.value).filter((v): v is number => v !== null);
         const lo = d3.min(values) ?? 0;
         const hi = d3.max(values) ?? 1;
-        const y = d3.scaleLinear().domain(lo === hi ? [lo - 1, hi + 1] : [lo, hi]).nice(2).range([panel - 14, 4]);
+        const y = d3.scaleLinear().domain(lo === hi ? [lo - 1, hi + 1] : [lo, hi]).nice(2).range([panel - HEAD - 6, 2]);
         const ticks = y.ticks(2);
         const step = ticks.length > 1 ? Math.abs(ticks[1] - ticks[0]) : 1;
         const d = d3
@@ -245,11 +248,11 @@ function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
             }}
             onBlur={() => setHover(null)}
           >
-            <text x={margin.left} y={9} className="fill-muted-foreground text-[10px]">
+            <text x={margin.left} y={10} className="fill-muted-foreground text-[10px]">
               <tspan className="fill-foreground font-medium">{l.label}</tspan>
               <tspan>{`  ${l.plotUnit}`}</tspan>
             </text>
-            <g transform={`translate(${margin.left},4)`}>
+            <g transform={`translate(${margin.left},${HEAD})`}>
               {ticks.map((v) => (
                 <g key={v} transform={`translate(0,${y(v)})`}>
                   <line x1={0} x2={iw} stroke="var(--border)" strokeWidth={1} shapeRendering="crispEdges" opacity={0.7} />
@@ -269,13 +272,13 @@ function Multiples({ lines, label, recordHref, onOpen, height }: Props) {
               )}
               {at && at.value !== null && t !== null && (
                 <g pointerEvents="none">
-                  <line x1={x(new Date(t))} x2={x(new Date(t))} y1={0} y2={panel - 14} stroke="var(--muted-foreground)" strokeWidth={1} opacity={0.6} />
+                  <line x1={x(new Date(t))} x2={x(new Date(t))} y1={0} y2={panel - HEAD - 6} stroke="var(--muted-foreground)" strokeWidth={1} opacity={0.6} />
                   <circle cx={x(day(at.date))} cy={y(at.value)} r={4} fill={slot(i)} stroke="var(--card)" strokeWidth={2} />
                 </g>
               )}
               <rect
                 width={iw}
-                height={panel - 10}
+                height={panel - HEAD - 4}
                 fill="transparent"
                 className="cursor-pointer"
                 onPointerMove={(e) => setHover(nearest(e.clientX, e.currentTarget.ownerSVGElement!.getBoundingClientRect()))}

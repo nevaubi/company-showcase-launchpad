@@ -142,6 +142,7 @@ function Figure({ tile, result, open }: { tile: BoardTile; result: Extract<TileR
         points={result.points}
         median={shape.median}
         unit={result.plotUnit}
+        axisTitle={shape.bins?.some((b) => b.axisFrom != null) ? (result.reader?.axis.title ?? result.plotUnit) : result.plotUnit}
         label={name(`${result.asOf}, ${shape.count} figures`)}
         recordHref={rowHref}
         periodHref={datasetHref(tile.source.datasetId, recordsSearch(tile))}
@@ -204,7 +205,8 @@ export function Tile({ tile, className, focusable }: { tile: BoardTile; classNam
   const result = tile.result;
   if (!result.ok) return null;
   const open = (href: string) => navigate({ href });
-  if (result.shape?.kind === "stat") return <StatTile tile={tile} result={result} change={result.shape.change} open={open} className={className} />;
+  if (result.shape?.kind === "stat")
+    return <StatTile tile={tile} result={result} change={result.shape.change} missing={result.shape.missing} open={open} className={className} />;
   const recordsAt = datasetHref(tile.source.datasetId, recordsSearch(tile));
   const collected = collectedOn(tile.source.retrievedAt);
   const percent = result.figureUnit === "%";
@@ -309,12 +311,15 @@ function StatTile({
   tile,
   result,
   change,
+  missing,
   open,
   className,
 }: {
   tile: BoardTile;
   result: Extract<TileResult, { ok: true }>;
   change: Extract<TileShape, { kind: "stat" }>["change"];
+  /** Why a change asked for is not shown. */
+  missing?: string;
   open: (href: string) => void;
   className?: string;
 }) {
@@ -355,9 +360,9 @@ function StatTile({
             </span>{" "}
             on {change.against}
           </span>
-        ) : (
-          <span>No change over a year</span>
-        )}
+        ) : missing ? (
+          <span>{missing}</span>
+        ) : null}
         <span className="ml-auto">{result.asOf}</span>
       </p>
     </article>
