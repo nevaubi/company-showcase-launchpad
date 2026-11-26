@@ -137,8 +137,11 @@ export const FDIC_SUMMARY_ENTRY: ProfileEntry = { family: "fdic-summary", claims
  * purchase-only monthly indexes, which the publisher's own file sets to 100.00 in January 1991 (record
  * USA, 1991, period 1, both index_nsa and index_sa); an address must fix those three fields.
  * Checked on 25 Nov 2026: 48 of 48 United States monthly records read equal FHFA's hpi_master.csv.
+ * The national and state table is left to the quarterly family of unit `sectors` (`fhfa-hpi-quarterly`):
+ * FHFA publishes purchase-only indexes for states only quarterly, which this profile's monthly fields refuse.
  */
-const fhfaClaims = (d: ProfileDataset) => d.source_id === "FHFA_MASTER";
+const FHFA_QUARTERLY_STATE_TABLE = "official_11_real_estate_national_and_state_c21c1607a1";
+const fhfaClaims = (d: ProfileDataset) => d.source_id === "FHFA_MASTER" && d.id !== FHFA_QUARTERLY_STATE_TABLE;
 const FHFA_UNIT = "Index, January 1991 = 100";
 const FHFA_EVIDENCE =
   "https://www.fhfa.gov/hpi/download/monthly/hpi_master.csv (traditional, purchase-only, monthly: index_nsa and index_sa are 100.00 for 1991, period 1)";
