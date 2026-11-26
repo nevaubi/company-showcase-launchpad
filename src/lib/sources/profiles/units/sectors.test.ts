@@ -3,7 +3,7 @@ import { computeSeriesTile, type CellInput, type TileContext } from "../../board
 import { tileSpec } from "../../boards/specs";
 import type { SeriesTileSpec } from "../../boards/types";
 import type { SourceColumn } from "../../schema";
-import { addressRefusal, measureOf, profileFor, profileStatus } from "../index";
+import { addressRefusal, measureOf, profileFor, profileStatus, unitOf } from "../index";
 import type { Profile } from "../types";
 import { FHFA_QUARTERLY_DATASET } from "./sectors";
 
@@ -117,5 +117,128 @@ describe("FHFA quarterly purchase-only family", () => {
     expect(result.figure).toBe("−0.2");
     expect(result.headline).toBe("The FHFA purchase-only index for California fell 0.2% over the four quarters to Q2 2026.");
     expect(result.refs.rows).toEqual([26218, 26214]);
+  });
+});
+
+const COUNTY_FIELDS = fields("State", "County", "FIPS code", "Year", "Annual Change (%)", "HPI", "HPI with 1990 base", "HPI with 2000 base");
+const ZIP_FIELDS = fields("Five-Digit ZIP Code", "Year", "Annual Change (%)", "HPI", "HPI with 1990 base", "HPI with 2000 base");
+const TRACT_FIELDS: SourceColumn[] = [
+  { key: "col0001", label: "tract", type: "string", unit: "11-character census tract identifier" },
+  { key: "col0002", label: "state_abbr", type: "string" },
+  { key: "col0003", label: "year", type: "string" },
+  { key: "col0004", label: "annual_change", type: "string", unit: "percent" },
+  { key: "col0005", label: "hpi", type: "string", unit: "index" },
+  { key: "col0006", label: "hpi1990", type: "string", unit: "index; 1990=100" },
+  { key: "col0007", label: "hpi2000", type: "string", unit: "index; 2000=100" },
+];
+
+describe("FHFA annual county, ZIP and tract families", () => {
+  it("draws the annual change and the two rebased indexes, never the index based on each place's first year", () => {
+    const county = on({ id: "official_11_real_estate_hpi_at_county_fc7641108a", source_id: "FHFA_COUNTY" }, COUNTY_FIELDS);
+    expect(county.family).toBe("fhfa-hpi-county");
+    expect(county.measures.map((m) => [m.field, m.unit.from === "constant" ? m.unit.text : ""])).toEqual([
+      ["Annual Change (%)", "Percent"],
+      ["HPI with 2000 base", "Index, 2000 = 100"],
+      ["HPI with 1990 base", "Index, 1990 = 100"],
+    ]);
+    expect(measureOf(county, "HPI")).toBeNull();
+    expect(county.measures.every((m) => m.markers?.includes("."))).toBe(true);
+  });
+
+  it("opens the county history on Los Angeles County and ranks the one-year table", () => {
+    const history = on({ id: "official_11_real_estate_hpi_at_county_fc7641108a", source_id: "FHFA_COUNTY" }, COUNTY_FIELDS);
+    expect(history.firstLook).toBe("series");
+    expect(history.defaultSeries?.({ id: "official_11_real_estate_hpi_at_county_fc7641108a", source_id: "FHFA_COUNTY" })).toEqual({ by: "geo_code", key: "06037" });
+    const latest = on({ id: "official_11_real_estate_hpi_at_county_latest_4e3ee0764a", source_id: "FHFA_COUNTY" }, COUNTY_FIELDS);
+    expect(latest.firstLook).toBe("ranking");
+    expect(latest.defaultSeries?.({ id: "official_11_real_estate_hpi_at_county_latest_4e3ee0764a", source_id: "FHFA_COUNTY" })).toBeNull();
+  });
+
+  it("gives the one-year ZIP table no measured first look: 19,024 places in one year are beyond a bounded ranking", () => {
+    expect(on({ id: "official_11_real_estate_hpi_at_zip5_beae754ada", source_id: "FHFA_ZIP5" }, ZIP_FIELDS).firstLook).toBe("series");
+    expect(on({ id: "official_11_real_estate_hpi_at_zip5_latest_8283bc1c1b", source_id: "FHFA_ZIP5" }, ZIP_FIELDS).firstLook).toBe("none");
+    // a ZIP table's fields do not satisfy the county family, which is not claimed for it anyway
+    expect(profileStatus({ id: "x", source_id: "FHFA_COUNTY" }, ZIP_FIELDS).state).toBe("off");
+  });
+
+  it("reads the tract units from the dictionary and turns off when it states another", () => {
+    const tract = on({ id: "official_11_real_estate_raw_hpi_at_tract_d51b3471be", source_id: "FHFA_TRACT" }, TRACT_FIELDS);
+    expect(tract.family).toBe("fhfa-hpi-tract");
+    expect(measureOf(tract, "hpi2000")?.unit).toEqual({ from: "dictionary", text: "index; 2000=100" });
+  });
+});
+
+const TW_TECH_FIELDS: SourceColumn[] = [
+  "exchange",
+  "source_report_date_roc",
+  "source_period_roc",
+  "company_code",
+  "company_name",
+  "industry_native",
+  "monthly_revenue",
+  "prior_month_revenue",
+  "year_ago_month_revenue",
+  "month_over_month_pct",
+  "year_over_year_pct",
+  "year_to_date_revenue",
+  "prior_year_to_date_revenue",
+  "year_to_date_growth_pct",
+  "notes_native",
+  "period_gregorian",
+].map((label, i) => ({
+  key: `col${String(i + 1).padStart(4, "0")}`,
+  label,
+  type: "string",
+  ...(label.endsWith("_revenue") ? { unit: "thousands of source reporting currency (MOPS: 千元); no currency normalization" } : label.endsWith("_pct") ? { unit: "%" } : {}),
+}));
+const TW_NATIVE_FIELDS = fields(
+  "出表日期",
+  "資料年月",
+  "公司代號",
+  "公司名稱",
+  "產業別",
+  "營業收入-當月營收",
+  "營業收入-上月營收",
+  "營業收入-去年當月營收",
+  "營業收入-上月比較增減(%)",
+  "營業收入-去年同月增減(%)",
+  "累計營業收入-當月累計營收",
+  "累計營業收入-去年累計營收",
+  "累計營業收入-前期比較增減(%)",
+  "備註",
+);
+
+describe("Taiwan monthly revenue families", () => {
+  it("draws money only from the technology tables, whose dictionary states the unit", () => {
+    const tech = on({ id: "official_02_technology_csv_twse_tech_revenue_922c8b713b", source_id: "TWSE_MONTHLY" }, TW_TECH_FIELDS);
+    expect(tech.family).toBe("tw-revenue-tech");
+    expect(measureOf(tech, "monthly_revenue")?.unit).toEqual({
+      from: "dictionary",
+      text: "thousands of source reporting currency (MOPS: 千元); no currency normalization",
+    });
+    const native = on({ id: "official_02_technology_csv_twse_revenue_all_industries_96edc5fdfa", source_id: "TWSE_MONTHLY" }, TW_NATIVE_FIELDS);
+    expect(native.family).toBe("tw-revenue-native");
+    expect(native.measures.map((m) => m.field)).toEqual(["營業收入-去年同月增減(%)", "營業收入-上月比較增減(%)", "累計營業收入-前期比較增減(%)"]);
+    expect(native.measures.every((m) => m.unit.from === "constant" && m.unit.text === "Percent")).toBe(true);
+  });
+
+  it("declares the period dimension of each copy: the ROC month, or the Gregorian month of the current copies", () => {
+    const roc = on({ id: "official_02_technology_csv_tpex_revenue_all_industries_65da2c3cb7", source_id: "TPEX_MONTHLY" }, TW_NATIVE_FIELDS);
+    expect(roc.period).toEqual({ from: "dimension", format: "roc-yyymm" });
+    const gregorian = on({ id: "official_tpex_monthly_revenue_native_current", source_id: "TPEX_MONTHLY" }, TW_NATIVE_FIELDS);
+    expect(gregorian.period).toEqual({ from: "dimension", format: "yyyy-mm" });
+  });
+
+  it("turns the technology profile off when the dictionary drops the unit", () => {
+    const bare = TW_TECH_FIELDS.map(({ unit: _unit, ...f }) => f);
+    const tech = on({ id: "official_02_technology_csv_twse_tech_revenue_922c8b713b", source_id: "TWSE_MONTHLY" }, bare);
+    const measure = measureOf(tech, "monthly_revenue");
+    expect(measure).not.toBeNull();
+    if (!measure) return;
+    // the profile still applies by labels, but its unit cannot be established, so nothing is drawn
+    expect(unitOf(measure, bare)).toEqual({
+      ok: false,
+      reason: 'the dictionary states no unit for monthly_revenue, not "thousands of source reporting currency (MOPS: 千元); no currency normalization"',
+    });
   });
 });
