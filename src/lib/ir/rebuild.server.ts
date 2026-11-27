@@ -71,7 +71,9 @@ export async function documentRows(ticker: string): Promise<PlanDocRow[]> {
     (a, b) =>
       supabaseAdmin
         .from("ir_documents")
-        .select("id, kind, ext, filed, title, period, source_url, rendition_path")
+        .select(
+          "id, kind, ext, filed, title, period, source_url, rendition_path, extract_facts, prose_facts",
+        )
         .eq("ticker", ticker)
         .order("id")
         .range(a, b) as never,
@@ -359,7 +361,8 @@ export async function rebuildCompany(
   opts: { dry?: boolean; captions?: boolean; fill?: boolean } = {},
 ): Promise<IrPayload | null> {
   // Only the planned documents' facts are loaded (doc-plan.ts): one copy per document family, decks for two
-  // years, older history from the primary statement documents only.
+  // years, older history from the primary statement documents only; documents without a filing date are placed
+  // by their period, never left out for lacking one.
   const [docRows, map, refused] = await Promise.all([
     documentRows(ticker),
     loadLabelMap(ticker),
