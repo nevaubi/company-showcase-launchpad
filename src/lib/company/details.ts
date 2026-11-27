@@ -1,3 +1,4 @@
+import { issuerLink, type ReviewedIssuerLinks } from "./issuer-directory";
 import type { CompanyProfile } from "@/lib/financials/types";
 
 /**
@@ -6,6 +7,7 @@ import type { CompanyProfile } from "@/lib/financials/types";
  * `wikipedia` (first sentence of the article, generated list) or `sec` (a sentence built from SEC registration data).
  */
 export interface CompanyDetails {
+  directory?: ReviewedIssuerLinks;
   website?: string;
   ir?: string;
   founded?: number;
@@ -35,18 +37,13 @@ export interface AboutFields {
 
 const text = (s: string | null | undefined) => (s && s.trim() ? s.trim() : null);
 
-/** True when the served profile lacks at least one of the four fields, so the details are worth asking for. */
-export function needsDetails(p: Pick<CompanyProfile, "website" | "investorRelations" | "description" | "founded">): boolean {
-  return !text(p.website) || !text(p.investorRelations) || !text(p.description) || !p.founded;
-}
-
-/** Each field from the profile when it has one, otherwise from the details; never mixes a field across the two. */
-export function aboutFields(p: Pick<CompanyProfile, "website" | "investorRelations" | "description" | "founded">, d: CompanyDetails | null | undefined): AboutFields {
+/** Reviewed issuer links take precedence over the stored profile and descriptive coverage fallback. */
+export function aboutFields(p: Pick<CompanyProfile, "website" | "investorRelations" | "description" | "founded"> & { ticker?: string }, d: CompanyDetails | null | undefined): AboutFields {
   const own = text(p.description);
   const other = text(d?.description);
   return {
-    website: text(p.website) ?? text(d?.website),
-    ir: text(p.investorRelations) ?? text(d?.ir),
+    website: issuerLink(d?.directory, "website", p.ticker ?? "", p.website, d?.website),
+    ir: issuerLink(d?.directory, "ir", p.ticker ?? "", p.investorRelations, d?.ir),
     founded: p.founded || d?.founded || null,
     description: own
       ? { text: own, origin: "profile" }

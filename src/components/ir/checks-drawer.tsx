@@ -2,7 +2,8 @@
 // every figure that needs a second look (totals whose parts don't add up, failed read-time checks, figures
 // held back, figures another document prints differently), each with its numbers and its source. The
 // statements keep only a quiet mark at such a figure.
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import type { VisibleStatementCheck } from "./statement-section";
 import { Check } from "lucide-react";
 import { IrChecksLine } from "@/components/ir/checks";
 import { AltMark, CheckDot, HeldMark } from "@/components/ir/marks";
@@ -52,7 +53,11 @@ const amount = (v: number, unit: string) =>
  * The tie-out checks the panel lists: a total a statement section prints with its parts is checked against
  * those parts (`sectionChecks`, as the section's marks are); other stored checks as the build made them.
  */
-function tableChecks(payload: IrPayload, byKey: Map<string, PayloadSeries>, sec?: Statement): PayloadCheck[] {
+function tableChecks(
+  payload: IrPayload,
+  byKey: Map<string, PayloadSeries>,
+  sec?: Statement,
+): PayloadCheck[] {
   const secs = sec ? [sec] : assembleStatements(payload);
   const out = new Map<string, PayloadCheck>();
   const covered = new Set<string>();
@@ -69,6 +74,8 @@ export function IrChecksDrawer({
   ticker,
   payload,
   section,
+  visible,
+  onAllChecks,
   check,
   consistency,
   late,
@@ -81,6 +88,8 @@ export function IrChecksDrawer({
   payload: IrPayload;
   /** a section id to show only that section's figures */
   section?: string;
+  visible?: VisibleStatementCheck[];
+  onAllChecks?: () => void;
   check?: SecCheck | null;
   consistency?: ConsistencySummary;
   late?: boolean;
@@ -88,12 +97,28 @@ export function IrChecksDrawer({
   stats: { label: string; value: string; hint?: string }[];
 }) {
   const src = useSource();
+  const [limit, setLimit] = useState(CAP);
+  const listed = useMemo(
+    () =>
+      visible
+        ?.slice()
+        .sort(
+          (a, b) =>
+            Number(a.check.ok) - Number(b.check.ok) ||
+            b.check.e.localeCompare(a.check.e) ||
+            a.section.localeCompare(b.section),
+        ),
+    [visible],
+  );
   const sec = useMemo(
-    () => (section && open ? assembleStatements(payload).find((s) => s.id === section) : undefined),
-    [payload, section, open],
+    () =>
+      section && open && !visible
+        ? assembleStatements(payload).find((s) => s.id === section)
+        : undefined,
+    [payload, section, open, visible],
   );
   const lists = useMemo(() => {
-    if (!open) return null;
+    if (!open || visible) return null;
     const keys = sec ? new Set(sec.keys) : null;
     const byKey = new Map(payload.series.map((s) => [s.k, s]));
     const failed: Item[] = [];
@@ -148,7 +173,7 @@ export function IrChecksDrawer({
       held: held.sort(newest),
       alt: alt.sort(newest),
     };
-  }, [open, payload, sec]);
+  }, [open, payload, sec, visible]);
 
   const openItem = (x: Item) => openIrCell(src.open, ticker, payload, x.s, x.e, x.kind, x.c);
   const list = (title: string, items: Item[], mark: ReactNode, note: string) =>
@@ -204,16 +229,71 @@ export function IrChecksDrawer({
       >
         <SheetHeader className="border-b px-4 py-3 text-left">
           <SheetTitle className="text-sm font-semibold">
-            {sec ? `Checks: ${sec.title}` : "Checks"}
+            {visible
+              ? "Period totals in this view"
+              : sec
+                ? `Checks: ${sec.title}`
+                : "All filing checks"}
           </SheetTitle>
           <SheetDescription className="text-xs">
-            Every figure is read from a stored document and checked where it can be: parts against
-            their printed total, quarters against the year, calculated values against their parts,
-            consolidated lines against the 10-Q and 10-K. Nothing is corrected. Click an item to
-            open its source.
+            {listed
+              ? `${listed.filter((x) => x.check.ok).length.toLocaleString()} of ${listed.length.toLocaleString()} totals reconcile across the selected sections and periods. Select a total to open its source.`
+              : "Review totals, annual and quarterly consistency, and comparisons with the company’s SEC filings. Select an item to open its source."}
           </SheetDescription>
         </SheetHeader>
-        {!sec && (
+        {listed && (
+          <div className="px-4 py-3">
+            {onAllChecks && (
+              <button type="button" className="mb-3 text-xs underline" onClick={onAllChecks}>
+                View all filing checks
+              </button>
+            )}
+            <ul className="divide-y">
+              {listed
+                .slice(0, limit)
+                .map(({ section: title, label, series, cell, check: ck }, i) => (
+                  <li key={`${series.k}|${ck.kind}|${ck.e}|${i}`}>
+                    <button
+                      type="button"
+                      className="w-full py-2 text-left text-xs hover:bg-secondary"
+                      onClick={() =>
+                        openIrCell(
+                          src.open,
+                          ticker,
+                          payload,
+                          series,
+                          ck.e,
+                          ck.kind === "fy" ? "y" : "q",
+                          cell,
+                        )
+                      }
+                    >
+                      <span className="block text-muted-foreground">
+                        {title} · {ck.e} · {ck.ok ? "Reconciled" : "Difference"}
+                      </span>
+                      <span className="font-medium">{label}</span> · Reported{" "}
+                      {amount(cell.v, series.unit)} · Components {amount(ck.sum, series.unit)}
+                      {!ck.ok && (
+                        <span className="block">
+                          Difference {amount(ck.sum - cell.v, series.unit)}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+            </ul>
+            {listed.length > limit && (
+              <button
+                type="button"
+                className="mt-2 text-xs underline"
+                onClick={() => setLimit(limit + CAP)}
+              >
+                Show more totals
+              </button>
+            )}
+          </div>
+        )}
+        {!listed && !sec && (
           <dl className="grid grid-cols-2 gap-px border-b bg-border">
             {stats.map((x, i) => (
               <div
@@ -230,7 +310,7 @@ export function IrChecksDrawer({
             ))}
           </dl>
         )}
-        {!sec && (
+        {!listed && !sec && (
           <IrChecksLine
             ticker={ticker}
             payload={payload}
@@ -240,7 +320,7 @@ export function IrChecksDrawer({
             late={late}
           />
         )}
-        {!sec && payload.stats.ttm ? (
+        {!listed && !sec && payload.stats.ttm ? (
           <p
             className={cn("border-t px-4 py-2", IR.caption)}
             data-section="IR trailing twelve months"

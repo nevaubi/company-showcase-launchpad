@@ -117,13 +117,13 @@ export function CompanyActions({
   /** the company dataset has not answered yet */
   pending: boolean;
   /** IR address from the coverage list, when it has one */
-  irHint?: string;
+  irHint?: string | null;
   price: number | null;
   className?: string;
 }) {
   const follow = useToggleFollow();
   const followed = follow.isFollowed(ticker);
-  const ir = irUrl(profile) ?? irUrl({ investorRelations: irHint ?? "" });
+  const ir = irHint === undefined ? irUrl(profile) : irUrl({ investorRelations: irHint ?? "" });
   const more = (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>

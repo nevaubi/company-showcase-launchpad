@@ -1,3 +1,4 @@
+import { issuerLink } from "@/lib/company/issuer-directory";
 import { useQuery } from "@tanstack/react-query";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { analyticsFile } from "@/lib/analytics-files";
@@ -94,7 +95,7 @@ export function CompanyHeader({
           profile={profile}
           filings={filings}
           pending={profilePending}
-          irHint={coverage?.ir ?? details.data?.ir}
+          irHint={details.data ? issuerLink(details.data.directory, "ir", ticker, profile?.investorRelations, details.data.ir, coverage?.ir) : null}
           price={quote?.price ?? null}
         />
       </div>

@@ -1,19 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import type { CompanyProfile } from "@/lib/financials/types";
 import { getCompanyDetails } from "./details.functions";
-import { needsDetails, type CompanyDetails } from "./details";
+import type { CompanyDetails } from "./details";
 
-/**
- * The coverage details of a company whose served profile lacks a website, IR address, founding year or description;
- * not asked for when the profile has all four. A failed read leaves the profile's own fields (the page shows less,
- * never something wrong).
- */
-export function useCompanyDetails(ticker: string, profile: Pick<CompanyProfile, "website" | "investorRelations" | "description" | "founded"> | undefined) {
+/** The header and About panel share one cached issuer identity read, including profiles with older links. */
+export function useCompanyDetails(ticker: string, profile: Pick<CompanyProfile, "cik"> | undefined) {
   return useQuery({
-    queryKey: ["company-details", ticker],
-    queryFn: (): Promise<CompanyDetails> => getCompanyDetails({ data: { ticker } }),
-    enabled: !!profile && needsDetails(profile),
-    staleTime: 24 * 60 * 60_000,
+    queryKey: ["company-details", ticker, profile?.cik],
+    queryFn: (): Promise<CompanyDetails> => getCompanyDetails({ data: { ticker, cik: profile?.cik || undefined } }),
+    enabled: !!profile,
+    staleTime: 60 * 60_000,
     retry: 1,
   });
 }

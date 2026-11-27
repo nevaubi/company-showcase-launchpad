@@ -209,6 +209,22 @@ async function regulatory(c: Co): Promise<Row[]> {
   return out;
 }
 
+// These two CDRH public notices print a two-digit initiation year. Their recall
+// actions identify April 2013 and November 30, 2012 respectively. Match the
+// exact device record and both original dates before using the reviewed year.
+const reviewedDeviceDates: Record<string, [string, string, string]> = {
+  "117862": ["0013-04-12", "2013-05-29", "2013-04-12"],
+  "122550": ["0012-11-30", "2013-11-04", "2012-11-30"],
+};
+
+export function recallEventDate(r: { cfres_id?: string; event_date_initiated?: string; recall_initiation_date?: string; event_date_posted?: string; report_date?: string }) {
+  const raw = r.recall_initiation_date ?? r.event_date_initiated;
+  const reviewed = reviewedDeviceDates[r.cfres_id ?? ""];
+  const initiated = iso(raw) ?? (reviewed && raw === reviewed[0] && r.event_date_posted === reviewed[1] ? reviewed[2] : null);
+  const posted = iso(r.event_date_posted) ?? iso(r.report_date);
+  return { date: initiated ?? posted, basis: initiated ? "firm_initiation" : posted ? "agency_publication" : null, raw, posted };
+}
+
 // ───────── openFDA: drug & device recalls, drug approvals ─────────
 async function fda(c: Co): Promise<Row[]> {
   if (!appliesTo("fda", c, c.reg)) return [];
@@ -223,7 +239,8 @@ async function fda(c: Co): Promise<Row[]> {
       for (const r of rs) {
         if (!ours(r.recalling_firm)) continue;
         const id = r.recall_number ?? r.res_event_number ?? r.cfres_id;
-        out.push({ uid: `fda:${c.ticker}:${path}:${id}`, ticker: c.ticker, dataset: "fda", kind: "event", date: iso(r.recall_initiation_date ?? r.event_date_initiated ?? r.report_date), title: `${kind}: ${(r.product_description ?? r.product_description ?? "").slice(0, 160)}`, meta: { kind, class: r.classification ?? r.root_cause_description, reason: (r.reason_for_recall ?? r.reason_for_recall ?? "").slice(0, 400), status: r.status ?? r.recall_status, firm: r.recalling_firm, quantity: r.product_quantity }, source: "openFDA", source_url: path === "device/recall" && r.cfres_id ? `https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfRES/res.cfm?id=${r.cfres_id}` : `https://api.fda.gov/${path}.json?search=recall_number:${id}` });
+        const eventDate = recallEventDate(r);
+        out.push({ uid: `fda:${c.ticker}:${path}:${id}`, ticker: c.ticker, dataset: "fda", kind: "event", date: eventDate.date, title: `${kind}: ${(r.product_description ?? r.product_description ?? "").slice(0, 160)}`, meta: { kind, date_basis: eventDate.basis, reported_initiation_date: eventDate.raw, publication_date: eventDate.posted, class: r.classification ?? r.root_cause_description, reason: (r.reason_for_recall ?? r.reason_for_recall ?? "").slice(0, 400), status: r.status ?? r.recall_status, firm: r.recalling_firm, quantity: r.product_quantity }, source: "openFDA", source_url: path === "device/recall" && r.cfres_id ? `https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfRES/res.cfm?id=${r.cfres_id}` : `https://api.fda.gov/${path}.json?search=recall_number:${id}` });
       }
       if (rs.length < 1000) break;
     }

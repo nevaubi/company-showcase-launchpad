@@ -19,6 +19,7 @@ describe("reaper", () => {
     expect(staleRuns(rows, now).map((r) => r.id)).toEqual([5, 6, 1]);
     expect(staleRuns(rows, now, 1).map((r) => r.id)).toEqual([5]);
     expect(maxRunMs("options")).toBe(600_000);
+    expect(maxRunMs("call-archive")).toBe(600_000);
     expect(maxRunMs("supply-intel")).toBe(4 * 3600_000 + 10 * 60_000);
     expect(maxRunMs("ir-site")).toBe(maxRunMs("ir-canon"));
   });

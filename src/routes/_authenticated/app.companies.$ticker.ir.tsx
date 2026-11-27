@@ -84,16 +84,26 @@ function IrPage() {
     () => (line && period ? { line, period, freq: freq ?? ("q" as const) } : undefined),
     [line, period, freq],
   );
-  const clearFocus = useCallback(() => navigate({ search: {}, replace: true }), [navigate]);
+  const requested = useMemo(
+    () => (period ? { end: period, frequency: freq ?? ("q" as const) } : undefined),
+    [period, freq],
+  );
+  const clearFocus = useCallback(
+    () => navigate({ search: (old) => ({ ...old, line: undefined }), replace: true }),
+    [navigate],
+  );
   const fetchIr = useServerFn(getIrData);
   const store = useQuery(storeIndexQuery(ticker));
   const qc = useQueryClient();
   const q = useQuery({
-    queryKey: irPageKey(ticker),
+    queryKey: irPageKey(ticker, requested),
     // The company's SEC statements (usually already cached by the company header) feed the cross-check.
     queryFn: () =>
-      loadIrPage(ticker, fetchIr, () =>
-        qc.fetchQuery(companyQuery(ticker)).then(checkStatementsOf),
+      loadIrPage(
+        ticker,
+        fetchIr,
+        () => qc.fetchQuery(companyQuery(ticker)).then(checkStatementsOf),
+        requested,
       ),
     staleTime: 5 * 60_000,
     retry: 3,
@@ -113,13 +123,13 @@ function IrPage() {
       .catch(() => null)
       .then((st) => checkLateIrPage(lateData, st))
       .then((next) => {
-        if (!off && qc.getQueryData(irPageKey(ticker)) === lateData)
-          qc.setQueryData(irPageKey(ticker), next);
+        if (!off && qc.getQueryData(irPageKey(ticker, requested)) === lateData)
+          qc.setQueryData(irPageKey(ticker, requested), next);
       });
     return () => {
       off = true;
     };
-  }, [lateData, qc, ticker]);
+  }, [lateData, qc, ticker, requested]);
 
   if (q.isLoading)
     return (
@@ -160,13 +170,72 @@ function IrPage() {
       </Panel>
     );
   return (
-    <IrPageView
-      ticker={ticker}
-      data={q.data!}
-      store={store.data?.documents}
-      focus={focus}
-      onFocusDone={clearFocus}
-    />
+    <>
+      <details
+        className="mb-4 rounded-md border bg-card px-4 py-2 text-sm"
+        open={requested ? true : undefined}
+      >
+        <summary className="cursor-pointer font-medium">
+          Historical period{requested ? ` · ${requested.end}` : ""}
+        </summary>
+        <form
+          key={requested?.end ?? "latest"}
+          className="mt-3 flex flex-wrap items-end gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            void navigate({
+              search: {
+                period: String(form.get("end")),
+                freq: form.get("frequency") === "y" ? "y" : "q",
+              },
+            });
+          }}
+        >
+          <label className="grid gap-1 text-xs">
+            Period end
+            <input
+              name="end"
+              type="date"
+              required
+              defaultValue={requested?.end}
+              className="h-8 rounded border bg-background px-2 text-sm"
+            />
+          </label>
+          <label className="grid gap-1 text-xs">
+            Period type
+            <select
+              name="frequency"
+              defaultValue={requested?.frequency === "y" ? "y" : "q"}
+              className="h-8 rounded border bg-background px-2 text-sm"
+            >
+              <option value="q">Quarter</option>
+              <option value="y">Fiscal year</option>
+            </select>
+          </label>
+          <Button size="sm" variant="outline" type="submit">
+            View period
+          </Button>
+          {requested && (
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              onClick={() => void navigate({ search: {} })}
+            >
+              All periods
+            </Button>
+          )}
+        </form>
+      </details>
+      <IrPageView
+        ticker={ticker}
+        data={q.data!}
+        store={store.data?.documents}
+        focus={focus}
+        onFocusDone={clearFocus}
+      />
+    </>
   );
 }
 
@@ -189,9 +258,9 @@ export function IrPageView({
   onFocusDone?: () => void;
 }) {
   const hasSeries = !!data.payload && data.payload.series.length > 0;
-  const [checks, setChecks] = useState<{ open: boolean; section?: string }>({ open: false });
+  const [checks, setChecks] = useState<{ open: boolean; section?: string; visible?: StatementsSummary["checks"] }>({ open: false });
   const [tie, setTie] = useState<StatementsSummary | null>(null);
-  const openChecks = useCallback((section?: string) => setChecks({ open: true, section }), []);
+  const openChecks = useCallback((section?: string, visible?: StatementsSummary["checks"]) => setChecks({ open: true, section, visible }), []);
   return (
     <div className="grid grid-cols-1 gap-6">
       <IrSummary
@@ -202,13 +271,20 @@ export function IrPageView({
         images={data.images ?? 0}
         builtAt={data.builtAt}
         tie={tie}
-        onChecks={openChecks}
+        onChecks={() => openChecks(undefined, tie?.tieN ? tie.checks : undefined)}
       />
       <IrStandardKpis ticker={ticker} />
+      {data.source === "partner" && (
+        <p className={IR.caption}>
+          Source: archived disclosures
+          {data.requestedPeriod ? ` for the period ending ${data.requestedPeriod.end}` : ""}.
+        </p>
+      )}
       {hasSeries ? (
         <IrStatements
-          key={ticker}
+          key={`${ticker}-${data.requestedPeriod?.end ?? ""}-${data.requestedPeriod?.frequency ?? ""}`}
           ticker={ticker}
+          requestedPeriod={data.requestedPeriod}
           payload={data.payload!}
           focus={focus}
           onFocusDone={onFocusDone}
@@ -219,16 +295,20 @@ export function IrPageView({
         <IrPanel section="IR statements" tour="ir-breakdowns" title="Statements">
           <div className="px-4 py-4 text-[13px]">
             <p>
-              {data.oversizeBytes
-                ? "This company's statements are being rebuilt in a lighter form."
-                : "No figures have been read from this company's documents yet."}
+              {data.requestedPeriod
+                ? `There are no source-backed figures for the selected period ending ${data.requestedPeriod.end}.`
+                : data.oversizeBytes
+                  ? "This company's statements are being rebuilt in a lighter form."
+                  : "No figures have been read from this company's documents yet."}
             </p>
             <p className={cn("mt-1", IR.caption)}>
-              {data.oversizeBytes
-                ? `Its stored history has grown to ${Math.round(data.oversizeBytes / 1_000_000)} MB, more than one page can load. The stored files below can be opened now.`
-                : data.pending
-                ? `Statements appear here once the ${data.pending.toLocaleString()} stored ${data.pending === 1 ? "file that is" : "files that are"} waiting have been read. Reading runs in the background; the stored files below can be opened now.`
-                : "The stored files below can be opened now; this company's releases have no tables the readers use."}
+              {data.requestedPeriod
+                ? "Select another period or open the original filings below."
+                : data.oversizeBytes
+                  ? `Its stored history has grown to ${Math.round(data.oversizeBytes / 1_000_000)} MB, more than one page can load. The stored files below can be opened now.`
+                  : data.pending
+                    ? `Statements appear here once the ${data.pending.toLocaleString()} stored ${data.pending === 1 ? "file that is" : "files that are"} waiting have been read. Reading runs in the background; the stored files below can be opened now.`
+                    : "The stored files below can be opened now; this company's releases have no tables the readers use."}
             </p>
           </div>
         </IrPanel>
@@ -242,6 +322,8 @@ export function IrPageView({
           ticker={ticker}
           payload={data.payload}
           section={checks.section}
+          visible={checks.visible}
+          onAllChecks={() => openChecks()}
           check={data.secCheck}
           consistency={data.consistency}
           late={data.secCheckLate}
@@ -413,7 +495,7 @@ function IrSummary({
                   ? "text-foreground"
                   : "text-muted-foreground",
               )}
-              title="Open the checks: parts against totals, quarters against the year, the SEC comparison and every figure to review"
+              title={tie?.tieN ? "Open the period totals counted in the current table view" : "Open all filing checks"}
             >
               {tie && tie.tieN ? (
                 <>

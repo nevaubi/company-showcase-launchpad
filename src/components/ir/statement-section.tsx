@@ -78,6 +78,15 @@ export interface ShownCell {
   e?: string;
 }
 
+/** One reconciliation included in a visible badge, with exactly the printed cell the user saw. */
+export interface VisibleStatementCheck {
+  section: string;
+  label: string;
+  series: PayloadSeries;
+  cell: PayloadCell;
+  check: PayloadCheck;
+}
+
 export interface SectionView {
   sec: Statement;
   cols: string[];
@@ -92,6 +101,7 @@ export interface SectionView {
   /** checks of the totals in view: tie out / checked */
   tieOk: number;
   tieN: number;
+  visibleChecks: VisibleStatementCheck[];
   failing: number;
   flagged: number;
   held: number;
@@ -164,7 +174,7 @@ export const StatementSection = memo(function StatementSection({
   exporting: boolean;
   onExcel: (sec: Statement) => void;
   onCsv: (sec: Statement, cols: string[]) => void;
-  onChecks: (secId: string) => void;
+  onChecks: (secId: string, checks?: VisibleStatementCheck[]) => void;
   openCell: (s: PayloadSeries, end: string, c: PayloadCell) => void;
   /** switch a year-to-date section between its printed columns and quarters */
   onYtd?: (secId: string, v: "printed" | "quarters") => void;
@@ -229,7 +239,7 @@ export const StatementSection = memo(function StatementSection({
           {view.tieN > 0 && (
             <button
               type="button"
-              onClick={() => onChecks(sec.id)}
+              onClick={() => onChecks(sec.id, view.visibleChecks)}
               className={cn(
                 "irt-hit inline-flex h-6 items-center gap-1 rounded-full border bg-card px-2 text-[11px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:hidden",
                 view.tieOk === view.tieN ? "text-muted-foreground" : "text-foreground",

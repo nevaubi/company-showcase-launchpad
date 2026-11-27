@@ -1,5 +1,6 @@
 // Compact, precomputed IR series payload stored per company (ir_company_series) and sent to the
 // IR data page. Pure: built by the pipeline scripts and by the server after new extractions.
+import { isPeriodComparison } from "./comparison-column";
 import type { PayloadBudget } from "@/lib/ir/payload-budget";
 import { tidyPayload } from "@/lib/ir/tidy";
 import {
@@ -364,6 +365,8 @@ export function buildPayload(
   facts: IrFact[],
   labelMap?: Record<string, LabelMapEntry>,
 ): IrPayload {
+  // Preserve raw observations. A comparison-column amount cannot be the reported level for a prior quarter.
+  facts = facts.filter((f) => !isPeriodComparison((f.locator as { q?: string } | null)?.q, f.label, f.value, f.unit));
   // Second pass without hierarchies whose parts never add up to their total in any period.
   let built = buildIrSeries(facts, { labelMap });
   const unlink = neverTies(built.checks);

@@ -10,14 +10,12 @@ import {
 } from "@/lib/transcripts/parse";
 import type { EarningsTranscript } from "@/lib/transcripts.functions";
 
+import { fromArchive, mergeCalls } from "@/lib/transcripts/archive";
 import {
-  archivedCalls,
-  fromArchive,
-  mergeCalls,
-  type ArchiveEntry,
-  type CallBundle,
-  type TurnFile,
-} from "@/lib/transcripts/archive";
+  archiveIndex,
+  issuerStatisticsKey,
+  issuerTurns,
+} from "@/lib/transcripts/issuer-archive.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { cached } from "@/lib/ai.server";
 import type { EarningsBrief } from "@/lib/web.functions";
@@ -35,24 +33,6 @@ async function stored<T>(key: string): Promise<T | null> {
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data?.payload as T) ?? null;
-}
-async function partner<T>(path: string): Promise<T | null> {
-  const key = process.env.PARTNER_DATA_KEY;
-  if (!key) throw new Error("Call archive access is not configured");
-  const base = process.env.PARTNER_DATA_URL || "https://filedunderai.vercel.app/api/app-data";
-  const res = await fetch(base + "?path=" + encodeURIComponent(path), {
-    headers: { "x-partner-key": key },
-    signal: AbortSignal.timeout(12000),
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error("Call archive temporarily unavailable");
-  return (await res.json()) as T;
-}
-async function archiveIndex(ticker: string) {
-  return cached(`call-archive-index:v1:${ticker}`, 6 * 3600_000, async () => {
-    const bundle = await partner<CallBundle>(`calls/${ticker}.json`);
-    return { entries: bundle ? archivedCalls(bundle, ticker) : [] };
-  });
 }
 function webKey(url: string) {
   return "transcript:v3:" + url.replace(/\/$/, "").split("/").slice(-4).join("/");
@@ -108,7 +88,7 @@ type Co = Pick<CoverageCompany, "ticker" | "shortName">;
 /** Page loads only read stored files. The background worker fills missing periods and extracts web copies. */
 export async function listCalls(co: Co): Promise<{ calls: TranscriptRef[]; error?: string }> {
   const [archive, legacy, ready] = await Promise.all([
-    archiveIndex(co.ticker).catch(() => ({ entries: [] as ArchiveEntry[] })),
+    archiveIndex(co.ticker),
     stored<{ calls: TranscriptRef[] }>(`calls:v1:${co.ticker}`),
     stored<{ calls: TranscriptRef[]; checked: string }>(`call-web-ready:v1:${co.ticker}`),
   ]);
@@ -153,23 +133,16 @@ export async function loadTranscript(
   // Never fetch a caller-supplied URL. Resolve the original source to this ticker's own archive index.
   const entry = entries.find((r) => r.url === rawUrl);
   if (!entry) return { transcript: null, error: "No stored transcript matches this source." };
-  const { transcript } = await cached(
-    `call-text:v1:${co.ticker}:${entry.archiveId}:${entry.textHash}`,
+  const file = await issuerTurns(co.ticker, entry);
+  const transcript = file && fromArchive(co.ticker, co.shortName, entry, file);
+  if (!transcript)
+    return { transcript: null, error: "The archived speaker turns are temporarily unavailable." };
+  const { statistics } = await cached(
+    issuerStatisticsKey(co.ticker, entry.archiveId, entry.textHash),
     Infinity,
-    async () => {
-      const file = await partner<TurnFile>(`calls/${co.ticker}/${entry.archiveId}.json`);
-      const parsed = file && fromArchive(co.ticker, co.shortName, entry, file);
-      if (!parsed) throw new Error("The archived speaker turns are temporarily unavailable.");
-      return { transcript: { ...parsed, statistics: transcriptStatistics(parsed) } };
-    },
+    async () => ({ statistics: transcriptStatistics(transcript) }),
   );
-  // An analysis can finish after the immutable text has already been read.
-  return {
-    transcript: {
-      ...transcript,
-      archiveSummary: entry.summary ? { text: entry.summary, asOf: entry.analyzedAt } : undefined,
-    },
-  };
+  return { transcript: { ...transcript, statistics } };
 }
 
 async function findCalls(
@@ -235,7 +208,7 @@ async function downloadWebTranscript(co: Co, url: string): Promise<boolean> {
 }
 
 /** Run only from the background worker. Publish the index after the downloads have succeeded. */
-export async function refreshWebCalls(co: Co) {
+export async function refreshWebCalls(co: Co, limit = 3) {
   type WebIndex = { calls: TranscriptRef[]; remaining?: TranscriptRef[]; checked: string };
   const key = `call-web-ready:v1:${co.ticker}`;
   const previous = await stored<WebIndex>(key);
@@ -264,7 +237,7 @@ export async function refreshWebCalls(co: Co) {
   for (const ref of refs) {
     let transcript = await storedWeb(co, ref.url);
     if (!transcript) {
-      if (attempted === 3) {
+      if (attempted >= limit) {
         remaining.push(ref);
         continue;
       }
@@ -297,7 +270,26 @@ export async function storedCallBrief(
   if (first?.archiveKind) {
     const { entries } = await archiveIndex(co.ticker);
     const row = entries.find((r) => r.url === first.url);
-    if (row?.summary)
+    if (row?.summary) {
+      const verification = await stored<{
+        analysisAt: string | null;
+        sourceHash: string;
+        sourceUrl: string;
+        quotes: {
+          section: string;
+          label: string | null;
+          detail: string;
+          turn: number;
+          speaker: string;
+        }[];
+      }>(`issuer-evidence:v1:${co.ticker}:${row.archiveId}:${row.textHash}`);
+      const quotes =
+        verification &&
+        verification.sourceHash === row.textHash &&
+        verification.sourceUrl === row.url &&
+        verification.analysisAt === row.analyzedAt
+          ? verification.quotes
+          : [];
       return {
         brief: {
           title: [
@@ -306,13 +298,23 @@ export async function storedCallBrief(
           ].join(" "),
           period: row.quarter || row.date!,
           summary: row.summary,
-          highlights: row.highlights,
-          guidance: row.guidance,
-          analystQuestions: row.questions,
+          highlights: quotes
+            .filter((q) => q.section === "theme" && q.label)
+            .slice(0, 6)
+            .map((q) => ({ label: q.label!, detail: q.detail })),
+          guidance: quotes
+            .filter((q) => q.section === "guidance")
+            .slice(0, 5)
+            .map((q) => q.detail),
+          analystQuestions: quotes
+            .filter((q) => q.section === "question")
+            .slice(0, 4)
+            .map((q) => q.detail),
           sources: [{ title: co.shortName + " investor relations", url: row.url }],
           generatedAt: row.analyzedAt || row.generated,
         },
       };
+    }
   }
   if (first) {
     const { transcript } = await loadTranscript(co, first.url);

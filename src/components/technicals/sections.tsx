@@ -637,6 +637,8 @@ export function RelativePanel({
 /* ---------- events: earnings reactions and the signal log ---------- */
 function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNullable<Technicals["reactions"]> }) {
   const { open } = useSource();
+  const sectorMoves = R.rows.flatMap((row) => row.sectorExcess == null ? [] : [row.sectorExcess]);
+  const averageSectorExcess = sectorMoves.length ? sectorMoves.reduce((sum, value) => sum + value, 0) / sectorMoves.length : null;
   return (
     <div>
       <SubTitle caption={`${R.stats.n} releases since ${fmtDate(T.first)}`}>Earnings reactions</SubTitle>
@@ -651,6 +653,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
               <th className={S.thNum} title="The same window minus SPY">
                 vs SPY
               </th>
+              {R.sectorBenchmark && <th className={S.thNum} title="Stock return less sector ETF return over the same two closing dates">vs {R.sectorBenchmark}</th>}
               <th className={cn(S.thNum, S.wide)} title="Size of the move in units of its normal two-day volatility: the daily volatility of the 60 sessions before × √2">
                 σ
               </th>
@@ -675,6 +678,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
                 </td>
                 <td className={cn(S.num, "font-medium", signTone(r.move))}>{pp(r.move)}</td>
                 <td className={cn(S.num, signTone(r.excess))}>{pp(r.excess)}</td>
+                {R.sectorBenchmark && <td className={cn(S.num, signTone(r.sectorExcess ?? null))}>{pp(r.sectorExcess)}</td>}
                 <td className={cn(S.num, S.wide)}>{f2(r.sigma, 1)}</td>
                 <td className={cn(S.num, signTone(r.drift20))}>{pp(r.drift20)}</td>
               </tr>
@@ -685,6 +689,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
                 ±{pc(R.stats.avgAbsMove, 1)}
               </td>
               <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgExcess)}</td>
+              {R.sectorBenchmark && <td className={cn(S.num, "font-semibold")} title={`Mean excess for ${sectorMoves.length} releases with matching ETF dates`}>{pp(averageSectorExcess)}</td>}
               <td className={cn(S.num, S.wide, "font-semibold")}>{f2(R.stats.avgSigma, 1)}</td>
               <td className={cn(S.num, "font-semibold")}>{pp(R.drift.test?.mean ?? R.stats.avgDrift20)}</td>
             </tr>
@@ -695,6 +700,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
                 </td>
                 <td className={S.num} />
                 <td className={cn(S.num, S.wide)} />
+                {R.sectorBenchmark && <td className={S.num} />}
                 <td className={cn(S.num, "text-muted-foreground")}>{pp(R.drift.test.meanAll)}</td>
               </tr>
             )}

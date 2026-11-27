@@ -1443,32 +1443,32 @@ export function sectionChecks(
     const parts = blockParts(sec.rows, i).map((j) => sec.rows[j] as LineRow);
     for (const freq of ["q", "y"] as const) {
       const tc = rowCells(t.ks, byKey, freq, t.at);
-      const pc = parts.map((r) => rowCells(r.ks, byKey, freq, r.at).cells);
+      const pc = parts.map((r) => rowCells(r.ks, byKey, freq, r.at));
       for (const [e, cell] of Object.entries(tc.cells)) {
         const owner = tc.from[e];
         const key = `${owner}|${freq}|${e}`;
         const x = map.get(key);
-        if (!x) continue;
-        // A check the build passed stands; one it failed is redone from this table's own parts, which is
-        // where a total compared with another table's or document's lines (managed basis against a slide's
-        // reported lines) comes right.
-        if (x.ok || x.partial || parts.length < 2) {
+        if (!x || x.total !== cell.v) continue;
+        // A passed stored check remains tied to its actual reported total. For a failed
+        // check, require this table's own comparable components before making a claim.
+        if (x.ok || x.partial) {
           out.set(key, x);
           continue;
         }
-        if (pc.some((c) => !c[e])) {
-          out.set(key, x);
-          continue;
-        }
+        const parent = byKey.get(owner);
+        if (!parent || parts.length < 2) continue;
+        const partsAt = pc.map((r) => ({ cell: r.cells[e], series: byKey.get(r.from[e]) }));
+        if (partsAt.some((p) => !p.cell || !p.series || p.series.unit !== parent.unit ||
+          p.cell.m !== cell.m || !!p.series.pit !== !!parent.pit)) continue;
+        const addresses = partsAt.map(({cell: c, series}) =>
+          c.d != null && Array.isArray(c.l) ? `${c.d}:${c.l.join(":")}` : `series:${series!.k}`);
+        const ownAddress = cell.d != null && Array.isArray(cell.l) ? `${cell.d}:${cell.l.join(":")}` : `series:${owner}`;
+        if (new Set(addresses).size !== addresses.length || addresses.includes(ownAddress)) continue;
         const sub = new Set(x.sub ?? []);
-        const sum = parts.reduce(
-          (n, r, j) => n + (r.ks.some((k) => sub.has(byKey.get(k)?.label ?? "")) ? -1 : 1) * pc[j][e].v,
-          0,
-        );
-        const unit = byKey.get(owner)?.unit;
-        const tol = Math.max(Math.abs(cell.v) * 0.005, unit === "usd" ? 1.5e6 : 1.5);
-        const ok = Math.abs(sum - cell.v) <= tol;
-        out.set(key, ok ? { ...x, total: cell.v, sum, ok, n: parts.length } : x);
+        const sum = parts.reduce((n, r, j) =>
+          n + (r.ks.some((k) => sub.has(byKey.get(k)?.label ?? "")) ? -1 : 1) * partsAt[j].cell.v, 0);
+        const tol = Math.max(Math.abs(cell.v) * 0.005, parent.unit === "usd" ? 1.5e6 : 1.5);
+        out.set(key, { ...x, total: cell.v, sum, ok: Math.abs(sum - cell.v) <= tol, n: parts.length });
       }
     }
   });

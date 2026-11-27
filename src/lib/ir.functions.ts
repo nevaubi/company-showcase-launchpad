@@ -2,7 +2,7 @@ import { requireAppAccess, requireFeature } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { IrPayload } from "@/lib/ir/payload";
-import { oversizeOf } from "@/lib/ir/payload-view";
+import { oversizeOf, selectIrPayload } from "@/lib/ir/payload-view";
 import { guardedDocIds, withoutGuardedCells, withoutGuardedDocs } from "@/lib/ir/source-guard";
 import type { StoreRef } from "@/lib/ir/store";
 
@@ -32,7 +32,7 @@ async function gzipStream(bytes: Uint8Array<ArrayBuffer>): Promise<ReadableStrea
 
 export const getIrData = createServerFn({ method: "GET" })
   .middleware([requireAppAccess])
-  .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
+  .inputValidator((d: unknown) => z.object({ ticker: tickerSchema, period: z.object({ end: z.string().date(), frequency: z.enum(["q", "y", "m"]) }).optional() }).parse(d))
   .handler(async ({ data, context }) => {
     // The document list and the precomputed breakdowns load in parallel.
     // Slide images (thousands per bank) load on demand in the library; only their count comes here.
@@ -77,45 +77,46 @@ export const getIrData = createServerFn({ method: "GET" })
       const { count } = await context.supabase.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", data.ticker).eq("kind", "image");
       return count ?? 0;
     };
-    // Two IR sources: the partner corpus and this site's own deep builds. The page shows whichever
-    // covers more series (a company built here in depth beats a thin partner payload, and vice versa).
-    const loadExternal = async (minimumSeries: number) => {
-      try {
-        const { loadExternalPayload } = await import("@/lib/ir/external.server");
-        return await loadExternalPayload(data.ticker, minimumSeries);
-      } catch (e) {
-        console.warn(`[ir] partner corpus failed for ${data.ticker}: ${(e as Error).message}`);
-        return null;
-      }
-    };
     const [allDocs, loaded, images] = await Promise.all([loadDocs(), loadSeries(), countImages()]);
-    let { series, payload } = loaded;
+    let { payload } = loaded;
+    const { series } = loaded;
     const { oversizeBytes } = loaded;
     // Files the reviewed list shows to be another company's are not listed, and figures read from
     // them are dropped from payloads built before the guard existed (source-guard.ts).
     const refused = guardedDocIds(data.ticker, allDocs as { id: string; source_url: string | null }[]);
     const docs = refused.size ? allDocs.filter((d) => !refused.has(String(d.id))) : allDocs;
     if (payload && refused.size) payload = withoutGuardedCells(payload, refused);
-    const external = payload?.preview ? null : await loadExternal(payload?.series.length ?? 0);
-    if (external && external.series.length && external.series.length >= (payload?.series.length ?? 0)) {
-      const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) }));
-      const bytes = new TextEncoder().encode(JSON.stringify({ payload: external, builtAt: external.builtAt, documents, images, pending: 0, source: "partner" }));
-      return { gz: await gzipStream(bytes) };
-    }
-    // Facts exist but no breakdowns are stored (first read, or a rebuild that never ran): build them
-    // now rather than showing an empty page.
     const readFacts = docs.reduce((n, d) => n + (Number(d.extract_facts) || 0), 0);
-    if (!payload && readFacts > 0 && !oversizeBytes) {
-      // Concurrent first views of the same company share one rebuild instead of each starting their own.
+    const selected = await selectIrPayload(payload, data.period, async () => {
+      if (!readFacts) return null;
+      if (data.period) {
+        const { readFiledPeriod } = await import("@/lib/ir/rebuild.server");
+        return readFiledPeriod(data.ticker, data.period, docs as unknown as IrDocRow[]).catch((error: Error) => {
+          console.warn(`[ir] stored period unavailable for ${data.ticker}: ${error.message}`);
+          return null;
+        });
+      }
+      if (oversizeBytes) return null;
       let job = rebuilding.get(data.ticker);
       if (!job) {
         const { rebuildCompany } = await import("@/lib/ir/rebuild.server");
         job = rebuildCompany(data.ticker).finally(() => rebuilding.delete(data.ticker));
         rebuilding.set(data.ticker, job);
       }
-      payload = await job;
-      series = payload ? { payload: null, payload_path: `series/${data.ticker}.json`, payload_bytes: null, built_at: payload.builtAt } : series;
-    }
+      return job.catch((error: Error) => {
+        console.warn(`[ir] native rebuild unavailable for ${data.ticker}: ${error.message}`);
+        return null;
+      });
+    }, async () => {
+      try {
+        const { loadExternalPayload } = await import("@/lib/ir/external.server");
+        return await loadExternalPayload(data.ticker, data.period);
+      } catch (e) {
+        console.warn(`[ir] archive unavailable for ${data.ticker}: ${(e as Error).message}`);
+        return null;
+      }
+    });
+    payload = selected.payload;
     console.log(`[ir] ${data.ticker} docs=${docs.length}+${images}img facts=${readFacts} row=${series ? "yes" : "no"} payload=${payload ? payload.series.length : "none"} ${Date.now() - t0}ms`);
     const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
     const pending = documents.filter((d) => !d.extract_status && EXTRACTABLE.includes(d.kind) && d.viewable).length;
@@ -123,7 +124,7 @@ export const getIrData = createServerFn({ method: "GET" })
     // when sent as objects, so ship one JSON string and parse it on the client.
     // Bank payloads outgrow the RPC serializer's 32 MB cap even as one string, so stream gzipped
     // bytes (raw streams bypass that cap) and decompress in the browser.
-    const bytes = new TextEncoder().encode(JSON.stringify({ payload, builtAt: payload?.builtAt ?? series?.built_at ?? null, documents, images, pending, oversizeBytes }));
+    const bytes = new TextEncoder().encode(JSON.stringify({ payload, builtAt: payload?.builtAt ?? series?.built_at ?? null, documents, images, pending, oversizeBytes, source: selected.source, requestedPeriod: data.period }));
     return { gz: await gzipStream(bytes) };
   });
 

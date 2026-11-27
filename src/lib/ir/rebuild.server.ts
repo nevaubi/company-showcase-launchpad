@@ -2,6 +2,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
 import { buildPayload, type IrPayload } from "@/lib/ir/payload";
+import { containsIrPeriod, type IrRequestedPeriod } from "./payload-view";
 import { BUDGET_BYTES, budgetPayload } from "@/lib/ir/payload-budget";
 import { planDocuments, type DocPlan, type PlanDocRow } from "@/lib/ir/doc-plan";
 import { fixPrintedSigns } from "@/lib/ir/sign-fix";
@@ -31,6 +32,28 @@ import {
 
 export const FACT_COLUMNS =
   "id, document_id, document_kind, category, metric, breakdown, parent, label, is_total, period_start, period_end, months, value, unit, accn, doc, filed, locator, method";
+
+/** Reconstruct a requested historical period from its stored filings, without replacing the current company cache. */
+export async function readFiledPeriod(ticker: string, period: IrRequestedPeriod, documents: {
+  id: string; kind: string; filed: string | null; extract_facts: number | null;
+}[]): Promise<IrPayload | null> {
+  const latest = new Date(Date.parse(period.end) + 135 * 86_400_000).toISOString().slice(0, 10);
+  const kinds = ["supplement", "press-release", "data", "other"];
+  const candidates = documents.filter((d) => d.filed && d.filed >= period.end && d.filed <= latest &&
+    Number(d.extract_facts) > 0 && kinds.includes(d.kind));
+  candidates.sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || a.filed!.localeCompare(b.filed!) || a.id.localeCompare(b.id));
+  const span = period.frequency === "y" ? 12 : period.frequency === "m" ? 1 : 3;
+  for (const doc of candidates.slice(0, 12)) {
+    const facts = await pages<IrFact>((a, b) => supabaseAdmin.from("ir_kpi_facts").select(FACT_COLUMNS)
+      .eq("ticker", ticker).eq("document_id", doc.id).eq("period_end", period.end).in("months", [0, span])
+      .eq("derived", false).order("id").range(a, b) as never);
+    const printed = facts.filter((f) => f.locator && "t" in f.locator && "r" in f.locator && "c" in f.locator);
+    if (!printed.length || (span === 12 && !printed.some((f) => f.months === 12))) continue;
+    const payload = buildPayload(ticker, fixPrintedSigns(printed).facts);
+    if (containsIrPeriod(payload, period)) return payload;
+  }
+  return null;
+}
 
 /** Retry transient database errors (statement timeouts while the reading jobs are inserting). */
 async function retry<T extends { error: { message: string } | null }>(

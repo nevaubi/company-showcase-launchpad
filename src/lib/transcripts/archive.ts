@@ -12,7 +12,9 @@ interface Speaker {
   turns: number;
   words: number;
 }
-interface ArchiveCall {
+export interface ArchiveCall {
+  n_turns?: number;
+  words?: number;
   call_id: string;
   title?: string;
   ticker: string;

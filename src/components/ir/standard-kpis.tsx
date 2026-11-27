@@ -129,21 +129,29 @@ export function standardRows(
           ? (point[1] - prev[1]) / Math.abs(prev[1])
           : null
       : null;
-    const L = latest.kpis[cid] ?? {};
-    const ind = Object.entries(L).filter(([, x]) => x.ind === co.industry);
-    const scope = ind.length >= 3 ? "industry" : "sector";
+    // Compare the displayed figure only with other companies reporting this frequency and end date.
+    const freq = s.Q.length ? "q" : "a";
+    const comparable = Object.entries(latest.kpis[cid] ?? {}).flatMap(([symbol, company]) => {
+      const reported = company[freq];
+      return symbol !== ticker && reported?.[0] === point[0] && Number.isFinite(reported[1])
+        ? [{ company, value: reported[1] }]
+        : [];
+    });
+    const industry = comparable.filter(({ company }) => co.industry && company.ind === co.industry);
+    const scope = industry.length >= 2 ? "industry" : "sector";
     const peers =
-      scope === "industry" ? ind : Object.entries(L).filter(([, x]) => x.sec === co.sector);
-    const vs = peers
-      .map(([, x]) => x.q?.[1] ?? x.a?.[1])
-      .filter((v): v is number => v != null && Number.isFinite(v));
-    const v0 = L[ticker]?.q?.[1] ?? L[ticker]?.a?.[1];
+      scope === "industry"
+        ? industry
+        : comparable.filter(({ company }) => co.sector && company.sec === co.sector);
     const pct =
-      vs.length > 1 && v0 != null
+      peers.length >= 2
         ? Math.round(
-            ((vs.filter((v) => v < v0).length + (vs.filter((v) => v === v0).length - 1) / 2) /
-              (vs.length - 1)) *
-              100,
+            (100 *
+              peers.reduce(
+                (n, p) => n + (p.value < point[1] ? 1 : p.value === point[1] ? 0.5 : 0),
+                0,
+              )) /
+              peers.length,
           )
         : null;
     rows.push({
@@ -157,7 +165,7 @@ export function standardRows(
       point,
       yoy,
       pct,
-      peers: vs.length,
+      peers: peers.length + 1,
       scope,
     });
   }
@@ -259,7 +267,7 @@ export function IrStandardKpis({ ticker }: { ticker: string }) {
               <th
                 scope="col"
                 className="border-b px-3 py-1.5 text-right font-normal"
-                title="Percentile among companies of the same industry that report it (the sector when fewer than three do)"
+                title="Percentile of reported values for the same period end and frequency. Ties receive half weight. At least three reporting companies are required; sector figures are used when industry coverage is smaller."
               >
                 Peer percentile
               </th>
@@ -311,12 +319,16 @@ export function IrStandardKpis({ ticker }: { ticker: string }) {
                     "border-b px-3 py-1.5 transition-colors duration-150 group-hover:bg-secondary/60",
                     IR.num,
                   )}
-                  title={r.pct != null ? `${r.peers} companies in the ${r.scope}` : undefined}
+                  title={
+                    r.pct != null
+                      ? `${ordinal(r.pct)} percentile among ${r.peers} ${r.scope} companies, including ${ticker}, for the ${r.point[2]} period ending ${r.point[0]}. Ties receive half weight.`
+                      : "Fewer than three companies reported for this period and frequency."
+                  }
                 >
-                  {r.pct == null ? DASH : ordinal(r.pct)}
+                  {r.pct == null ? DASH : `${ordinal(r.pct)} percentile`}
                   {r.pct != null && (
                     <span className={cn("block", IR.caption)}>
-                      of {r.peers} in {r.scope}
+                      {r.peers} {r.scope} companies
                     </span>
                   )}
                 </td>
@@ -324,6 +336,7 @@ export function IrStandardKpis({ ticker }: { ticker: string }) {
                   <Link
                     to="/app/kpis"
                     onClick={() => toPeers(r)}
+                    aria-label={`Compare ${r.measure} across companies`}
                     className="text-xs text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground"
                   >
                     Peers

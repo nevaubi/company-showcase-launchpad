@@ -50,7 +50,7 @@ export interface Technicals {
   /** The cross-company record of each chart event and horizon (pooled.ts); null when the file is not available */
   pooled: PooledRow[] | null;
   read: ReadSentence[];
-  reactions: { rows: Reaction[]; stats: ReactionStats; drift: DriftTest } | null;
+  reactions: { rows: Reaction[]; stats: ReactionStats; sectorBenchmark?: string; drift: DriftTest } | null;
   events: EventLogRow[];
   seasonality: ReturnType<typeof seasonalContext>;
   /** Milliseconds the computation took */
@@ -130,10 +130,12 @@ export function analyze(input: AnalysisInput): Technicals | null {
     // Bars in the price-file shape; the adjusted close carries the total-return index.
     const k = B.c[n - 1] / B.tr[n - 1];
     const bars: Bar[] = B.d.map((d, i) => [d, B.o[i], B.h[i], B.l[i], B.c[i], B.tr[i] * k, B.v[i]]);
+    const benchmarkBars = (series?: BenchSeries): Bar[] | undefined =>
+      series?.d.map((d, i) => [d, series.tr[i], series.tr[i], series.tr[i], series.tr[i], series.tr[i], 0]);
     const spy = input.bench?.find((b) => b.kind === "market");
-    const spyBars: Bar[] | undefined = spy?.d.map((d, i) => [d, spy.tr[i], spy.tr[i], spy.tr[i], spy.tr[i], spy.tr[i], 0]);
-    const rows = earningsReactions(bars, releases, spyBars).filter((r) => r.date >= B.d[0]);
-    if (rows.length) reactions = { rows, stats: reactionStats(rows), drift: driftTest(B, rows) };
+    const sector = input.bench?.find((b) => b.kind === "sector");
+    const rows = earningsReactions(bars, releases, benchmarkBars(spy), benchmarkBars(sector)).filter((r) => r.date >= B.d[0]);
+    if (rows.length) reactions = { rows, stats: reactionStats(rows), sectorBenchmark: sector?.sym, drift: driftTest(B, rows) };
   }
 
   const events: EventLogRow[] = [...I.events]

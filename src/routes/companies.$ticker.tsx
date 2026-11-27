@@ -92,6 +92,10 @@ function PublicCompany() {
         <p className="mt-2 text-sm text-muted-foreground">
           {s.exchange}: {s.ticker} · {s.sector} · {s.industry}{s.city ? ` · ${s.city}` : ""}
         </p>
+        {(s.website || s.investorRelations) && <nav aria-label="Company sources" className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+          {s.website && <a href={s.website} target="_blank" rel="noreferrer" className="underline underline-offset-4">Company website</a>}
+          {s.investorRelations && <a href={s.investorRelations} target="_blank" rel="noreferrer" className="underline underline-offset-4">Investor relations</a>}
+        </nav>}
         {s.description && <p className="mt-5 max-w-3xl text-sm leading-relaxed text-muted-foreground line-clamp-4">{s.description}</p>}
 
         <section className="mt-10 min-w-0 rounded-xl border bg-card">

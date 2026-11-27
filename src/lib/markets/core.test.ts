@@ -14,6 +14,18 @@ describe("earnings reactions", () => {
     expect(r.excess).toBeCloseTo(0.2);
     expect(reactionStats([r]).upRate).toBe(1);
   });
+  it("compares sector/market over identical closing dates and excludes invalid benchmark quotes", () => {
+    const own = mk([100, 100, 100, 115, 121, 123]);
+    const sector = mk([100, 100, 100, 108, 110, 114]);
+    const market = mk([100, 100, 0, 103, 104, 105]);
+    const events = [{ filed: day(3), accn: "a", doc: "release" }];
+    const [r] = earningsReactions(own, events, market, sector);
+    expect(r.sectorExcess).toBeCloseTo(0.11);
+    expect(r.excess).toBeNull();
+    expect(earningsReactions(own, events, market, sector.filter((_, i) => i !== 4))[0].sectorExcess).toBeNull();
+    expect(earningsReactions(market, events, own)).toHaveLength(0);
+  });
+
 });
 
 describe("correlations", () => {

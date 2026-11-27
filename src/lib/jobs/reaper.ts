@@ -4,7 +4,7 @@
  */
 
 /** Scheduled HTTP jobs: the scheduler hangs up after about 5 s, so no run can still be alive after 10 min. */
-export const HTTP_JOBS: readonly string[] = ["prices", "macro", "sec", "filing-cache", "ir-docs", "estimates", "alt-data", "setups", "gov-data", "options", "short-volume", "sec-discover", "partner-mirror", "emails", "abs-ee"];
+export const HTTP_JOBS: readonly string[] = ["prices", "macro", "sec", "filing-cache", "ir-docs", "estimates", "alt-data", "setups", "gov-data", "options", "short-volume", "sec-discover", "partner-mirror", "emails", "abs-ee", "call-archive"];
 
 export const HTTP_MAX_RUN_MS = 10 * 60_000;
 /**

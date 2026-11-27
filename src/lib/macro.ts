@@ -146,6 +146,7 @@ export function changeText(def: MacroDef, r: Pick<Reading, "latest" | "prior" | 
 
 /** Compact per-series state for dashboards (written by ingest and the refresh job). */
 export interface MacroSummary {
+  calculationVersion?: number;
   id: string;
   date: string | null;
   latest: number | null;
@@ -183,6 +184,7 @@ export function summarize(def: MacroDef, raw: Obs, now = new Date().toISOString(
   const spark = recent.filter((_, i) => i % step === 0 || i === recent.length - 1).map(([d, v]) => [d, Math.round(v * 1e4) / 1e4] as [string, number]);
   return {
     id: def.id,
+    calculationVersion: 2,
     ...r,
     pct10y,
     z5y,
@@ -191,6 +193,13 @@ export function summarize(def: MacroDef, raw: Obs, now = new Date().toISOString(
     spark,
     updatedAt: now,
   };
+}
+
+/** Older workers used observation counts across missing calendar months. */
+export function preferCloudSummary(cloud: MacroSummary, bundled?: MacroSummary, frequency?: string) {
+  if (!cloud.date || (bundled?.date && cloud.date < bundled.date)) return false;
+  if (!bundled || (cloud.calculationVersion ?? 0) >= 2) return true;
+  return frequency === "Daily" && !!bundled.date && cloud.date > bundled.date;
 }
 
 /** NBER recession bands from the USREC 0/1 series. */

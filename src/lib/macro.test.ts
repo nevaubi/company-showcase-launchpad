@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { readingOf, sharedCurveDates, transformed, type Obs } from "./macro";
+import { preferCloudSummary, type MacroSummary, readingOf, sharedCurveDates, transformed, type Obs } from "./macro";
 
 describe("calendar-aligned macro readings", () => {
+  it("protects validated monthly baselines while older workers roll forward", () => {
+    const base = { date: "2026-09-01", calculationVersion: 2 } as MacroSummary;
+    const legacy = { date: "2026-10-01" } as MacroSummary;
+    expect(preferCloudSummary(legacy, base, "Monthly")).toBe(false);
+    expect(preferCloudSummary(legacy, base, "Daily")).toBe(true);
+    expect(preferCloudSummary({ ...legacy, calculationVersion: 2 }, base, "Monthly")).toBe(true);
+  });
+
   it("does not replace a missing October CPI base with September", () => {
     const observations: Obs = [["2025-09-01", 100], ["2025-11-01", 110], ["2026-10-01", 120], ["2026-11-01", 121]];
     const result = transformed({ frequency: "Monthly", transform: "yoy" }, observations);

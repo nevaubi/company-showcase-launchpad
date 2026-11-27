@@ -16,6 +16,18 @@ vi.mock("@/integrations/supabase/client.server", () => ({
             error: null,
           }),
         }),
+        like: (_col: string, pattern: string) => ({
+          order: () => ({
+            range: async (from: number, to: number) => ({
+              data: [...ctx.rows.keys()]
+                .filter((k) => k.startsWith(pattern.slice(0, -1)))
+                .sort()
+                .slice(from, to + 1)
+                .map((key) => ({ key })),
+              error: null,
+            }),
+          }),
+        }),
         in: (_col: string, keys: string[]) => {
           const rows = keys
             .filter((k) => ctx.rows.has(k))
@@ -78,19 +90,35 @@ describe("archive-only page requests", () => {
     vi.stubEnv("PARTNER_DATA_KEY", "test-server-key");
   });
   it("loads the index and speaker turns once across repeated cold client requests, reuses the brief", async () => {
-    const requests: string[] = [];
-    vi.stubGlobal("fetch", async (raw: string, opts: RequestInit) => {
-      const path = new URL(raw).searchParams.get("path")!;
-      expect(opts.headers).toEqual({ "x-partner-key": "test-server-key" });
-      requests.push(path);
-      return Response.json(
-        path === "calls/JPM.json"
-          ? index
-          : {
-              call_id: id,
-              turns: [{ i: 0, sp: 0, sec: "prepared", x: "Deposits increased.", w: 2 }],
-            },
-      );
+    const external = vi.fn(async () => {
+      throw new Error("External fetch on a page read");
+    });
+    vi.stubGlobal("fetch", external);
+    ctx.rows.set("issuer-index:v1:JPM", { bundle: index, sha256: "index" });
+    ctx.rows.set(`issuer-turns:v1:JPM:${id}:1234`, {
+      ticker: "JPM",
+      kind: "transcript",
+      sourceHash: "1234",
+      sourceUrl: original,
+      sha256: "turns",
+      file: {
+        call_id: id,
+        turns: [{ i: 0, sp: 0, sec: "prepared", x: "Deposits increased.", w: 2 }],
+      },
+    });
+    ctx.rows.set(`issuer-evidence:v1:JPM:${id}:1234`, {
+      analysisAt: null,
+      sourceHash: "1234",
+      sourceUrl: original,
+      quotes: [
+        {
+          section: "theme",
+          label: "Funding",
+          detail: "Deposits increased.",
+          turn: 0,
+          speaker: "Test Officer",
+        },
+      ],
     });
     for (let i = 0; i < 2; i++) {
       const list = await listCalls(co);
@@ -98,11 +126,14 @@ describe("archive-only page requests", () => {
       expect((await loadTranscript(co, original)).transcript?.turns[0].text).toBe(
         "Deposits increased.",
       );
-      expect((await storedCallBrief(co)).brief?.summary).toBe("Deposits increased.");
+      expect((await storedCallBrief(co)).brief).toMatchObject({
+        summary: "Deposits increased.",
+        highlights: [{ label: "Funding", detail: "Deposits increased." }],
+      });
     }
-    expect(requests).toEqual(["calls/JPM.json", `calls/JPM/${id}.json`]);
+    expect(external).not.toHaveBeenCalled();
     expect((await loadTranscript(co, "https://other.example/source")).transcript).toBeNull();
-    expect(requests.length).toBe(2);
+    expect(external).not.toHaveBeenCalled();
   });
   it("finishes later download batches without repeating discovery or downloading earlier quarters again", async () => {
     const refs = [1, 2, 3, 4].map((q) => ({

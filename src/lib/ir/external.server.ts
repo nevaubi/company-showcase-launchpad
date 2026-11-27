@@ -1,5 +1,6 @@
 // Read-only access to the partner FiledUnder corpus (its published, publicly readable tables).
 import { buildExternalPayload, type ExtDef, type ExtDoc, type ExtValue } from "@/lib/ir/external";
+import type { IrRequestedPeriod } from "./payload-view";
 import type { IrPayload } from "@/lib/ir/payload";
 
 const DEFAULT_URL = "https://apxfeteebnspwyajlxfh.supabase.co";
@@ -41,19 +42,16 @@ async function all<T>(path: string, max = 400_000): Promise<T[]> {
   return out;
 }
 
-export async function loadExternalPayload(ticker: string, minimumSeries = 0): Promise<IrPayload | null> {
+export async function loadExternalPayload(ticker: string, period?: IrRequestedPeriod): Promise<IrPayload | null> {
+  if (period?.frequency === "m") return null;
   const t = encodeURIComponent(ticker);
+  // For a historical lookup read only original observations at this period end. A derived
+  // observation needs inputs from other dates and cannot be cited by this bounded lookup.
+  const scope = period ? `&period_end=eq.${encodeURIComponent(period.end)}&derived=is.null` : "";
   const defs = await all<ExtDef>(`kpi_definitions?ticker=eq.${t}&select=kpi_id,name,category,unit,parent_id,sums_to_parent,sort&order=kpi_id`);
-  // A definition can yield at most a flow and an instant; skip the potentially large values
-  // and documents reads when this source therefore cannot win the coverage comparison.
-  if (!defs.length || defs.length * 2 < minimumSeries) return null;
-  const values = await all<ExtValue>(`kpi_values?ticker=eq.${t}&select=kpi_id,period_kind,period_end,fiscal_label,value,source_kind,source_id,anchor,derived&order=kpi_id,period_kind,period_end,source_kind,source_id`);
+  if (!defs.length) return null;
+  const values = await all<ExtValue>(`kpi_values?ticker=eq.${t}${scope}&select=kpi_id,period_kind,period_end,fiscal_label,value,source_kind,source_id,anchor,derived&order=kpi_id,period_kind,period_end,source_kind,source_id`);
   if (!values.length) return null;
-  if (minimumSeries > 0) {
-    const series = new Set(values.filter((v) => v.period_kind === "I" || v.period_kind === "A" || v.period_kind === "Q")
-      .map((v) => `${v.period_kind === "I" ? "instant" : "flow"}|${v.kpi_id}`));
-    if (series.size < minimumSeries) return null;
-  }
   const docs = await all<ExtDoc>(`ir_documents?ticker=eq.${t}&select=id,url,title,doc_type,published&order=id`);
   return buildExternalPayload(ticker, defs, values, docs);
 }

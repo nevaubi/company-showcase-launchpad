@@ -4,6 +4,8 @@ import { hostname } from 'node:os';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { join } from 'node:path';
 import { COVERAGE } from '../src/lib/coverage';
+import { issuerDirectory } from '../src/lib/company/issuer-directory.server';
+import { issuerLink } from '../src/lib/company/issuer-directory';
 import { dbGate, sb, sleep, selectAll } from './lib/supa';
 import contracts from './vendor/contracts.json';
 import { phaseB, phaseC } from './vendor/phases';
@@ -266,12 +268,11 @@ async function company(c: (typeof COVERAGE)[number]) {
       }
     }
   }
-  // The fiscal-ai profile carries no website and only 78 covered companies have one bundled, so the
-  // EODHD general profile (WebURL) is read first; the primary domain drops corporate subdomains
-  // (about.nike.com → nike.com), which caused the earlier misses.
+  // A reviewed registrant domain controls vendor entity matching, including an explicit withheld decision.
   const eodFundamentals = await collect('eodhd','fundamentals/company',c.ticker,{ticker:`${c.ticker}.US`});
   const general = eodFundamentals?.pages?.[0]?.response?.data?.General;
-  const domain = primaryDomain(p?.website ?? c.website ?? general?.WebURL);
+  const directory = await issuerDirectory(c.ticker, c.cik);
+  const domain = primaryDomain(issuerLink(directory, "website", c.ticker, p?.website, c.website, general?.WebURL));
   const legionPath=fileKey('datalegion','companies/enrich-premium',c.ticker);
   if (!await remote(legionPath)) {
     const legal=p?.legalNameEnglish ?? registry[c.ticker]?.legal ?? p?.legalName ?? p?.companyName;

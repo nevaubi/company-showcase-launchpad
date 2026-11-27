@@ -9,10 +9,10 @@ import type {
   Universe,
 } from "@/lib/financials/types";
 import { getMacroSeries, getNews, getPriceSeries, getQuotes } from "@/lib/market.functions";
-import { coverageOf, isBundled, type MacroDef } from "@/lib/coverage";
+import { coverageOf, isBundled, MACRO_SERIES, type MacroDef } from "@/lib/coverage";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import { decodeEntities } from "@/lib/format";
-import type { MacroSummary } from "@/lib/macro";
+import { preferCloudSummary, type MacroSummary } from "@/lib/macro";
 import { supabase } from "@/integrations/supabase/client";
 import { withFiledReleases } from "@/lib/financials/releases";
 
@@ -547,7 +547,7 @@ export const macroSummariesQuery = queryOptions({
       for (const r of data ?? []) {
         const s = r.summary as unknown as MacroSummary;
         const cur = out.get(r.series_id);
-        if (s?.date && (!cur?.date || s.date >= cur.date)) out.set(r.series_id, s);
+        if (s && preferCloudSummary(s, cur, MACRO_SERIES.find((d) => d.id === r.series_id)?.frequency)) out.set(r.series_id, s);
       }
     } catch {
       /* bundled only */

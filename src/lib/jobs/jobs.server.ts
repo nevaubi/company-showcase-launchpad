@@ -19,7 +19,7 @@ import { barProblem } from "@/lib/jobs/bar-check";
 import { healRow, providerKey, tripRow, type CircuitRow } from "@/lib/jobs/provider-health";
 import { isEarnings } from "@/lib/jobs/sec-discover";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror" | "emails" | "abs-ee";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror" | "emails" | "abs-ee" | "call-archive";
 
 /** job_state row: where the options tail rotation starts tonight (cursor = offset into the tail). */
 const OPTIONS_TAIL_KEY = "options-tail";
@@ -119,6 +119,10 @@ export async function runJob(job: JobName): Promise<{ ok: boolean; items: number
 type JobResult = { ok: boolean; items: number; detail: Record<string, unknown> };
 
 const JOBS: Record<JobName, () => Promise<JobResult>> = {
+  async "call-archive"() {
+    const { scheduledCallArchive } = await import("@/lib/transcripts/issuer-jobs.server");
+    return scheduledCallArchive();
+  },
   /** Dead-man watchdog first (bounded), then the email outbox with the time that is left. */
   async emails() {
     const started = Date.now();

@@ -30,6 +30,8 @@ export const SOURCES: FreshnessSource[] = [
   { job: "gov-tri", label: "Plants & releases (EPA TRI)", everyMin: 7 * 1440 },
   { job: "sec-discover", label: "SEC market-wide discovery", everyMin: 10 },
   { job: "partner-mirror", label: "Partner dataset mirror", everyMin: 30 },
+  { job: "call-archive", label: "Earnings calls and background analysis", everyMin: 2 },
+  { job: "call-archive-evidence", label: "Earnings quote verification", everyMin: 1 },
   { job: "short-volume", label: "Short volume (FINRA)", everyMin: 1440 },
   { job: "setups", label: "Short-term setups", everyMin: 1440 },
   { job: "filing-steps", label: "Redlines & supply for new filings (worker)", everyMin: 30 },

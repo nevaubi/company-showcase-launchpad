@@ -92,7 +92,7 @@ describe("IR statements", { timeout: 30_000 }, () => {
     expect(slot).toBeTruthy();
     act(() => void window.dispatchEvent(new CustomEvent("ir-statement-show", { detail: "0:8" })));
     expect(section("Segment & corporate results - managed basis")).toBeTruthy();
-    expect(onSummary).toHaveBeenLastCalledWith({ tieOk: 64, tieN: 64, sections: 2 });
+    expect(onSummary).toHaveBeenLastCalledWith(expect.objectContaining({ tieOk: 64, tieN: 64, sections: 2 }));
   });
 
   it("gives the tie-out mark its own slot: figures stay right-aligned beside it, one column width for the tab", () => {
@@ -182,7 +182,10 @@ describe("IR statements", { timeout: 30_000 }, () => {
         /Open the checks for this section/,
       ),
     );
-    expect(onChecks).toHaveBeenCalledWith("0:3");
+    expect(onChecks).toHaveBeenCalledWith("0:3", expect.any(Array));
+    const shown = onChecks.mock.calls[0][1];
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.every((x: {cell: {v:number}; check: {total:number; partial?:boolean}}) => x.cell.v === x.check.total && !x.check.partial)).toBe(true);
   });
 
   // irpolish: Statements ran about 28,000 px on JPM (33 sections): rows, headings and spacers are tightened to

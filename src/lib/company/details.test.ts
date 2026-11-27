@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { aboutFields, aboutSubtitle, descriptionOrigin, needsDetails } from "./details";
+import { aboutFields, aboutSubtitle, descriptionOrigin } from "./details";
 
 const empty = { website: "", investorRelations: "", description: "", founded: 0 };
 const full = { website: "https://a.example", investorRelations: "https://ir.a.example", description: "A makes things.", founded: 1976 };
 
 describe("company details fallback", () => {
-  it("asks only when a field is missing", () => {
-    expect(needsDetails(full)).toBe(false);
-    expect(needsDetails(empty)).toBe(true);
-    expect(needsDetails({ ...full, investorRelations: "  " })).toBe(true);
-  });
-
   it("fills each missing field from the details and keeps the profile's own", () => {
     // HCC as served (no fields) and its coverage details entry
     const hcc = aboutFields(empty, {

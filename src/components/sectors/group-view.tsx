@@ -137,7 +137,7 @@ export function GroupView({
           eyebrow={d.kind === "sector" ? `Sector${d.etf ? ` · ${d.etf}` : ""}` : `Industry · ${d.sector}`}
           title={d.name}
           actions={<SectorSourceLink sector={d.kind === "sector" ? d.name : d.sector} />}
-          description={`${d.constituents.length} covered companies · ${ref ? `${qLabel(ref.q)} fundamentals` : "Quarterly fundamentals"} · Built ${fmtDate(d.generated.slice(0, 10))}${breadthLine}. Each metric shows its own reporting cohort.`}
+          description={`${d.constituents.length} covered companies · ${ref ? `${qLabel(ref.q)} fundamentals` : "Quarterly fundamentals"} · Built ${fmtDate(d.generated.slice(0, 10))}${breadthLine}.${d.sector_release ? ` Bank filing review through ${fmtDate(d.sector_release.as_of)}.` : ""} Each metric shows its own reporting cohort.`}
 
         />
       </div>

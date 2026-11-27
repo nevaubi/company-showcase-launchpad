@@ -41,6 +41,8 @@ export interface Reaction {
   move: number;
   /** Same window minus SPY. */
   excess: number | null;
+  /** Same-window return minus the sector ETF, when its endpoint prices are observed. */
+  sectorExcess?: number | null;
   /** Largest single-day gap open in the window, vs prior close. */
   gap: number;
   /** Run-up into the print: 5 sessions before. */
@@ -68,7 +70,16 @@ export interface ReactionStats {
   avgSigma: number | null;
 }
 
-export function earningsReactions(bars: Bar[], releases: { filed: string; accn: string; doc: string }[], spy?: Bar[]): Reaction[] {
+function matchedBenchmarkReturn(benchmark: Bar[] | undefined, first: string, last: string): number | null {
+  if (!benchmark?.length) return null;
+  const from = benchmark[barIndexOnOrAfter(benchmark, first)];
+  const to = benchmark[barIndexOnOrAfter(benchmark, last)];
+  if (from?.[0] !== first || to?.[0] !== last || !(from[ADJ] > 0 && to[ADJ] > 0)) return null;
+  const move = to[ADJ] / from[ADJ] - 1;
+  return Number.isFinite(move) ? move : null;
+}
+
+export function earningsReactions(bars: Bar[], releases: { filed: string; accn: string; doc: string }[], spy?: Bar[], sector?: Bar[]): Reaction[] {
   const out: Reaction[] = [];
   const seen = new Set<string>();
   for (const r of releases) {
@@ -79,13 +90,10 @@ export function earningsReactions(bars: Bar[], releases: { filed: string; accn: 
     if (i <= 0 || i + 1 >= bars.length) continue;
     const pre = i - 1;
     const end = i + 1;
-    const move = ret(bars, pre, end)!;
-    let excess: number | null = null;
-    if (spy?.length) {
-      const si = barIndexOnOrAfter(spy, bars[pre][0]);
-      const se = barIndexOnOrAfter(spy, bars[end][0]);
-      if (spy[si]?.[0] === bars[pre][0] && spy[se]?.[0] === bars[end][0]) excess = move - (ret(spy, si, se) ?? 0);
-    }
+    const move = ret(bars, pre, end);
+    if (move == null || !Number.isFinite(move) || bars[pre][ADJ] <= 0 || bars[end][ADJ] <= 0) continue;
+    const marketMove = matchedBenchmarkReturn(spy, bars[pre][0], bars[end][0]);
+    const sectorMove = matchedBenchmarkReturn(sector, bars[pre][0], bars[end][0]);
     const gapA = bars[i][1] / bars[pre][4] - 1;
     const gapB = bars[i + 1][1] / bars[i][4] - 1;
     const gap = Math.abs(gapA) >= Math.abs(gapB) ? gapA : gapB;
@@ -99,7 +107,8 @@ export function earningsReactions(bars: Bar[], releases: { filed: string; accn: 
       accn: r.accn,
       doc: r.doc,
       move,
-      excess,
+      excess: marketMove == null ? null : move - marketMove,
+      sectorExcess: sectorMove == null ? null : move - sectorMove,
       gap,
       preRun: ret(bars, pre - 5, pre),
       drift5: end + 5 < bars.length ? ret(bars, end, end + 5) : null,

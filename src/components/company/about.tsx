@@ -56,7 +56,7 @@ export function AboutPanel({ ticker, data }: { ticker: string; data: CompanyData
   const ctx = useCompanyContext(ticker);
   const p = data.profile;
   const details = useCompanyDetails(ticker, p);
-  const f = aboutFields(p, details.data);
+  const f = aboutFields(p, details.data ?? { directory: { website: null, ir: null } });
   const c = ctx.data;
   const paras = c?.description?.paragraphs ?? [];
   const proxyCeo = c?.people?.length ? rankPeople(c.people).ceo : undefined;

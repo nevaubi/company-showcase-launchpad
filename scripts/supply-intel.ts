@@ -13,7 +13,7 @@ import { classifyError } from "../src/lib/jobs/failure";
 import { args, log, sb } from "./lib/supa";
 import { saveSignals } from "./lib/supply-save";
 import { supplyNewsCandidate, supplyNewsDomains } from "./lib/supply-news";
-import { coverageDetails } from "../src/lib/coverage-details.server";
+import { reviewedCompanyDetails } from "../src/lib/company/issuer-directory.server";
 import { readDataset } from "./lib/datasets";
 import { IR_MODELS, openaiStructured } from "../src/lib/openai.server";
 import { quoteInText } from "../src/lib/supply/core";
@@ -207,7 +207,7 @@ async function fromNews(co: Co, short: string) {
   const freq = new Map<string, number>();
   for (const c of [...(data ?? []).map((d) => d.country as string), ...(l ?? []).flatMap((x) => (x.regions as string[] | null) ?? [])]) freq.set(c, (freq.get(c) ?? 0) + 1);
   const top = [...freq].sort((a, b) => b[1] - a[1]).map((x) => x[0]).filter((c) => !/^(united states|us|u\.s\.|global|worldwide)$/i.test(c)).slice(0, 3);
-  const issuer = coverageDetails(co.ticker);
+  const issuer = await reviewedCompanyDetails(co.ticker, co.cik);
   const domains = supplyNewsDomains(issuer.website, issuer.ir);
   const qs = [`${short} supplier orders production agreement supply chain tariffs export controls`, ...top.map((c) => `${short} ${c} regulation OR tariff OR government OR election OR plant`)];
   const found = await Promise.allSettled(qs.map((q) => tavilySearch(q, { topic: "news", days: 120, maxResults: 5, domains })));

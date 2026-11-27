@@ -40,3 +40,6 @@ dist-ssr
 
 # SEC files kept on disk by scripts/abs-ee.ts
 .cache/
+
+# Bytecode from the bank-sector data refresh scripts
+__pycache__/

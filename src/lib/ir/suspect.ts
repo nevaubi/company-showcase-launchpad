@@ -17,6 +17,7 @@
 //   5. a figure the same document prints for another period of the same line while it prints a
 //      different figure for this one (a column read under the wrong period);
 //   6. a calculated value that uses a held figure.
+import { isPeriodComparison } from "./comparison-column";
 import { CUSTODY, CUSTODY_METRICS, MAX_USD, MAX_USD_CUSTODY, SLIP, fmtTimes } from "@/lib/ir/scale-check";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadSeries } from "@/lib/ir/payload";
 
@@ -119,6 +120,11 @@ export function findSuspects(p: IrPayload): SuspectMap {
     if (lgs.length >= 20) companyLg.set(unit, median(lgs));
   }
   for (const s of p.series) {
+    for (const k of KINDS) for (const [e, c] of Object.entries(cellsOf(s,k))) {
+      const changed = !c.l && isPeriodComparison(c.x, s.label, c.v, s.unit);
+      const changedPart = c.f?.parts.some((part) => !part.l && isPeriodComparison(part.x, s.label, part.v, s.unit));
+      if (changed || changedPart) flag(s,k,e,"The cited slide reports a change versus the comparison period.");
+    }
     if (!GUARDED.has(s.unit)) continue;
     const custody = CUSTODY_METRICS.has(s.met) || CUSTODY.test(`${s.label} ${s.parent ? byKey.get(s.parent)?.label ?? "" : ""} ${s.bd ?? bdOf.get(s.k) ?? ""}`);
     // 1–2. Marked at storage or by older builds; larger than any company reports.

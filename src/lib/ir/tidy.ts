@@ -19,7 +19,7 @@ import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 import { holdSuspects } from "@/lib/ir/suspect";
 import { splitTrailing, trailingLine } from "@/lib/ir/ttm";
 
-export const TIDY_VERSION = 13;
+export const TIDY_VERSION = 14;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */

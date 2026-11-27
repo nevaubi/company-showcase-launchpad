@@ -55,6 +55,8 @@ export interface PublicSnapshot {
   sector: string;
   industry: string;
   city: string | null;
+  website: string | null;
+  investorRelations: string | null;
   description: string | null;
   logo: string | null;
   periods: string[];
@@ -133,6 +135,8 @@ export function buildPublicSnapshot(
     exchange: p.exchange,
     sector: listed?.sector ?? p.sector,
     industry: listed?.industry ?? p.industry,
+    website: p.website || null,
+    investorRelations: p.investorRelations || null,
     city: addr?.city ? `${addr.city}${addr.state ? `, ${addr.state}` : ""}` : null,
     description:
       (p as { description?: string }).description?.trim() || details?.description?.trim() || null,

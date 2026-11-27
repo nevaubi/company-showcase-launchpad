@@ -178,10 +178,10 @@ export async function exhibitsOf(c: CoverageCompany, f: Candidate): Promise<Cand
 /** Downloadable files linked from the IR site (pdf, xlsx, pptx, docx…). */
 export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]> {
   const { firecrawlLinks, firecrawlMap } = await import("@/lib/web.server");
-  const { coverageDetails } = await import("@/lib/coverage-details.server");
-  const details = coverageDetails(c.ticker);
-  const irSite = c.ir || details.ir || "";
-  const website = c.website || details.website || irSite;
+  const { reviewedCompanyDetails } = await import("@/lib/company/issuer-directory.server");
+  const details = await reviewedCompanyDetails(c.ticker, c.cik);
+  const irSite = details.ir || "";
+  const website = details.website || irSite;
   if (!irSite) return [];
   const pages = await firecrawlMap(irSite, { limit: 400 });
   const PAGE_RE = /(financial|quarter|results|earnings|events|presentation|report|filings|supplement|fact|kpi|metrics|investor-day)/i;

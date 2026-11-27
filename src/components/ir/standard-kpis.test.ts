@@ -83,6 +83,16 @@ describe("standardized KPI rows", () => {
     // Among four banks (10, 12, 17, 20): two below, so (2 + 0) / 3 = 67th.
     expect([r.pct, r.peers, r.scope]).toEqual([67, 4, "industry"]);
   });
+  it("excludes stale quarterly and annual-only figures and compares the actual displayed value", () => {
+    const extended = { kpis: { roe: {
+      ...latest.kpis.roe,
+      AAA: { q: ["2026-09-30", 11], a: null, ind: "Banks", sec: "Financials" },
+      OLD: { q: ["2013-12-31", 999], a: null, ind: "Banks", sec: "Financials" },
+      ANNUAL: { q: null, a: ["2026-09-30", 999], ind: "Banks", sec: "Financials" },
+    } } };
+    const [row] = standardRows("AAA", co as never, extended as never, tax);
+    expect([row.pct, row.peers, row.scope]).toEqual([67, 4, "industry"]);
+  });
   it("formats by measure class", () => {
     expect(fmtStd(13.9, "pct")).toBe("13.9%");
     expect(fmtStd(132.3, "usd_ps")).toBe("$132.30");

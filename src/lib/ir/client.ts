@@ -1,6 +1,7 @@
 // The IR page's data, shared by the page and the assistant so both read one cached copy.
 import { getIrData, type IrDocRow } from "@/lib/ir.functions";
 import type { ConsistencySummary } from "@/lib/ir/consistency";
+import type { IrRequestedPeriod } from "./payload-view";
 import type { IrPayload } from "@/lib/ir/payload";
 import { checkStatementsOf, type CheckStatements, type SecCheck } from "@/lib/ir/sec-check";
 
@@ -13,6 +14,7 @@ export interface IrPageData {
   /** bytes of a stored payload too large to load (0 or absent otherwise): the page says so instead of statements */
   oversizeBytes?: number;
   source?: "partner";
+  requestedPeriod?: IrRequestedPeriod;
   /** read-time cross-check against the SEC statements (null when they could not be loaded) */
   secCheck?: SecCheck | null;
   /** read-time quarters-against-year and formula checks */
@@ -26,7 +28,7 @@ export interface IrPageData {
 export { checkStatementsOf };
 
 /** Bank-sized payloads arrive as a gzipped byte stream (see getIrData); unpack it in the browser. */
-type IrFetch = (opts: { data: { ticker: string } }) => Promise<{ gz: unknown }>;
+type IrFetch = (opts: { data: { ticker: string; period?: IrRequestedPeriod } }) => Promise<{ gz: unknown }>;
 class WorkerUnavailable extends Error {}
 const STATEMENTS_WAIT_MS = 2500;
 
@@ -34,12 +36,12 @@ const STATEMENTS_WAIT_MS = 2500;
  * Unpacking and tidying run in a web worker, so a bank-sized payload never freezes the page while
  * the loading state shows; the main thread is the fallback where a worker can't start.
  */
-export async function loadIrPage(ticker: string, fetchIr: IrFetch = getIrData, getStatements?: () => Promise<CheckStatements | null>): Promise<IrPageData> {
+export async function loadIrPage(ticker: string, fetchIr: IrFetch = getIrData, getStatements?: () => Promise<CheckStatements | null>, period?: IrRequestedPeriod): Promise<IrPageData> {
   // The SEC statements for the cross-check load alongside; the page never waits on them failing.
   // Once the IR data is here, the statements get at most STATEMENTS_WAIT_MS more: the page is never
   // held back by them (the checks line then says the check did not run).
   const pending = getStatements ? getStatements().catch(() => null) : Promise.resolve(null);
-  const { gz } = await fetchIr({ data: { ticker } });
+  const { gz } = await fetchIr({ data: { ticker, ...(period ? { period } : {}) } });
   let late = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const statements = await Promise.race([pending, new Promise<null>((r) => (timer = setTimeout(() => ((late = true), r(null)), STATEMENTS_WAIT_MS)))]);
@@ -113,4 +115,5 @@ export async function checkLateIrPage(data: IrPageData, statements: CheckStateme
   return checkLate(data, statements);
 }
 
-export const irPageKey = (ticker: string) => ["ir", ticker] as const;
+export const irPageKey = (ticker: string, period?: IrRequestedPeriod) =>
+  period ? ["ir", ticker, period.frequency, period.end] as const : ["ir", ticker] as const;

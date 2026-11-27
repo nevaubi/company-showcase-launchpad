@@ -17,6 +17,8 @@
 //                                                     for when the partner universe cannot be read; logos untouched)
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { CURATED_COVERAGE as COVERAGE } from "@/lib/coverage";
+import { snapshotIssuerLinks } from "@/lib/company/issuer-directory.seed";
+import { issuerLink } from "@/lib/company/issuer-directory";
 import type { CoverageCompany } from "@/lib/coverage";
 import { acceptName, applyCorrections, displayName, namesAgree, type Correction } from "./lib/coverage-names";
 import { applyDetailCorrections, fallbackDescription as secSentence, type CoverageDetails, type DetailCorrection } from "./lib/coverage-details";
@@ -464,9 +466,10 @@ if (!args["no-logos"]) {
       const buf = await download(`${PUBLIC}/logos/${c.ticker}.png`);
       if (buf) return save(c.ticker, { buf, ext: "png", url: `${PUBLIC}/logos/${c.ticker}.png` }, "Filed Under partner corpus", "partner");
     }
-    if (c.website) {
-      const got = await siteIcon(c.website);
-      if (got) return save(c.ticker, got, `${new URL(c.website).hostname} site icon`, "website");
+    const website = issuerLink(snapshotIssuerLinks(c.ticker, c.cik), "website", c.ticker, c.website);
+    if (website) {
+      const got = await siteIcon(website);
+      if (got) return save(c.ticker, got, `${new URL(website).hostname} site icon`, "website");
     }
     if (have) return void tally.kept++;
     delete sources[c.ticker];

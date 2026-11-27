@@ -3,6 +3,8 @@ import { withFiledReleases } from "@/lib/financials/releases";
 // data service, falling back to the private `datasets` bucket; filings/estimates/caches in tables) so reports are built from
 // trusted data, never from numbers a browser sent.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { reviewedCompanyDetails } from "@/lib/company/issuer-directory.server";
+import { issuerLink } from "@/lib/company/issuer-directory";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import type { Bar, CompanyDataset, Filing, UniverseEntry } from "@/lib/financials/types";
 import { COVERAGE, coverageOf } from "@/lib/coverage";
@@ -100,8 +102,16 @@ export async function loadDataset(ticker: string): Promise<CompanyDataset> {
   if (!raw) throw new Error(`No SEC dataset is stored for ${ticker} yet`);
   const d = hydrateDataset(raw);
   const latest = d.filings.reduce((m, f) => (f.filed > m ? f.filed : m), "");
-  const { data: fresh } = await supabaseAdmin.from("sec_filings").select("accn, form, filed, report, doc, description, items, ixbrl, size")
-    .eq("ticker", ticker).gt("filed", latest || "1900-01-01").order("filed", { ascending: false }).limit(100);
+  const [details, { data: fresh }] = await Promise.all([
+    reviewedCompanyDetails(ticker, d.profile.cik),
+    supabaseAdmin.from("sec_filings").select("accn, form, filed, report, doc, description, items, ixbrl, size")
+      .eq("ticker", ticker).gt("filed", latest || "1900-01-01").order("filed", { ascending: false }).limit(100),
+  ]);
+  d.profile = {
+    ...d.profile,
+    website: issuerLink(details.directory, "website", ticker, d.profile.website, details.website) ?? "",
+    investorRelations: issuerLink(details.directory, "ir", ticker, d.profile.investorRelations, details.ir) ?? "",
+  };
   if (fresh?.length) {
     const known = new Set(d.filings.map((f) => f.accn));
     const add: Filing[] = fresh.filter((r) => r.form !== "4" && !known.has(r.accn)).map((r) => ({

@@ -42,6 +42,8 @@ import type {
 } from "../src/lib/financials/types";
 import { COVERAGE, companyCiks, historyCik, isBundled, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
 import { coverageDetails } from "../src/lib/coverage-details.server";
+import { issuerLink } from "../src/lib/company/issuer-directory";
+import { snapshotProfileLinks } from "../src/lib/company/issuer-directory.seed";
 import { sicDescription } from "../src/lib/sec/sic";
 import { summarize, type MacroSummary } from "../src/lib/macro";
 
@@ -702,6 +704,7 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
   // The generated coverage list keeps website, IR address, founding year and description in the
   // server-only details file; without this read their profiles were built with none of the four.
   const details = coverageDetails(cfg.ticker);
+  const directory = snapshotProfileLinks(cfg, cik);
   const profile: CompanyProfile = {
     ticker: cfg.ticker,
     cik: pad(cik),
@@ -716,8 +719,8 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
     ein: sub.ein,
     phone: sub.phone,
     address: { street: [b.street1, b.street2].filter(Boolean).join(", "), city: b.city, state: b.stateOrCountry, zip: b.zipCode },
-    website: cfg.website ?? details.website,
-    investorRelations: cfg.ir ?? details.ir,
+    website: issuerLink(directory, "website", cfg.ticker, cfg.website, details.website) ?? "",
+    investorRelations: issuerLink(directory, "ir", cfg.ticker, cfg.ir, details.ir) ?? "",
     description: cfg.description ?? details.description,
     logo: await loadLogo(cfg.ticker),
     founded: cfg.founded ?? details.founded,

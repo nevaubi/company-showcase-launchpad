@@ -3,6 +3,7 @@
 // Controls: current or all series, quarterly or annual, 8Q / 20Q / all, a category filter, line search,
 // a jump list, Excel and per-section downloads. Sections render as they come near the screen, so a bank's
 // page lays out quickly; nothing scrolls inside the page except a wide table sideways.
+import type { VisibleStatementCheck } from "./statement-section";
 import {
   Fragment,
   useCallback,
@@ -285,6 +286,7 @@ function sectionView(
   const tableChecks = sectionChecks(sec, byKey, checks);
   let tieOk = 0;
   let tieN = 0;
+  const visibleChecks: VisibleStatementCheck[] = [];
   let failing = 0;
   let flagged = 0;
   let held = 0;
@@ -333,8 +335,10 @@ function sectionView(
       const isHeld = !m.cells[e];
       const owner = byKey.get(m.from[e]) ?? s;
       // Only a total the section prints with its parts carries the tie-out mark, checked against those parts.
-      const chk = r.total && !printedYtd ? tableChecks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
+      const candidate = r.total && !printedYtd && !isHeld ? tableChecks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
+      const chk = candidate && candidate.total === c.v ? candidate : undefined;
       if (chk && !chk.partial) {
+        visibleChecks.push({section:sec.title,label:rowLabel(r,byKey),series:owner,cell:c,check:chk});
         tieN++;
         if (chk.ok) tieOk++;
         else failing++;
@@ -419,6 +423,7 @@ function sectionView(
     rows: shown,
     tieOk,
     tieN,
+    visibleChecks,
     failing,
     flagged,
     held,
@@ -475,6 +480,7 @@ function Lazy({
 }
 
 export interface StatementsSummary {
+  checks: VisibleStatementCheck[];
   tieOk: number;
   tieN: number;
   sections: number;
@@ -484,6 +490,7 @@ export function IrStatements({
   ticker,
   payload,
   focus,
+  requestedPeriod,
   onFocusDone,
   onChecks,
   onSummary,
@@ -491,9 +498,10 @@ export function IrStatements({
   ticker: string;
   payload: IrPayload;
   focus?: IrFocus;
+  requestedPeriod?: import("@/lib/ir/payload-view").IrRequestedPeriod;
   onFocusDone?: () => void;
   /** open the checks panel, for one section or all */
-  onChecks: (secId?: string) => void;
+  onChecks: (secId?: string, checks?: VisibleStatementCheck[]) => void;
   /** the tie-out count of what is in view, for the badge at the top of the tab */
   onSummary?: (s: StatementsSummary) => void;
 }) {
@@ -501,9 +509,9 @@ export function IrStatements({
   const headRef = useRef<HTMLDivElement>(null);
   // One sideways position for the head row and every section (scroll-group.ts).
   const group = useMemo(() => scrollGroup(() => gridRoot.current), []);
-  const [freq, setFreq] = useState<Freq>("q");
+  const [freq, setFreq] = useState<Freq>(requestedPeriod?.frequency === "y" ? "y" : "q");
   const [span, setSpan] = useState(DEFAULT_SPAN.q);
-  const [show, setShow] = useState<"cur" | "all">("cur");
+  const [show, setShow] = useState<"cur" | "all">(requestedPeriod ? "all" : "cur");
   const [dim, setDim] = useState("all");
   const [query, setQuery] = useState("");
   const [exporting, setExporting] = useState<string | null>(null);
@@ -552,7 +560,7 @@ export function IrStatements({
   const fy = useMemo(() => fiscalCalendar(payload), [payload]);
   const cut = useMemo(() => (show === "cur" ? currentCut(payload) : undefined), [payload, show]);
   const q = query.trim().toLowerCase();
-  const all = grids[freq];
+  const all = useMemo(() => requestedPeriod?.frequency === freq ? [requestedPeriod.end] : grids[freq], [grids, freq, requestedPeriod]);
 
   const views = useMemo(() => {
     const out: SectionView[] = [];
@@ -588,9 +596,10 @@ export function IrStatements({
 
   const tieOk = views.out.reduce((n, v) => n + v.tieOk, 0);
   const tieN = views.out.reduce((n, v) => n + v.tieN, 0);
+  const visibleChecks = useMemo(() => views.out.flatMap((view) => view.visibleChecks), [views]);
   useEffect(
-    () => onSummary?.({ tieOk, tieN, sections: views.out.length }),
-    [tieOk, tieN, views.out.length, onSummary],
+    () => onSummary?.({ tieOk, tieN, sections: views.out.length, checks: visibleChecks }),
+    [tieOk, tieN, views.out.length, visibleChecks, onSummary],
   );
 
   const openCell = useCallback(
@@ -845,7 +854,7 @@ export function IrStatements({
               { v: "all", l: "All series" },
             ]}
           />
-          <Segmented
+          {!requestedPeriod && <Segmented
             label="Period type"
             value={freq}
             onChange={changeFreq}
@@ -854,7 +863,8 @@ export function IrStatements({
               { v: "y", l: "Annual" },
             ]}
           />
-          <Segmented label="Periods shown" value={span} onChange={setSpan} options={SPANS[freq]} />
+          }
+          {!requestedPeriod && <Segmented label="Periods shown" value={span} onChange={setSpan} options={SPANS[freq]} />}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -939,7 +949,7 @@ export function IrStatements({
             {tieN > 0 && (
               <button
                 type="button"
-                onClick={() => onChecks()}
+                onClick={() => onChecks(undefined, visibleChecks)}
                 className="inline-flex items-center gap-1.5 rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {tieOk === tieN ? (

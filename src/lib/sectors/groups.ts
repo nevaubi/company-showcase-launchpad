@@ -9,6 +9,7 @@
 // the published figure.
 import { queryOptions } from "@tanstack/react-query";
 import { partnerFile } from "@/lib/data";
+import { sectorFile } from "./cloud-release";
 import { ordinal } from "@/lib/format";
 import { MISSING, mult, pct, usd } from "./format";
 import { getSectorBreadth } from "./breadth.functions";
@@ -88,6 +89,7 @@ export interface Constituent {
   above200?: boolean | null;
 }
 export interface GroupFile {
+  sector_release?: { as_of: string; period: string };
   slug: string;
   name: string;
   kind: "sector" | "industry";
@@ -215,7 +217,7 @@ export interface Note {
 const hour = 3600_000;
 export const overviewQuery = queryOptions({
   queryKey: ["sectors", "overview"],
-  queryFn: () => partnerFile<Overview>("sectors.json"),
+  queryFn: () => sectorFile<Overview>("sectors.json", partnerFile),
   staleTime: hour,
   retry: 1,
 });
@@ -228,14 +230,14 @@ export const notesQuery = queryOptions({
 export const groupQuery = (slug: string) =>
   queryOptions({
     queryKey: ["sectors", "group", slug],
-    queryFn: () => partnerFile<GroupFile>(`sectors/${slug}.json`),
+    queryFn: () => sectorFile<GroupFile>(`sectors/${slug}.json`, partnerFile),
     staleTime: hour,
     retry: 1,
   });
 export const compQuery = (slug: string) =>
   queryOptions({
     queryKey: ["sectors", "comp", slug],
-    queryFn: () => partnerFile<CompFile>(`sectors/${slug}.comp.json`),
+    queryFn: () => sectorFile<CompFile>(`sectors/${slug}.comp.json`, partnerFile),
     staleTime: hour,
     retry: 1,
   });
