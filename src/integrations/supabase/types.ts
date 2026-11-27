@@ -4817,6 +4817,10 @@ export type Database = {
         Args: { _dimension: string; _max_values: number; _snapshot_id: string }
         Returns: number
       }
+      source_eia_year_field: {
+        Args: { _agency: string; _columns: Json; _ingest: Json }
+        Returns: number
+      }
       source_facets: {
         Args: {
           _after?: string
