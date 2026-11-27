@@ -218,9 +218,15 @@ export function IrPageView({
       ) : (
         <IrPanel section="IR statements" tour="ir-breakdowns" title="Statements">
           <div className="px-4 py-4 text-[13px]">
-            <p>No figures have been read from this company's documents yet.</p>
+            <p>
+              {data.oversizeBytes
+                ? "This company's statements are being rebuilt in a lighter form."
+                : "No figures have been read from this company's documents yet."}
+            </p>
             <p className={cn("mt-1", IR.caption)}>
-              {data.pending
+              {data.oversizeBytes
+                ? `Its stored history has grown to ${Math.round(data.oversizeBytes / 1_000_000)} MB, more than one page can load. The stored files below can be opened now.`
+                : data.pending
                 ? `Statements appear here once the ${data.pending.toLocaleString()} stored ${data.pending === 1 ? "file that is" : "files that are"} waiting have been read. Reading runs in the background; the stored files below can be opened now.`
                 : "The stored files below can be opened now; this company's releases have no tables the readers use."}
             </p>

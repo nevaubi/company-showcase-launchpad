@@ -2,6 +2,7 @@ import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { IrPayload } from "@/lib/ir/payload";
+import { oversizeOf } from "@/lib/ir/payload-view";
 import { guardedDocIds, withoutGuardedCells, withoutGuardedDocs } from "@/lib/ir/source-guard";
 import type { StoreRef } from "@/lib/ir/store";
 
@@ -53,16 +54,20 @@ export const getIrData = createServerFn({ method: "GET" })
       return docs;
     };
     const loadSeries = async () => {
-      const { data: series, error } = await context.supabase.from("ir_company_series").select("payload, payload_path, built_at").eq("ticker", data.ticker).maybeSingle();
+      const { data: series, error } = await context.supabase.from("ir_company_series").select("payload, payload_path, payload_bytes, built_at").eq("ticker", data.ticker).maybeSingle();
       if (error) throw new Error(error.message);
       let payload = (series?.payload ?? null) as IrPayload | null;
+      // A stored payload beyond what a page can load (a bank with thousands of read files before its
+      // bounded rebuild) is not fetched: the page says so and lists the documents.
+      const oversizeBytes = oversizeOf(series?.payload_bytes);
+      if (oversizeBytes) return { series, payload: null, oversizeBytes };
       if (series?.payload_path) {
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const { data: file, error: dl } = await supabaseAdmin.storage.from("ir-documents").download(series.payload_path);
         if (dl || !file) throw new Error(dl?.message ?? "Couldn't load breakdowns");
         payload = JSON.parse(await file.text()) as IrPayload;
       }
-      return { series, payload };
+      return { series, payload, oversizeBytes: 0 };
     };
     const t0 = Date.now();
     const countImages = async () => {
@@ -82,6 +87,7 @@ export const getIrData = createServerFn({ method: "GET" })
     };
     const [allDocs, loaded, images, external] = await Promise.all([loadDocs(), loadSeries(), countImages(), loadExternal()]);
     let { series, payload } = loaded;
+    const { oversizeBytes } = loaded;
     // Files the reviewed list shows to be another company's are not listed, and figures read from
     // them are dropped from payloads built before the guard existed (source-guard.ts).
     const refused = guardedDocIds(data.ticker, allDocs as { id: string; source_url: string | null }[]);
@@ -95,7 +101,7 @@ export const getIrData = createServerFn({ method: "GET" })
     // Facts exist but no breakdowns are stored (first read, or a rebuild that never ran): build them
     // now rather than showing an empty page.
     const readFacts = docs.reduce((n, d) => n + (Number(d.extract_facts) || 0), 0);
-    if (!payload && readFacts > 0) {
+    if (!payload && readFacts > 0 && !oversizeBytes) {
       // Concurrent first views of the same company share one rebuild instead of each starting their own.
       let job = rebuilding.get(data.ticker);
       if (!job) {
@@ -104,7 +110,7 @@ export const getIrData = createServerFn({ method: "GET" })
         rebuilding.set(data.ticker, job);
       }
       payload = await job;
-      series = payload ? { payload: null, payload_path: `series/${data.ticker}.json`, built_at: payload.builtAt } : series;
+      series = payload ? { payload: null, payload_path: `series/${data.ticker}.json`, payload_bytes: null, built_at: payload.builtAt } : series;
     }
     console.log(`[ir] ${data.ticker} docs=${docs.length}+${images}img facts=${readFacts} row=${series ? "yes" : "no"} payload=${payload ? payload.series.length : "none"} ${Date.now() - t0}ms`);
     const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
@@ -113,7 +119,7 @@ export const getIrData = createServerFn({ method: "GET" })
     // when sent as objects, so ship one JSON string and parse it on the client.
     // Bank payloads outgrow the RPC serializer's 32 MB cap even as one string, so stream gzipped
     // bytes (raw streams bypass that cap) and decompress in the browser.
-    const bytes = new TextEncoder().encode(JSON.stringify({ payload, builtAt: series?.built_at ?? null, documents, images, pending }));
+    const bytes = new TextEncoder().encode(JSON.stringify({ payload, builtAt: series?.built_at ?? null, documents, images, pending, oversizeBytes }));
     return { gz: await gzipStream(bytes) };
   });
 

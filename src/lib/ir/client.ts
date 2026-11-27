@@ -10,6 +10,8 @@ export interface IrPageData {
   documents: IrDocRow[];
   images: number;
   pending: number;
+  /** bytes of a stored payload too large to load (0 or absent otherwise): the page says so instead of statements */
+  oversizeBytes?: number;
   source?: "partner";
   /** read-time cross-check against the SEC statements (null when they could not be loaded) */
   secCheck?: SecCheck | null;
