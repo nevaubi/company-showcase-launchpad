@@ -8,6 +8,8 @@ import {
   absAfterRun,
   absLeftFromReceipt,
   absNextTurn,
+  absSeenFromJson,
+  absSeenToJson,
   advanceCursor,
   canStartOfficialChild,
   childReceipt,
@@ -117,15 +119,34 @@ describe("ABS lane rotation (review rev-workers S7)", () => {
     expect(absNextTurn({ count: 91, cursor: 0, seen: new Map(), stay: null, now: NOW })).toEqual({ index: 0, command: "run" });
   });
 
-  it("looks at an idle CIK at most once an hour, and waits when every CIK is idle", () => {
-    const seen = new Map<number, AbsSeen>([[0, { at: NOW - 10 * 60_000, left: 0 }], [1, { at: NOW - 70 * 60_000, left: 0 }], [2, { at: NOW - 5 * 60_000, left: 0 }]]);
+  it("looks at an idle CIK at most once in six hours, and waits when every CIK is idle", () => {
+    const seen = new Map<number, AbsSeen>([[0, { at: NOW - 10 * 60_000, left: 0 }], [1, { at: NOW - 370 * 60_000, left: 0 }], [2, { at: NOW - 5 * 60_000, left: 0 }]]);
     expect(absNextTurn({ count: 3, cursor: 0, seen, stay: null, now: NOW })).toEqual({ index: 1, command: "run" });
     seen.set(1, { at: NOW, left: 0 });
-    expect(absNextTurn({ count: 3, cursor: 2, seen, stay: null, now: NOW })).toEqual({ waitMs: 50 * 60_000 });
+    // the first to come due is index 0, looked at 10 minutes ago: 5 h 50 min to wait
+    expect(absNextTurn({ count: 3, cursor: 2, seen, stay: null, now: NOW })).toEqual({ waitMs: 350 * 60_000 });
     // a CIK with work left is never skipped
     seen.set(2, { at: NOW, left: 4 });
     expect(absNextTurn({ count: 3, cursor: 0, seen, stay: null, now: NOW })).toEqual({ index: 2, command: "run" });
-    expect(ABS_IDLE_RECHECK_MS).toBe(3_600_000);
+    expect(ABS_IDLE_RECHECK_MS).toBe(6 * 3_600_000);
+  });
+
+  it("keeps what it has looked at across a restart, by CIK, and forgets what is too old to trust", () => {
+    const ciks = [111, 222, 333, 444];
+    const seen = new Map<number, AbsSeen>([[0, { at: NOW - 60_000, left: 0 }], [1, { at: NOW - 30 * 60_000, left: 7 }], [3, { at: NOW - 7 * 3_600_000, left: 0 }]]);
+    const text = absSeenToJson(seen, ciks);
+    // only looks that left nothing are stored
+    expect(JSON.parse(text)).toEqual({ v: 1, idle: { "111": Math.floor((NOW - 60_000) / 1000), "444": Math.floor((NOW - 7 * 3_600_000) / 1000) } });
+    // read back for a watch list in another order, with one issuer gone: the memory follows the CIK
+    const back = absSeenFromJson(text, [999, 111, 333], NOW);
+    expect([...back.entries()]).toEqual([[1, { at: Math.floor((NOW - 60_000) / 1000) * 1000, left: 0 }]]);
+    // so after a restart an issuer just looked at is not looked at again
+    expect(absNextTurn({ count: 3, cursor: 1, seen: back, stay: null, now: NOW })).toEqual({ index: 2, command: "run" });
+    // unreadable, another version, or a time in the future: nothing is remembered
+    expect(absSeenFromJson("not json", ciks, NOW).size).toBe(0);
+    expect(absSeenFromJson(JSON.stringify({ v: 2, idle: { "111": 1 } }), ciks, NOW).size).toBe(0);
+    expect(absSeenFromJson(JSON.stringify({ v: 1, idle: { "111": Math.floor(NOW / 1000) + 600 } }), ciks, NOW).size).toBe(0);
+    expect(absSeenFromJson(null, ciks, NOW).size).toBe(0);
   });
 
   it("gives the other CIKs a turn after a long stay, and comes back on the next pass", () => {

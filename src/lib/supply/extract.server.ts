@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { IR_MODELS, openaiStructured } from "@/lib/openai.server";
 import { normText, quoteInText, RELATIONS } from "@/lib/supply/core";
+import { scanReceipts } from "@/lib/supply/scan";
 
 const UA = "FiledUnder Research research@filedunder.ai";
 
@@ -262,6 +263,16 @@ async function readFiling(
   return rows;
 }
 
+/** Receipts for the filings just read (rules: src/lib/supply/scan.ts). Never fatal: a receipt that cannot be written does not undo a read. */
+async function recordScans(db: SupabaseClient, ticker: string, filings: SupplyFiling[], rows: Record<string, unknown>[], log: Log) {
+  try {
+    const { error } = await db.from("supply_scans").upsert(scanReceipts(ticker, filings, rows, new Date().toISOString()) as never, { onConflict: "ticker,accn" });
+    if (error) log(ticker, "read receipts not stored", error.message);
+  } catch (e) {
+    log(ticker, "read receipts not stored", (e as Error).message);
+  }
+}
+
 export interface SupplyResult {
   ticker: string;
   status: "stored" | "no-10k" | "empty" | "failed" | "dry";
@@ -295,6 +306,7 @@ export async function extractSupply(
     return { ticker: co.ticker, status: "failed", links: 0, error };
   }
   if (opts.dry) return { ticker: co.ticker, status: "dry", links: all.length };
+  await recordScans(db, co.ticker, set.map((s) => s.f), all, log);
   if (!all.length) return { ticker: co.ticker, status: "empty", links: 0 };
   await db.from("supply_links").delete().eq("ticker", co.ticker);
   for (let i = 0; i < all.length; i += 200) {

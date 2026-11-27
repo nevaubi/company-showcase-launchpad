@@ -7,6 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSource } from "@/components/source/source-context";
 import { pricesQuery, useCompany } from "@/lib/data";
 import { InsiderTable } from "@/components/app/insider-table";
+import { CoverageNote } from "@/components/company/coverage-note";
+import { CORPUS } from "@/lib/coverage/corpora";
 import {
   CongressTrades,
   Government,
@@ -171,6 +173,11 @@ function Insiders() {
                   })
                 }
               />
+            )}
+            {!company.data.insiders.length && (
+              <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+                <CoverageNote ticker={ticker} corpus={CORPUS.insiders} fallback="No insider transaction is on file for this company." />
+              </p>
             )}
             <InsiderTable rows={company.data.insiders.map((t) => ({ ...t, ticker }))} />
           </>

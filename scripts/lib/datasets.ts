@@ -19,3 +19,21 @@ export async function readDataset<T>(kind: "companies" | "prices", file: string)
   }
   throw new Error(`partner data service unavailable for ${kind}/${file}`);
 }
+
+/** Any file of the partner data service (screener.json, sectors.json …), read with the partner key. */
+export async function readPartnerFile<T>(path: string): Promise<T> {
+  const key = process.env.PARTNER_DATA_KEY;
+  if (!key) throw new Error(`PARTNER_DATA_KEY is not set; ${path} cannot be read`);
+  let last = "no answer";
+  for (let i = 0; i < 4; i++) {
+    const r = await fetch(`${URL_}?path=${encodeURIComponent(path)}`, { headers: { "x-partner-key": key }, signal: AbortSignal.timeout(60_000) }).catch((e) => {
+      last = (e as Error).message;
+      return null;
+    });
+    if (r?.ok) return (await r.json()) as T;
+    if (r) last = `HTTP ${r.status}`;
+    if (r && r.status === 404) break;
+    await new Promise((s) => setTimeout(s, 1500 * (i + 1)));
+  }
+  throw new Error(`partner data service: ${path} unavailable (${last})`);
+}

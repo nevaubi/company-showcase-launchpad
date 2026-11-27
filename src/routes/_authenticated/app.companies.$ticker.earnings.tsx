@@ -21,6 +21,7 @@ import { getEstimates } from "@/lib/estimates.functions";
 import { earningsReactions } from "@/lib/markets/core";
 import { earningsPricing } from "@/lib/options/core";
 import { optionsHistoryQuery } from "@/lib/options/data";
+import { quoteMoment, sourceName } from "@/lib/options/source";
 import { quoteLink } from "@/lib/supply/counterparty";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/earnings")({
@@ -142,12 +143,13 @@ function Earnings() {
       <HoldHeight phase={model.state}>
         <History ticker={ticker} quarters={model.recent} profit={model.profit} />
       </HoldHeight>
-      <PromiseTracker loading={promises.isLoading} data={promises.data} error={promises.error as Error | null} shownElsewhere={guidanceQuotes} />
+      <PromiseTracker ticker={ticker} loading={promises.isLoading} data={promises.data} error={promises.error as Error | null} shownElsewhere={guidanceQuotes} />
       <NextReport
         next={next}
         consensus={consensus}
         pricing={pricing}
         pricedAsOf={snap?.date ?? null}
+        pricedFrom={snap ? `the ${sourceName(snap)} ${quoteMoment(snap.meta)}` : undefined}
         typical={typical}
         guidance={guidance}
         listenFor={(preview.data?.listen_for ?? []).map((x) => x.text).slice(0, 6)}

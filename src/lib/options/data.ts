@@ -1,8 +1,9 @@
 // Browser reads of the nightly options snapshots (RLS: members with app access).
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { TermPoint } from "./core";
+import type { OptionsSource, TermPoint } from "./core";
 import type { StoredMove } from "./as-of";
+import { sameSource, sourceOf, type OptionsMeta } from "./source";
 
 export interface OptionsRow {
   ticker: string;
@@ -19,6 +20,10 @@ export interface OptionsRow {
   put_vol: number;
   term: TermPoint[];
   fetched_at?: string;
+  /** where the quotes came from; a history only compares rows of one source (`sameSource`) */
+  source: OptionsSource;
+  /** how the day was read (Yahoo rows) */
+  meta: OptionsMeta | null;
 }
 
 export interface OptionsBoardRow extends OptionsRow {
@@ -42,12 +47,13 @@ export const optionsHistoryQuery = (ticker: string) =>
     queryFn: async (): Promise<OptionsRow[]> => {
       const { data, error } = await supabase
         .from("options_daily")
-        .select("ticker, date, price, iv30, atm_iv, skew25, pc_oi, pc_vol, call_oi, put_oi, call_vol, put_vol, term, fetched_at")
+        .select("ticker, date, price, iv30, atm_iv, skew25, pc_oi, pc_vol, call_oi, put_oi, call_vol, put_vol, term, fetched_at, source, meta")
         .eq("ticker", ticker.toUpperCase())
         .order("date", { ascending: false })
         .limit(400);
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => ({
+      // newest first; only the newest row's source, so a rank never mixes Cboe's figures with computed ones
+      return sameSource((data ?? []).map((r) => ({
         ...r,
         price: Number(r.price),
         iv30: num(r.iv30),
@@ -56,7 +62,9 @@ export const optionsHistoryQuery = (ticker: string) =>
         pc_oi: num(r.pc_oi),
         pc_vol: num(r.pc_vol),
         term: (r.term ?? []) as unknown as TermPoint[],
-      }));
+        source: sourceOf(r),
+        meta: (r.meta ?? null) as OptionsMeta | null,
+      })));
     },
     staleTime: 30 * 60_000,
     retry: 1,
@@ -67,7 +75,7 @@ export const optionsBoardQuery = queryOptions({
   queryFn: async (): Promise<OptionsBoardRow[]> => {
     const out: OptionsBoardRow[] = [];
     for (let from = 0; from < 10000; from += 1000) {
-      const { data, error } = await supabase.rpc("options_board").order("ticker").range(from, from + 999);
+      const { data, error } = await supabase.rpc("options_board_v2").order("ticker").range(from, from + 999);
       if (error) throw new Error(error.message);
       for (const r of data ?? [])
         out.push({
@@ -83,6 +91,8 @@ export const optionsBoardQuery = queryOptions({
           call_vol: Number(r.call_vol),
           put_vol: Number(r.put_vol),
           term: (r.term ?? []) as unknown as TermPoint[],
+          source: sourceOf(r),
+          meta: (r.meta ?? null) as OptionsMeta | null,
           iv_n: num(r.iv_n),
           iv_min: num(r.iv_min),
           iv_max: num(r.iv_max),
@@ -134,11 +144,11 @@ export const setupQuoteQuery = (ticker: string, session: string) =>
   queryOptions({
     queryKey: ["setup-options", ticker, session],
     queryFn: async () => {
-      const { data, error } = await supabase.from("options_daily").select("date, price, term, skew25, pc_oi")
+      const { data, error } = await supabase.from("options_daily").select("date, price, term, skew25, pc_oi, source, meta")
         .eq("ticker", ticker).eq("date", session).maybeSingle();
       if (error) throw new Error(error.message);
       return data ? { date: data.date, price: Number(data.price), term: (data.term ?? []) as unknown as TermPoint[],
-        skew: num(data.skew25), putCall: num(data.pc_oi) } : null;
+        skew: num(data.skew25), putCall: num(data.pc_oi), source: sourceOf(data), meta: (data.meta ?? null) as OptionsMeta | null } : null;
     },
     staleTime: 30 * 60_000,
     retry: 1,

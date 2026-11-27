@@ -853,6 +853,60 @@ export type Database = {
         }
         Relationships: []
       }
+      corpus_coverage: {
+        Row: {
+          checked_at: string
+          corpus: string
+          items: number
+          newest: string | null
+          state: string
+          ticker: string
+          why: string
+        }
+        Insert: {
+          checked_at?: string
+          corpus: string
+          items?: number
+          newest?: string | null
+          state: string
+          ticker: string
+          why?: string
+        }
+        Update: {
+          checked_at?: string
+          corpus?: string
+          items?: number
+          newest?: string | null
+          state?: string
+          ticker?: string
+          why?: string
+        }
+        Relationships: []
+      }
+      corpus_coverage_daily: {
+        Row: {
+          companies: number
+          corpus: string
+          day: string
+          items: number
+          state: string
+        }
+        Insert: {
+          companies: number
+          corpus: string
+          day: string
+          items?: number
+          state: string
+        }
+        Update: {
+          companies?: number
+          corpus?: string
+          day?: string
+          items?: number
+          state?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           content: Json
@@ -1931,12 +1985,14 @@ export type Database = {
           date: string
           fetched_at: string
           iv30: number | null
+          meta: Json | null
           pc_oi: number | null
           pc_vol: number | null
           price: number
           put_oi: number
           put_vol: number
           skew25: number | null
+          source: string
           term: Json
           ticker: string
         }
@@ -1947,12 +2003,14 @@ export type Database = {
           date: string
           fetched_at?: string
           iv30?: number | null
+          meta?: Json | null
           pc_oi?: number | null
           pc_vol?: number | null
           price: number
           put_oi?: number
           put_vol?: number
           skew25?: number | null
+          source?: string
           term?: Json
           ticker: string
         }
@@ -1963,12 +2021,14 @@ export type Database = {
           date?: string
           fetched_at?: string
           iv30?: number | null
+          meta?: Json | null
           pc_oi?: number | null
           pc_vol?: number | null
           price?: number
           put_oi?: number
           put_vol?: number
           skew25?: number | null
+          source?: string
           term?: Json
           ticker?: string
         }
@@ -3507,6 +3567,33 @@ export type Database = {
         }
         Relationships: []
       }
+      supply_scans: {
+        Row: {
+          accn: string
+          filed: string
+          form: string
+          links: number
+          scanned_at: string
+          ticker: string
+        }
+        Insert: {
+          accn: string
+          filed: string
+          form: string
+          links?: number
+          scanned_at?: string
+          ticker: string
+        }
+        Update: {
+          accn?: string
+          filed?: string
+          form?: string
+          links?: number
+          scanned_at?: string
+          ticker?: string
+        }
+        Relationships: []
+      }
       supply_signals: {
         Row: {
           accn: string | null
@@ -4550,6 +4637,13 @@ export type Database = {
         }[]
       }
       consume_usage: { Args: { _kind: string }; Returns: Json }
+      corpus_coverage_matrix: { Args: never; Returns: Json }
+      corpus_coverage_put: {
+        Args: { _corpus: string; _rows: Json }
+        Returns: number
+      }
+      corpus_coverage_rows: { Args: { _corpus: string }; Returns: Json }
+      corpus_measure: { Args: { _corpus: string }; Returns: Json }
       create_firm: { Args: { _name: string }; Returns: string }
       data_coverage: {
         Args: never
@@ -4664,6 +4758,19 @@ export type Database = {
           unfinished: number
         }[]
       }
+      lane_last_runs: {
+        Args: { _jobs: string[] }
+        Returns: {
+          detail: Json
+          failed_24h: number
+          finished_at: string
+          items: number
+          job: string
+          ok: boolean
+          runs_24h: number
+          started_at: string
+        }[]
+      }
       my_firm_invites: {
         Args: never
         Returns: {
@@ -4701,6 +4808,33 @@ export type Database = {
           put_oi: number
           put_vol: number
           skew25: number
+          term: Json
+          ticker: string
+          vol_avg20: number
+        }[]
+      }
+      options_board_v2: {
+        Args: never
+        Returns: {
+          atm_iv: number
+          call_oi: number
+          call_vol: number
+          date: string
+          fetched_at: string
+          iv_below: number
+          iv_max: number
+          iv_min: number
+          iv_n: number
+          iv_prev: number
+          iv30: number
+          meta: Json
+          pc_oi: number
+          pc_vol: number
+          price: number
+          put_oi: number
+          put_vol: number
+          skew25: number
+          source: string
           term: Json
           ticker: string
           vol_avg20: number

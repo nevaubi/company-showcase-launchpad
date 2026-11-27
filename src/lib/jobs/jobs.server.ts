@@ -11,20 +11,22 @@ import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { storeForm4 } from "@/lib/jobs/form4.server";
 import { budgetCut, claimSlice, commitSlice, outcomeOf, runBudgetMs, sliceKey, unitTimeoutMs, type Claim, type SliceOutcome } from "@/lib/jobs/slice";
-import { fairOrder, nextTailOffset } from "@/lib/jobs/priority";
+import { fairOrder } from "@/lib/jobs/priority";
 import { loadJobRank } from "@/lib/jobs/priority.server";
-import { backoffRow, blockStreak, chainStatus, judgeSlice, OPTIONS_BACKOFF_KEY, OPTIONS_PROBE, optionsNight, type ChainResult } from "@/lib/jobs/options-run";
 import { backoffTicker, chargeFailure, estimateErrorClass, pickEstimates, scanCursorAfter, ESTIMATE_FAIL_PREFIX, ESTIMATE_NONE_PREFIX, ESTIMATE_SCAN, type FailReceipt } from "@/lib/jobs/estimates-order";
 import { barProblem } from "@/lib/jobs/bar-check";
 import { targetSession } from "@/lib/jobs/trading-days";
 import { listingClosure } from "@/lib/company/listing-history";
-import { healRow, providerKey, tripRow, type CircuitRow } from "@/lib/jobs/provider-health";
 import { isEarnings } from "@/lib/jobs/sec-discover";
+import { isOwnerHold } from "@/lib/jobs/lane-hold";
+import { holdKey } from "@/lib/jobs/lanes";
 
 export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror" | "emails" | "abs-ee" | "call-archive";
 
-/** job_state row: where the options tail rotation starts tonight (cursor = offset into the tail). */
-const OPTIONS_TAIL_KEY = "options-tail";
+/** The options collection's lane on the board: the app job is its second lane and obeys the same hold. */
+const OPTIONS_LANE = "loop:options-night";
+/** job_state rows of the Cboe options collector (to 27 Nov 2026): cleared by the options job, never written again. */
+const LEGACY_OPTIONS_KEYS = ["options-backoff", "provider:cboe", "options-worker"];
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 const slice = <T,>(all: T[], start: number, n: number) => all.slice(start, start + n);
@@ -222,105 +224,72 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
     return { ok: true, items: rows.length, detail: { period: next } };
   },
   /**
-   * Nightly options snapshots from Cboe's delayed chains: four stocks per call, top 1,000 by dv20
-   * first (the list restarts at the top each night, so a short night still covers the biggest names).
-   * Rows are keyed by the quotes' own trading day, so a re-run the same night overwrites rather than
-   * duplicates. A refusal (429, or 403s that SPY confirms) is not "no options": the slice is held,
-   * the job backs off (`options-backoff`), `provider:cboe` records the block and the run is not ok.
+   * Options snapshots, second lane. The worker collects each session's chains from Yahoo Finance
+   * after the close (`scripts/options-snapshot.ts --night`; rules in options-collect.ts). This job
+   * only steps in while the worker is silent: then it reads `APP_STEP` stocks a call by the same
+   * rules and routes (direct, then the page reader), from its own place (`options-app`), skipping
+   * names already stored for the session. A refusal of both routes is not ok and holds the place.
    */
   async options() {
-    const { cboeChainUrl, snapshotRow, summarizeChain } = await import("@/lib/options/core");
-    const left = budget();
+    const oc = await import("@/lib/jobs/options-collect");
     const now = Date.now();
-    const night = optionsNight(now);
-    const st0 = await readStates([OPTIONS_BACKOFF_KEY, providerKey("cboe"), "options-night", "options", OPTIONS_TAIL_KEY]);
-    const backoff = st0.get(OPTIONS_BACKOFF_KEY);
-    if ((backoff?.cursor ?? 0) > now / 1000) return { ok: true, items: 0, detail: { idle: true, retryAt: new Date((backoff?.cursor ?? 0) * 1000).toISOString(), reason: backoff?.paused_reason } };
-    const step = 4;
-    // The tail rotation resumes where last night's pass ended (review R4); before the first night
-    // with this row it starts at the night number, as it did.
-    let tailOffset = st0.get(OPTIONS_TAIL_KEY)?.cursor ?? night;
-    if ((st0.get("options-night")?.cursor ?? 0) !== night) {
-      // A new night starts at the top of the ranked list; the tail goes on after the names last night reached.
-      const rank = await loadJobRank();
-      if (rank.size) tailOffset = nextTailOffset(COVERAGE.map((c) => c.ticker), rank, tailOffset, Number(st0.get("options")?.cursor ?? 0));
-      await putCursors([{ job: "options", cursor: 0 }, { job: sliceKey("options"), cursor: 0 }, { job: "options-night", cursor: night }, { job: OPTIONS_TAIL_KEY, cursor: tailOffset }]);
+    const holdRow = holdKey(OPTIONS_LANE);
+    const st = await readStates([oc.COLLECT_KEY, oc.APP_KEY, oc.READER_KEY, holdRow, ...LEGACY_OPTIONS_KEYS]);
+    // Rows the Cboe collector left behind (its back-off, its circuit, the worker's night): cleared once.
+    const legacy = LEGACY_OPTIONS_KEYS.filter((k) => st.get(k)?.paused_reason);
+    if (legacy.length) {
+      const { error } = await supabaseAdmin.from("job_state").upsert(legacy.map((job) => ({ job, cursor: 0, paused_reason: null, updated_at: new Date(now).toISOString() })));
+      if (error) throw new Error(error.message);
     }
-    const tickers = (await rankedCoverage(tailOffset)).map((c) => c.ticker);
-    const { c: cl } = await claim("options", tickers.length, step);
-    const picked = slice(tickers, cl.start, step);
-    const headers = { "User-Agent": "Mozilla/5.0 (compatible; FiledUnder/1.0)", Accept: "application/json" };
-    const results: ChainResult[] = await Promise.all(
-      picked.map(async (t): Promise<ChainResult> => {
-        try {
-          const r = await fetch(cboeChainUrl(t), { headers, signal: AbortSignal.timeout(unitTimeoutMs(left.end - 600, Date.now())) });
-          const kind = chainStatus(r.status);
-          if (kind !== "read") {
-            r.body?.cancel().catch(() => undefined);
-            if (kind === "error") return { t, kind: "error", message: `HTTP ${r.status}` };
-            return { t, kind, status: r.status };
-          }
-          const j = (await r.json()) as { data?: import("@/lib/options/core").CboeChain };
-          const snap = j.data ? summarizeChain(t, j.data) : null;
-          return snap ? { t, kind: "stored", row: snapshotRow(snap) } : { t, kind: "none", status: r.status };
-        } catch (e) {
-          return { t, kind: "error", message: (e as Error).message.slice(0, 120) };
-        }
-      }),
+    // The owner stopped the options collection (lane board): the second lane stays out too.
+    if (isOwnerHold(st.get(holdRow)?.paused_reason)) return { ok: true, items: 0, detail: { idle: true, held: st.get(holdRow)!.paused_reason } };
+    const worker = st.get(oc.COLLECT_KEY);
+    if (!oc.appTakesOver({ nowMs: now, row: worker })) return { ok: true, items: 0, detail: { idle: true, by: "worker", worker: worker?.paused_reason ?? null } };
+    const tickers = (await rankedCoverage()).map((c) => c.ticker);
+    const mine = st.get(oc.APP_KEY);
+    const plan = oc.collectPlan({ nowMs: now, row: mine, total: tickers.length });
+    if (!plan.run) return { ok: true, items: 0, detail: { idle: true, why: plan.why } };
+    const { Collector, loadRate, openRoutes } = await import("@/lib/options/collect.server");
+    const left = budget();
+    const used0 = oc.readerUsed(st.get(oc.READER_KEY), plan.session);
+    const c = new Collector(supabaseAdmin, process.env, await loadRate(supabaseAdmin), plan.date, openRoutes(used0));
+    const chunk = slice(tickers, plan.start, oc.APP_STEP);
+    const { data: have, error: hErr } = await supabaseAdmin.from("options_daily").select("ticker").in("ticker", chunk).eq("date", plan.date).eq("source", "yahoo");
+    if (hErr) throw new Error(hErr.message);
+    const todo = oc.toFetch(chunk, new Set((have ?? []).map((r) => r.ticker)));
+    const results = await Promise.all(
+      todo.map((t) => c.one(t, AbortSignal.timeout(unitTimeoutMs(left.end - 600, Date.now()))).catch((e: Error): import("@/lib/jobs/options-collect").ChainOutcome => ({ t, kind: "error", message: e.message.slice(0, 120) }))),
     );
-    let verdict = judgeSlice(results);
-    let probe: number | undefined;
-    if (verdict.needsProbe) {
-      probe = await fetch(cboeChainUrl(OPTIONS_PROBE), { headers, signal: AbortSignal.timeout(unitTimeoutMs(left.end - 300, Date.now())) })
-        .then((r) => (r.body?.cancel().catch(() => undefined), r.status))
-        .catch(() => 0);
-      verdict = judgeSlice(results, probe);
-    }
-    const rows = verdict.results.flatMap((r) => (r.kind === "stored" ? [r.row as ReturnType<typeof snapshotRow>] : []));
+    const rows = results.flatMap((r) => (r.kind === "stored" ? [{ ...r.row, fetched_at: new Date().toISOString() }] : []));
     if (rows.length) {
-      const { error } = await supabaseAdmin.from("options_daily").upsert(rows.map((r) => ({ ...r, term: r.term as unknown as Json, fetched_at: new Date().toISOString() })), { onConflict: "ticker,date" });
+      const { error } = await supabaseAdmin.from("options_daily").upsert(rows as never, { onConflict: "ticker,date" });
       if (error) throw new Error(error.message);
     }
-    await commit("options", cl, verdict.outcome, tickers.length, step);
-    const cboe = st0.get(providerKey("cboe")) as CircuitRow | undefined;
-    let retryAt: string | undefined;
-    if (verdict.outcome === "blocked") {
-      const statuses = verdict.results.flatMap((r) => (r.kind === "blocked" ? [r.status] : []));
-      const b = backoffRow(blockStreak(backoff?.paused_reason) + 1, statuses, Date.now());
-      retryAt = new Date(b.cursor * 1000).toISOString();
-      const trip = tripRow("cboe", "rate", b.paused_reason.replace(/^blocked: /, "").replace(/\s\[n=\d+\]$/, ""), cboe ?? null, Date.now());
-      // Same columns in both rows; the circuit's retry time follows the job's own backoff.
-      const { error } = await supabaseAdmin.from("job_state").upsert([
-        { job: b.job, cursor: b.cursor, paused_reason: b.paused_reason, updated_at: b.updated_at },
-        { job: trip.job, cursor: b.cursor, paused_reason: trip.paused_reason, updated_at: trip.updated_at ?? b.updated_at },
-      ]);
+    // a name without listed options leaves a receipt (coverage ledger: "has none" is not "not collected")
+    const none = oc.noneReceipts(results, Date.now());
+    if (none.length) await supabaseAdmin.from("job_state").upsert(none.map((r) => ({ job: r.job, cursor: r.cursor ?? 0, paused_reason: null, updated_at: r.updated_at ?? new Date().toISOString() })));
+    const put = async (row: StateRow) => {
+      const { error } = await supabaseAdmin.from("job_state").upsert({ job: row.job, cursor: row.cursor ?? 0, paused_reason: row.paused_reason, updated_at: row.updated_at ?? new Date().toISOString() });
       if (error) throw new Error(error.message);
-    } else if (verdict.stored > 0 && (backoff?.paused_reason || cboe?.paused_reason)) {
-      // Cboe answered again: clear the backoff and close the circuit.
-      const heal = healRow("cboe", Date.now());
-      const at = heal.updated_at ?? new Date().toISOString();
-      const { error } = await supabaseAdmin.from("job_state").upsert([
-        { job: OPTIONS_BACKOFF_KEY, cursor: 0, paused_reason: null, updated_at: at },
-        { job: heal.job, cursor: 0, paused_reason: null, updated_at: at },
-      ]);
-      if (error) throw new Error(error.message);
-    }
-    const of = (k: ChainResult["kind"]) => verdict.results.filter((r) => r.kind === k);
-    return {
-      ok: verdict.outcome === "done",
-      items: rows.length,
-      detail: {
-        ...sliceDetail(cl, verdict.outcome, tickers.length),
-        night,
-        tailOffset,
-        stored: rows.map((r) => r.ticker),
-        none: of("none").map((r) => `${r.t}${"status" in r ? ` ${r.status}` : ""}`),
-        blocked: of("blocked").map((r) => `${r.t}${"status" in r ? ` ${r.status}` : ""}`),
-        failed: of("error").map((r) => `${r.t}: ${"message" in r ? r.message : ""}`),
-        ...(probe !== undefined ? { probe: `${OPTIONS_PROBE} ${probe}` } : {}),
-        ...(retryAt ? { retryAt } : {}),
-      },
     };
+    if (c.routes.readerUsed !== used0) await put(oc.readerRow(plan.session, c.routes.readerUsed, Date.now()));
+    const counts = oc.tally(oc.emptyTally(), results);
+    const detail = { by: "app", session: plan.session, at: plan.start, of: tickers.length, ...counts, names: results.map((r) => `${r.t} ${r.kind}${r.kind === "error" ? `: ${r.message}` : r.kind === "stale" ? ` (${r.quoted})` : ""}`) };
+    const key = (row: StateRow): StateRow => ({ ...row, job: oc.APP_KEY });
+    if (results.some((r) => r.kind === "blocked")) {
+      const why = `Yahoo refused the app server (HTTP ${c.routes.lastStatus || "?"})${c.routes.readerClosed ? " and the page reader was refused too" : " and the page reader's requests for the session are used"}`;
+      await put(key(oc.collectBlocked(plan.session, plan.start, oc.parseCollect(mine), Date.now(), why)));
+      return { ok: false, items: rows.length, detail: { ...detail, blocked: why } };
+    }
+    // The first names of the list always trade on a session day: all of them showing an earlier day means a holiday.
+    if (plan.start === 0 && results.length > 0 && results.every((r) => r.kind === "stale" && r.quoted.slice(0, 10) < plan.date)) {
+      const last = results[0]!.kind === "stale" ? results[0]!.quoted.slice(0, 10) : plan.date;
+      await put(key(oc.collectClosed(plan.session, last, Date.now())));
+      return { ok: true, items: 0, detail: { ...detail, closed: true } };
+    }
+    if (oc.chunkFailed(results)) return { ok: false, items: 0, detail: { ...detail, failed: true } };
+    await put(key(oc.collectProgress(plan.session, plan.start + chunk.length, tickers.length, Date.now())));
+    return { ok: true, items: rows.length, detail };
   },
   /**
    * Analyst estimates, three a run: covered companies with no stored estimates first (top 1,000 by

@@ -49,7 +49,9 @@ describe("watchdog rules", () => {
   it("prices are not expected outside market hours", () => {
     const night = Date.parse("2026-11-21T03:00:00Z");
     const jobs = SCHEDULED.map((j) => ({ ...j, last_run: new Date(night - 60_000).toISOString() })).map((j) => (j.job === "prices" ? { ...j, last_run: iso(60 * 4) } : j));
-    const i = { ...input({ jobs }), freshness: input().freshness.map((f) => (f.key === "worker_heartbeat" ? { ...f, newest: new Date(night - 60_000).toISOString() } : f)) };
+    // (22:00 in New York: the options collection has finished its list for the session)
+    const states: StateRow[] = [{ job: "options-collect", cursor: 1844, paused_reason: "session:20261120 done", updated_at: new Date(night - 90 * 60_000).toISOString() }];
+    const i = { ...input({ jobs, states }), freshness: input().freshness.map((f) => (f.key === "worker_heartbeat" ? { ...f, newest: new Date(night - 60_000).toISOString() } : f)) };
     expect(alerts(i, night, REMEDY_KEYS).map((a) => a.key)).toEqual([]);
   });
   it("an AI provider out of credit or misconfigured; the routine free-allowance stop is not an alert", () => {
@@ -64,9 +66,29 @@ describe("watchdog rules", () => {
     expect(a[1].action).toMatch(/Fix the configuration/);
     expect(a.every((x) => x.graceMin === 120)).toBe(true);
   });
-  it("options blocked", () => {
-    const states = [{ job: "options-backoff", cursor: 2_000_000_000, paused_reason: "blocked: Cboe refused option chains (403 x4, 429 x0) [n=2]", updated_at: iso(1) }];
-    expect(keys(input({ states }))).toEqual(["options-blocked"]);
+  it("options blocked: both routes refused, while the back-off lasts", () => {
+    const evening = Date.parse("2026-11-20T22:00:00Z"); // 17:00 in New York
+    const at = (m: number) => new Date(evening + m * 60_000).toISOString();
+    const base = { ...input(), freshness: input().freshness.map((f) => (f.key === "worker_heartbeat" ? { ...f, newest: at(-1) } : f)), jobs: SCHEDULED.map((j) => ({ ...j, last_run: at(-1), last_ok: at(-1) })) };
+    const blocked: StateRow = { job: "options-collect", cursor: 300, paused_reason: `session:20261120 blocked until ${at(10)} Yahoo refused the collector (HTTP 429) and the page reader's 600 requests for the session are used [n=2]`, updated_at: at(0) };
+    const a = alerts({ ...base, states: [blocked] }, evening + 60_000, REMEDY_KEYS).filter((x) => x.key.startsWith("options"));
+    expect(a.map((x) => x.key)).toEqual(["options-blocked"]);
+    expect(a[0].title).toBe("Options collection blocked: Yahoo refused the collector (HTTP 429) and the page reader's 600 requests for the session are used");
+    // once the back-off has run out the collector tries again: no block alert, and the row is recent
+    expect(alerts({ ...base, states: [blocked] }, evening + 11 * 60_000, REMEDY_KEYS).filter((x) => x.key.startsWith("options"))).toEqual([]);
+  });
+  it("options behind: neither lane moved for 45 minutes inside the window; a finished list or a holiday is not behind", () => {
+    const evening = Date.parse("2026-11-20T23:00:00Z"); // 18:00 in New York, 100 minutes into the window
+    const at = (m: number) => new Date(evening + m * 60_000).toISOString();
+    const base = { ...input(), freshness: input().freshness.map((f) => (f.key === "worker_heartbeat" ? { ...f, newest: at(-1) } : f)), jobs: SCHEDULED.map((j) => ({ ...j, last_run: at(-1), last_ok: at(-1) })) };
+    const run = (states: StateRow[]) => alerts({ ...base, states }, evening, REMEDY_KEYS).map((x) => x.key).filter((k) => k.startsWith("options"));
+    const worker = (reason: string, minAgo: number): StateRow => ({ job: "options-collect", cursor: 300, paused_reason: reason, updated_at: at(-minAgo) });
+    expect(run([worker("session:20261120", 50)])).toEqual(["options-behind"]);
+    expect(run([])).toEqual(["options-behind"]);
+    expect(run([worker("session:20261120", 10)])).toEqual([]);
+    expect(run([worker("session:20261120", 50), { job: "options-app", cursor: 12, paused_reason: "session:20261120", updated_at: at(-2) }])).toEqual([]);
+    expect(run([worker("session:20261120 done", 80)])).toEqual([]);
+    expect(run([worker("session:20261120 closed: Yahoo's newest quote is from 2026-11-19", 80)])).toEqual([]);
   });
   it("a stale dataset alerts at once without a remedy, and after six hours of staleness with one, whatever the remedy receipt says", () => {
     const stale = [{ key: "supply_signals", newest: iso(60 * 24 * 15) }, { key: "macro", newest: iso(60 * 30) }];

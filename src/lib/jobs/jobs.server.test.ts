@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeSupabase } from "@/test/fake-supabase";
 import { COVERAGE, MACRO_SERIES } from "@/lib/coverage";
-import { optionsNight } from "./options-run";
 
 const mocks = vi.hoisted(() => ({
   db: null as unknown as ReturnType<typeof import("@/test/fake-supabase").fakeSupabase>,
@@ -138,116 +137,168 @@ describe("commit-after-work cursors", () => {
   });
 });
 
-describe("options: blocked is not 'no options'", () => {
-  const night = () => optionsNight(Date.now());
-  function chains(byTicker: (t: string) => number | { status: number; body?: unknown }) {
-    const calls: string[] = [];
+describe("options: the app job is the second lane behind the worker", () => {
+  // Friday 27 Nov 2026 22:30 UTC = 17:30 in New York: 70 minutes into the collection window
+  const NOW = Date.parse("2026-11-27T22:30:00Z");
+  const CLOSE = Date.parse("2026-11-27T18:00:02Z") / 1000; // an early close
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** A small finished-session chain for one stock: one expiry 21 days out, quoted both sides at three strikes. */
+  const chain = (t: string, over: { state?: string; at?: number } = {}) => ({
+    optionChain: {
+      result: [
+        {
+          underlyingSymbol: t,
+          quote: { regularMarketPrice: 100, regularMarketTime: over.at ?? CLOSE, marketState: over.state ?? "POST" },
+          options: [
+            {
+              expirationDate: Date.parse("2026-12-18T00:00:00Z") / 1000,
+              calls: [[95, 6.4], [100, 3.4], [105, 1.5]].map(([k, px]) => ({ contractSymbol: `${t.replace("-", "")}261218C${String(k! * 1000).padStart(8, "0")}`, strike: k, bid: px! - 0.05, ask: px! + 0.05, volume: 3, openInterest: 30 })),
+              puts: [[95, 1.3], [100, 3.2], [105, 6.3]].map(([k, px]) => ({ contractSymbol: `${t.replace("-", "")}261218P${String(k! * 1000).padStart(8, "0")}`, strike: k, bid: px! - 0.05, ask: px! + 0.05, volume: 2, openInterest: 60 })),
+            },
+          ],
+          error: null,
+        },
+      ],
+      error: null,
+    },
+  });
+  /** Yahoo and the page reader. `yahoo(t)` answers a status or a body for the chain request. */
+  function net(yahoo: (t: string) => number | object, reader: (t: string) => number | object = () => 500) {
+    const calls = { direct: [] as string[], reader: [] as string[], session: 0 };
+    const symbol = (u: string) => decodeURIComponent(/\/options\/([^?]+)/.exec(u)![1]!);
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => {
-        const t = decodeURIComponent(url.split("/").pop()!.replace(/\.json$/, "")).replace(/^_/, "");
-        calls.push(t);
-        const r = byTicker(t);
-        const status = typeof r === "number" ? r : r.status;
-        const body = typeof r === "number" ? {} : r.body;
-        return new Response(JSON.stringify(body ?? {}), { status });
+      vi.fn(async (url: string, init?: { body?: string }) => {
+        if (url.startsWith("https://fc.yahoo.com")) return new Response("", { status: 404, headers: { "set-cookie": "A3=abc; Domain=.yahoo.com" } });
+        if (url.includes("/v1/test/getcrumb")) return (calls.session++, new Response("crumb123", { status: 200 }));
+        if (url.includes("firecrawl")) {
+          const t = symbol((JSON.parse(init!.body!) as { url: string }).url);
+          calls.reader.push(t);
+          const r = reader(t);
+          return typeof r === "number" ? new Response("{}", { status: r }) : new Response(JSON.stringify({ success: true, data: { rawHtml: JSON.stringify(r), metadata: { statusCode: 200 } } }), { status: 200 });
+        }
+        const t = symbol(url);
+        calls.direct.push(t);
+        const r = yahoo(t);
+        return typeof r === "number" ? new Response("{}", { status: r }) : new Response(JSON.stringify(r), { status: 200 });
       }),
     );
     return calls;
   }
-  const seed = (cursor: number, extra: ReturnType<typeof st>[] = []) => (mocks.db = fakeSupabase({ job_state: [st("options", cursor), st("options-night", night()), ...extra] }));
+  const first = COVERAGE.slice(0, 2).map((c) => c.ticker);
+  const rate = { series_id: "DGS3MO", date: "2026-11-24", value: 4.36 };
+  const silent = new Date(NOW - 40 * 60_000).toISOString();
 
-  it("four 403s confirmed by SPY: run not ok, cursor held, backoff and Cboe circuit written, nothing stored", async () => {
-    seed(8);
-    const calls = chains(() => 403);
-    const before = Math.floor(Date.now() / 1000);
+  it("does nothing while the worker is collecting", async () => {
+    mocks.db = fakeSupabase({ job_state: [{ ...st("options-collect", 300, "session:20261127"), updated_at: new Date(NOW - 5 * 60_000).toISOString() }] });
+    const calls = net(() => 200);
     const r = await runJob("options");
+    expect(r).toMatchObject({ ok: true, items: 0, detail: { idle: true, by: "worker" } });
+    expect(calls.direct).toHaveLength(0);
+  });
+
+  it("is idle once the worker finished the session, and outside the window", async () => {
+    mocks.db = fakeSupabase({ job_state: [{ ...st("options-collect", 1844, "session:20261127 done"), updated_at: silent }] });
+    expect((await runJob("options")).detail.idle).toBe(true);
+    vi.setSystemTime(Date.parse("2026-11-27T19:00:00Z"));
+    mocks.db = fakeSupabase();
+    expect((await runJob("options")).detail.idle).toBe(true);
+  });
+
+  it("reads two stocks from Yahoo when the worker has been silent, and stores them with their source", async () => {
+    mocks.db = fakeSupabase({ job_state: [{ ...st("options-collect", 300, "session:20261127"), updated_at: silent }], macro_observations: [rate] });
+    const calls = net((t) => chain(t));
+    const r = await runJob("options");
+    expect(r.ok).toBe(true);
+    expect(r.items).toBe(2);
+    expect(calls.direct).toEqual(first);
+    expect(calls.reader).toHaveLength(0);
+    const rows = mocks.db.tables["options_daily"]!;
+    expect(rows.map((x) => x["ticker"])).toEqual(first);
+    expect(rows[0]).toMatchObject({ date: "2026-11-27", price: 100, source: "yahoo" });
+    expect(rows[0]!["meta"]).toMatchObject({ state: "POST", route: "direct", rate: 0.0436, rateDate: "2026-11-24" });
+    // its own place moves; the worker's row is left alone
+    expect(mocks.db.state("options-app")).toMatchObject({ cursor: 2, paused_reason: "session:20261127" });
+    expect(mocks.db.state("options-collect")!.cursor).toBe(300);
+  });
+
+  it("goes through the page reader when Yahoo refuses the app server, and counts the requests", async () => {
+    mocks.db = fakeSupabase({ macro_observations: [rate] });
+    const env = process.env["FIRECRAWL_API_KEY"];
+    process.env["FIRECRAWL_API_KEY"] = "fc-test";
+    const calls = net(() => 429, (t) => chain(t));
+    const r = await runJob("options");
+    process.env["FIRECRAWL_API_KEY"] = env;
+    expect(r.ok).toBe(true);
+    expect(r.items).toBe(2);
+    expect([...calls.reader].sort()).toEqual([...first].sort());
+    expect(mocks.db.tables["options_daily"]![0]!["meta"]).toMatchObject({ route: "reader" });
+    expect(mocks.db.state("options-reader")).toMatchObject({ cursor: 2, paused_reason: "session:20261127" });
+  });
+
+  it("both routes refused: not ok, place held, nothing stored, next try after five minutes", async () => {
+    mocks.db = fakeSupabase({ macro_observations: [rate] });
+    const env = process.env["FIRECRAWL_API_KEY"];
+    process.env["FIRECRAWL_API_KEY"] = "fc-test";
+    net(() => 429, () => 402);
+    const r = await runJob("options");
+    process.env["FIRECRAWL_API_KEY"] = env;
     expect(r.ok).toBe(false);
-    expect(calls).toContain("SPY");
-    expect(mocks.db.state("options")!.cursor).toBe(8);
-    const b = mocks.db.state("options-backoff")!;
-    expect(b.cursor).toBeGreaterThanOrEqual(before + 90);
-    expect(b.paused_reason).toMatch(/^blocked: Cboe refused option chains \(403 x4, 429 x0\) \[n=1\]$/);
-    expect(mocks.db.state("provider:cboe")!.paused_reason).toMatch(/^rate: /);
-    expect(mocks.db.tables.options_daily ?? []).toHaveLength(0);
-    expect(r.detail.blocked).toHaveLength(4);
+    expect(mocks.db.tables["options_daily"] ?? []).toHaveLength(0);
+    const row = mocks.db.state("options-app")!;
+    expect(row.cursor).toBe(0);
+    expect(row.paused_reason).toMatch(/^session:20261127 blocked until 2026-11-27T22:35:00\.000Z Yahoo refused the app server \(HTTP 402\) and the page reader was refused too \[n=1\]$/);
+    // and it makes no request until then
+    const calls = net(() => 200);
+    vi.setSystemTime(NOW + 60_000);
+    expect((await runJob("options")).detail.idle).toBe(true);
+    expect(calls.direct).toHaveLength(0);
   });
 
-  it("four 404s: no listed options, run ok, cursor advanced", async () => {
-    seed(8);
-    chains(() => 404);
+  it("a market holiday: the first names show an earlier session, the day is recorded as closed", async () => {
+    mocks.db = fakeSupabase({ macro_observations: [rate] });
+    net((t) => chain(t, { state: "CLOSED", at: Date.parse("2026-11-25T21:00:02Z") / 1000 }));
+    const r = await runJob("options");
+    expect(r).toMatchObject({ ok: true, items: 0, detail: { closed: true } });
+    expect(mocks.db.state("options-app")!.paused_reason).toBe("session:20261127 closed: Yahoo's newest quote is from 2026-11-25");
+    expect(mocks.db.tables["options_daily"] ?? []).toHaveLength(0);
+  });
+
+  it("no listed options and no usable quotes are not failures: the place moves on", async () => {
+    mocks.db = fakeSupabase({ macro_observations: [rate] });
+    net((t) => (t === first[0] ? { optionChain: { result: [], error: null } } : chain(t, { state: "POST" })));
     const r = await runJob("options");
     expect(r.ok).toBe(true);
-    expect(mocks.db.state("options")!.cursor).toBe(12);
-    expect(r.detail.none).toHaveLength(4);
-    expect(mocks.db.state("options-backoff")).toBeUndefined();
+    expect(r.items).toBe(1);
+    expect(r.detail).toMatchObject({ stored: 1, none: 1 });
+    expect(mocks.db.state("options-app")!.cursor).toBe(2);
   });
 
-  it("four 403s while SPY answers: the symbols are unlisted, not blocked", async () => {
-    seed(8);
-    chains((t) => (t === "SPY" ? 200 : 403));
-    const r = await runJob("options");
-    expect(r.ok).toBe(true);
-    expect(r.detail.none).toHaveLength(4);
-    expect(mocks.db.state("options")!.cursor).toBe(12);
-  });
-
-  it("a 429 holds the slice without spending one of its three tries", async () => {
-    seed(8);
-    chains(() => 429);
+  it("skips names already stored for the session", async () => {
+    mocks.db = fakeSupabase({ macro_observations: [rate], options_daily: [{ ticker: first[0], date: "2026-11-27", source: "yahoo", price: 1 }] });
+    const calls = net((t) => chain(t));
     await runJob("options");
-    await runJob("options").catch(() => undefined);
-    // the second run is idle (backoff), the slice keeps attempt 0
-    expect(mocks.db.state("options-slice")!.cursor).toBe(80);
-    expect(mocks.db.state("options")!.cursor).toBe(8);
+    expect(calls.direct).toEqual([first[1]]);
   });
 
-  it("makes no request while the backoff is in the future", async () => {
-    seed(8, [st("options-backoff", Math.floor(Date.now() / 1000) + 600, "blocked: Cboe refused option chains (403 x4, 429 x0) [n=2]")]);
-    const calls = chains(() => 200);
-    const r = await runJob("options");
-    expect(calls).toHaveLength(0);
-    expect(r.detail.idle).toBe(true);
-  });
-
-  it("the next block doubles the wait", async () => {
-    seed(8, [st("options-backoff", Math.floor(Date.now() / 1000) - 1, "blocked: Cboe refused option chains (403 x4, 429 x0) [n=2]")]);
-    chains(() => 429);
-    await runJob("options");
-    expect(mocks.db.state("options-backoff")!.paused_reason).toMatch(/\[n=3\]$/);
-  });
-
-  it("stored chains after a block clear the backoff and close the Cboe circuit", async () => {
-    const chain = { current_price: 100, last_trade_time: "2026-11-19T21:00:00", options: [] };
-    seed(8, [st("options-backoff", Math.floor(Date.now() / 1000) - 1, "blocked: x [n=2]"), st("provider:cboe", Math.floor(Date.now() / 1000) - 1, "rate: x [n=2]")]);
-    vi.doMock("@/lib/options/core", async () => {
-      const real = await vi.importActual<typeof import("@/lib/options/core")>("@/lib/options/core");
-      return { ...real, summarizeChain: (t: string) => ({ ticker: t, date: "2026-11-19" }), snapshotRow: (s: { ticker: string; date: string }) => ({ ticker: s.ticker, date: s.date, term: [] }) };
+  it("clears the rows the Cboe collector left behind", async () => {
+    mocks.db = fakeSupabase({
+      job_state: [
+        st("options-backoff", 1795760414, "blocked: Cboe refused option chains (403 x4, 429 x0) [n=40]"),
+        st("provider:cboe", 1795760414, "rate: Cboe refused option chains (403 x4, 429 x0) [n=40]"),
+        st("options-worker", 0, "night:20261126 blocked until 2026-11-27T07:55:40.894Z Cboe refused the worker (403 x20, 429 x0) [n=1]"),
+        { ...st("options-collect", 300, "session:20261127"), updated_at: new Date(NOW - 60_000).toISOString() },
+      ],
     });
-    chains(() => ({ status: 200, body: { data: chain } }));
-    const r = await runJob("options");
-    vi.doUnmock("@/lib/options/core");
-    expect(r.ok).toBe(true);
-    expect(r.items).toBe(4);
-    expect(mocks.db.state("options-backoff")!.paused_reason).toBeNull();
-    expect(mocks.db.state("provider:cboe")!.paused_reason).toBeNull();
-  });
-
-  it("a new night starts the tail after the names last night reached, not at the night number (review R4)", async () => {
-    mocks.rank = new Map(COVERAGE.slice(0, 1000).map((c, i) => [c.ticker, i + 1]));
-    mocks.db = fakeSupabase({ job_state: [st("options", 1500), st("options-night", 20200101), st("options-tail", 5)] });
-    chains(() => 404);
-    const r = await runJob("options");
-    // 1,500 positions of fairOrder = 1,000 head + 250 interleaved + 250 more tail names
-    expect(mocks.db.state("options-tail")!.cursor).toBe(5 + 500);
-    expect(r.detail.tailOffset).toBe(505);
-  });
-  it("a new night starts again at the top of the ranked list", async () => {
-    mocks.db = fakeSupabase({ job_state: [st("options", 400), st("options-night", 20200101)] });
-    chains(() => 404);
-    const r = await runJob("options");
-    expect(r.detail.at).toBe(0);
-    expect(mocks.db.state("options-night")!.cursor).toBe(night());
+    net(() => 200);
+    await runJob("options");
+    for (const k of ["options-backoff", "provider:cboe", "options-worker"]) expect(mocks.db.state(k)).toMatchObject({ cursor: 0, paused_reason: null });
+    expect(mocks.db.state("options-collect")!.paused_reason).toBe("session:20261127");
   });
 });
 

@@ -15,7 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSource, type SourceTarget } from "@/components/source/source-context";
 import { useUniverse } from "@/lib/data";
 import { earningsIndexQuery, todayIso } from "@/lib/calendars/data";
-import { cboeQuotePage, earningsPricing, impliedMoveBy, REPORT_EXPIRY_LAG } from "@/lib/options/core";
+import { earningsPricing, impliedMoveBy, REPORT_EXPIRY_LAG } from "@/lib/options/core";
+import { iv30Basis, quotePage, sourceName } from "@/lib/options/source";
 import { boardIvRank, optionsBoardQuery, reactionsQuery, volumeRatio, type OptionsBoardRow } from "@/lib/options/data";
 import { useSessionState } from "@/lib/use-session-state";
 import { fmtDate, fmtPct } from "@/lib/format";
@@ -27,7 +28,7 @@ export const Route = createFileRoute("/_authenticated/app/options")({
       { title: "Options · FiledUnder" },
       { name: "description", content: "What the options market prices for every covered stock: moves into the next earnings report against past reactions, implied volatility and its rank, put/call positioning, unusual volume and skew." },
       { property: "og:title", content: "Options · FiledUnder" },
-      { property: "og:description", content: "Priced earnings moves vs history, implied volatility, put/call and skew across every stock with listed options, from Cboe quotes." },
+      { property: "og:description", content: "Priced earnings moves vs history, implied volatility, put/call and skew across every stock with listed options, from stored option quotes." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -63,7 +64,7 @@ const ext = (r: Row, label: string, value: number, unit: string, quote: string):
   unit,
   value,
   periodLabel: fmtDate(r.date),
-  external: { url: cboeQuotePage(r.ticker), date: r.date, quote },
+  external: { url: quotePage(r.ticker, r), date: r.date, quote },
 });
 const btn = (onClick: () => void, text: string, cls?: string) => (
   <button type="button" onClick={onClick} className={cn("num whitespace-nowrap tabular-nums hover:underline", cls)}>
@@ -99,7 +100,7 @@ const C: Record<string, Col> = {
   },
   beat: { k: "beat", label: "Moved more", title: "Past reports whose move was larger than the move on the row’s quote date", get: (r) => (r.priced && r.past && r.priced.lag <= REPORT_EXPIRY_LAG ? r.past.moves.filter((x) => Math.abs(x.m) > r.priced!.m).length / r.past.n : null), cell: (r) => (r.priced && r.past && r.priced.lag <= REPORT_EXPIRY_LAG ? <span className="num tabular-nums">{r.past.moves.filter((x) => Math.abs(x.m) > r.priced!.m).length} of {r.past.n}</span> : dash) },
   ratio: { k: "ratio", label: "Priced ÷ past", title: "Priced move ÷ past median move: above 1 the market expects a bigger move than usual", get: (r) => (r.priced && r.pastMedian && r.priced.lag <= REPORT_EXPIRY_LAG ? r.priced.m / r.pastMedian : null), cell: (r) => (r.priced && r.pastMedian && r.priced.lag <= REPORT_EXPIRY_LAG ? <span className={cn("num tabular-nums", (r.priced.m / r.pastMedian >= 1.5 || r.priced.m / r.pastMedian <= 0.67) && "font-semibold")}>{(r.priced.m / r.pastMedian).toFixed(2)}×</span> : dash) },
-  iv: { k: "iv", label: "IV30", title: "Cboe 30-day implied volatility", get: (r) => r.iv30, cell: (r, open) => (r.iv30 != null ? btn(() => open(ext(r, "30-day implied volatility", r.iv30!, "pct", "Cboe IV30")), fmtPct(r.iv30, 1)) : dash) },
+  iv: { k: "iv", label: "IV30", title: "30-day implied volatility: at-the-money, computed from the quoted chain (Cboe's own figure on days read from Cboe)", get: (r) => r.iv30, cell: (r, open) => (r.iv30 != null ? btn(() => open(ext(r, "30-day implied volatility", r.iv30!, "pct", iv30Basis(r))), fmtPct(r.iv30, 1)) : dash) },
   ivChg: { k: "ivChg", label: "Δ prior quote", title: "Change in IV30 since the previous recorded day, in volatility points", get: (r) => r.ivChg, cell: (r) => (r.ivChg != null ? <span className={cn("num tabular-nums", r.ivChg > 0.02 ? "text-negative" : r.ivChg < -0.02 && "text-positive")}>{pts(r.ivChg)}</span> : dash) },
   rank: { k: "rank", label: "IV rank", title: "Where IV30 sits in its recorded range over the last year (0 = low, 100 = high); needs 20 recorded days", get: (r) => r.rank, cell: (r) => (r.rank != null ? <span className="num tabular-nums">{(r.rank * 100).toFixed(0)}</span> : dash) },
   m30: { k: "m30", label: "~30d move", title: "Move priced to the first expiry at least four weeks out", get: (r) => r.m30?.m ?? null, cell: (r, open) => (r.m30 ? btn(() => open(ext(r, `Move priced through ${fmtDate(r.m30!.e)}`, r.m30!.m, "pct", `At-the-money straddle for the ${r.m30!.e} expiry ÷ stock price ${r.price.toFixed(2)}`)), `±${fmtPct(r.m30.m, 1)}`) : dash) },
@@ -191,7 +192,7 @@ function OptionsHub() {
       <PageHeader
         eyebrow="Markets"
         title="Options"
-        description="Stored Cboe quotes, historical earnings moves and positioning. Each row shows its quote date."
+        description="Stored option quotes, historical earnings moves and positioning. Each row shows its quote date and opens its source."
         actions={
           <Segmented
             label="Options view"
@@ -212,7 +213,7 @@ function OptionsHub() {
       ) : q.error ? (
         <Empty title="Options data didn't load">{(q.error as Error).message}</Empty>
       ) : !all.length ? (
-        <Empty title="No options snapshots yet">Snapshots are recorded every weekday evening from Cboe's delayed quotes.</Empty>
+        <Empty title="No options snapshots yet">Snapshots are recorded once every trading day from Yahoo Finance quotes.</Empty>
       ) : (
         <div className="mt-4 min-w-0" data-section="Options board">
           <h2 className="mb-2 text-sm font-semibold">Single-stock options <span className="ml-1 text-[11px] font-normal text-muted-foreground">Latest stored quote · {fmtDate(latest)}</span></h2>

@@ -6,14 +6,19 @@ describe("Ling OpenRouter reader", () => {
   it("sends inclusionai/ling-3.0-flash-vl only through the OpenRouter connector", async () => {
     vi.stubEnv("UDC_OPENROUTER_API_KEY", "test-connection");
     vi.stubEnv("LOVABLE_API_KEY", "test-gateway");
-    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ model: "inclusionai/ling-3.0-flash-vl", choices: [{ finish_reason: "stop", message: { content: '{"ok":true}' } }] })));
+    // A fresh reply per call: where a database is configured, the provider circuit is read through the same fetch
+    // first, and one shared Response can be read only once ("Body has already been read").
+    const request = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ model: "inclusionai/ling-3.0-flash-vl", choices: [{ finish_reason: "stop", message: { content: '{"ok":true}' } }] }))));
     vi.stubGlobal("fetch", request);
     try {
       const r = await openaiStructured<{ ok: boolean }>({ model: "inclusionai/ling-3.0-flash-vl", name: "check", instructions: "Read", input: "test", schema: {} });
       expect(r.data.ok).toBe(true);
-      expect(request.mock.calls[0]?.[0]).toBe("https://connector-gateway.lovable.dev/udc_openrouter/v1/chat/completions");
-      expect(JSON.parse(request.mock.calls[0]?.[1].body).model).toBe("inclusionai/ling-3.0-flash-vl");
-      expect(JSON.parse(request.mock.calls[0]?.[1].body).stream).toBe(true);
+      const CONNECTOR = "https://connector-gateway.lovable.dev/udc_openrouter/v1/chat/completions";
+      // every request to a model provider went to the connector (the circuit's own database reads are not model calls)
+      const model = request.mock.calls.filter((c) => !/supabase/.test(String(c[0])));
+      expect(model.map((c) => c[0])).toEqual([CONNECTOR]);
+      expect(JSON.parse(model[0]?.[1].body).model).toBe("inclusionai/ling-3.0-flash-vl");
+      expect(JSON.parse(model[0]?.[1].body).stream).toBe(true);
     } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
   });
   it("assembles split streaming JSON and ignores keep-alives", async () => {

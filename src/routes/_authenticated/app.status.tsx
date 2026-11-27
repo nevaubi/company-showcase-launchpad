@@ -1,4 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, stripSearchParams } from "@tanstack/react-router";
+import { CoverageBoard } from "@/components/admin/coverage-board";
+import { Segmented } from "@/components/app/segmented";
+import { COVERAGE_SEARCH, coverageSearch, type CoverageSearch } from "@/lib/coverage/view";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleAlert, Clock3 } from "lucide-react";
 import { PageHeader, Panel } from "@/components/app/page-header";
@@ -11,17 +14,25 @@ import { fmtDate, fmtInt, fmtRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CompanyLogo } from "@/components/app/company-logo";
 
+/** The page's address: which of its two views, and the coverage view's filters. */
+type StatusSearch = CoverageSearch & { view: "coverage" | "jobs" };
+const STATUS_SEARCH: StatusSearch = { ...COVERAGE_SEARCH, view: "coverage" };
+
 export const Route = createFileRoute("/_authenticated/app/status")({
   head: () => ({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { title: "Data status · FiledUnder" },
-      { name: "description", content: "Where every number comes from, how often it refreshes, and when each scheduled refresh last ran." },
+      { name: "description", content: "What is stored for every company and kind of data, where every number comes from, and when each scheduled refresh last ran." },
       { property: "og:title", content: "Data status · FiledUnder" },
-      { property: "og:description", content: "Sources, refresh schedules and the latest run of every data job." },
+      { property: "og:description", content: "Coverage by company and kind of data, sources, refresh schedules and the latest run of every data job." },
     ],
   }),
+  // the coverage section's view: kind of data, state, search, order and the open company
+  validateSearch: (s: Record<string, unknown>): StatusSearch => ({ ...coverageSearch(s), view: s["view"] === "jobs" ? "jobs" : "coverage" }),
+  // defaults stay out of the address: /app/status is the coverage view with no filter
+  search: { middlewares: [stripSearchParams(STATUS_SEARCH)] },
   component: Status,
 });
 
@@ -235,19 +246,45 @@ function summary(detail: Run["detail"]) {
 }
 
 function Status() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  // filters change the address in place: no new history entry, and the page stays where it is
+  const set = (patch: Partial<StatusSearch>) => void navigate({ to: ".", search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
+  return (
+    <div className="grid grid-cols-1 gap-5">
+      <PageHeader
+        eyebrow="Admin"
+        title="Data status"
+        description={
+          search.view === "jobs"
+            ? "Every figure starts in a bundled snapshot built from primary sources; scheduled jobs then layer newer prices, filings, insider trades and economic prints on top."
+            : "What the app holds for every company, by kind of data: complete, partial, not stored yet, stopped, or not applicable, with the reason for each."
+        }
+        actions={
+          <Segmented<StatusSearch["view"]>
+            label="What to show"
+            value={search.view}
+            onChange={(view) => set({ view })}
+            options={[
+              { v: "coverage", l: "Coverage" },
+              { v: "jobs", l: "Sources and jobs" },
+            ]}
+          />
+        }
+      />
+      {search.view === "jobs" ? <JobsView /> : <CoverageBoard search={search} onSearch={set} />}
+    </div>
+  );
+}
+
+function JobsView() {
   const manifest = useQuery(manifestQuery);
   const runs = useQuery(runsQuery);
   const live = useQuery(liveQuery);
   const m = manifest.data;
 
   return (
-    <div className="grid grid-cols-1 gap-5">
-      <PageHeader
-        eyebrow="Admin"
-        title="Data status"
-        description="Every figure starts in a bundled snapshot built from primary sources; scheduled jobs then layer newer prices, filings, insider trades and economic prints on top."
-      />
-
+    <>
       <Panel title="Snapshot" subtitle={m ? `Built ${fmtDate(m.generatedAt)} (${fmtRelative(m.generatedAt)}) from SEC EDGAR, Yahoo Finance, FRED and the U.S. Treasury` : "Loading…"}>
         {m ? (
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-8">
@@ -368,6 +405,6 @@ function Status() {
       <Panel title="Investor-relations library" subtitle="Earnings releases, supplements, decks and data files stored byte-for-byte, then read cell by cell">
         <IrCoverage />
       </Panel>
-    </div>
+    </>
   );
 }

@@ -1,4 +1,6 @@
 import { ClientOnly, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { CoverageNote } from "@/components/company/coverage-note";
+import { CORPUS } from "@/lib/coverage/corpora";
 import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Network } from "lucide-react";
@@ -315,7 +317,13 @@ function SupplyChainPage() {
               ) : !drawn ? (
                 <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
                   <Network className="size-6" aria-hidden="true" />
-                  {view === "chain" ? `No filing names a supplier or customer of ${focusName} yet, so there is no chain to draw.` : `No named customers or suppliers found in ${focusName}'s latest 10-K yet.`}
+                  {/* the ledger knows whether a filing was read at all: "names nobody" is not "not read yet" */}
+                  <CoverageNote
+                    ticker={ticker}
+                    corpus={CORPUS.supplyLinks}
+                    className="max-w-md"
+                    fallback={view === "chain" ? `No filing names a supplier or customer of ${focusName} yet, so there is no chain to draw.` : `No named customers or suppliers are stored for ${focusName} yet.`}
+                  />
                 </div>
               ) : view === "chain" && chain ? (
                 <ValueChain chain={chain} flow={chainFlow} onFlow={setChainFlow} product={chainProduct} onProduct={setChainProduct} size={chainSize}

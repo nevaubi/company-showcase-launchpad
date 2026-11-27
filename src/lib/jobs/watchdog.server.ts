@@ -27,7 +27,7 @@ export async function runWatchdog(budgetMs = 1500): Promise<Record<string, unkno
     Promise.all([
       rpc("data_freshness"),
       readJobHealth({ rpc, from: (t: string) => supabaseAdmin.from(t as never) } as HealthClient, { hours: 24, budgetMs: readMs - 100 }),
-      supabaseAdmin.from("job_state").select("job, cursor, paused_reason, updated_at").or(`job.like."provider:*",job.like."alert:*",job.like."remedy:*",job.like."registrant-drift:*",job.eq.options-backoff,job.eq.alert-digest,paused_reason.like."${OWNER_HOLD_PREFIX}*"`).limit(1000),
+      supabaseAdmin.from("job_state").select("job, cursor, paused_reason, updated_at").or(`job.like."provider:*",job.like."alert:*",job.like."remedy:*",job.like."registrant-drift:*",job.eq.options-collect,job.eq.options-app,job.eq.alert-digest,paused_reason.like."${OWNER_HOLD_PREFIX}*"`).limit(1000),
     ]),
     readMs,
     "watchdog reads",

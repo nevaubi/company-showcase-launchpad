@@ -10,14 +10,15 @@ import { cn } from "@/lib/utils";
 import { FREE_SAFETY, FREE_TIERS } from "@/lib/ir/openai-allowance";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { TickerMark } from "@/components/app/ticker";
+import { LaneBoard } from "@/components/admin/lane-board";
 
 export const Route = createFileRoute("/_authenticated/app/worker")({
   head: () => ({
     meta: [
       { title: "Admin · Live worker · FiledUnder" },
-      { name: "description", content: "Live progress of the always-on investor-relations build worker." },
+      { name: "description", content: "Every background lane of the worker with Stop and Resume, and live progress of the investor-relations build." },
       { property: "og:title", content: "Admin · Live worker · FiledUnder" },
-      { property: "og:description", content: "Live progress of the always-on investor-relations build worker." },
+      { property: "og:description", content: "Every background lane of the worker with Stop and Resume, and live progress of the investor-relations build." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },
@@ -70,13 +71,21 @@ function WorkerPage() {
   const q = useQuery({ queryKey: ["admin", "worker"], queryFn: () => fetchFn(), refetchInterval: 20_000 });
   const fq = useQuery({ queryKey: ["admin", "free-models"], queryFn: async () => (await supabase.rpc("free_model_today")).data?.[0] ?? null, refetchInterval: 20_000 });
   const d = useMemo(() => (q.data ? derive(q.data) : null), [q.data]);
-  if (q.isError) return <p className="p-6 text-sm text-muted-foreground">Couldn't load worker progress: {(q.error as Error).message}</p>;
+  if (q.isError)
+    return (
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4">
+        <PageHeader title="Live worker" description="Every background lane of the worker, and the investor-relations build it runs." />
+        <LaneBoard />
+        <p className="p-6 text-sm text-muted-foreground">Couldn't load worker progress: {(q.error as Error).message}</p>
+      </div>
+    );
   if (!q.data || !d) return <p className="p-6 text-sm text-muted-foreground">Loading live progress…</p>;
   const p = q.data;
   const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : "–");
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4">
-      <PageHeader title="Live worker" description="The always-on cloud worker reading every investor-relations file. Refreshes every 20 seconds from the database." />
+      <PageHeader title="Live worker" description="Every background lane of the worker with Stop and Resume, and the investor-relations build it runs. Refreshes from the database every 20 to 30 seconds." />
+      <LaneBoard />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {[
           ["Worker", d.status, `heartbeat ${ago(p.loop?.heartbeat, p.now)} · up ${d.uptimeMin == null ? "–" : `${Math.round(d.uptimeMin)} min`}`],

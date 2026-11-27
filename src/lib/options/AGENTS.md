@@ -1,0 +1,9 @@
+# Options
+
+- `core.ts` summarizes a chain (30-day implied volatility, at-the-money straddle term, 25-delta skew, put/call) into one `options_daily` row per stock and trading day. Pure.
+- Source is Yahoo Finance since 27 Nov 2026 (owner: Yahoo Finance or Firecrawl; Cboe refused the collector and is not used for chains). `yahoo.ts` computes implied volatility and delta from each quote's midpoint, because Yahoo's own figure is built on the last trade; `pricing.ts` is Black 1976 on the forward read from the chain by put-call parity, discounted at the stored 3-month Treasury yield. The 30-day figure interpolates at-the-money total variance between the expiries around 30 days (`constantMaturityIv`). Inputs and basis are stored in `meta`, so a figure can be reproduced.
+- A new measure needs a test against a textbook or hand value (`pricing.test.ts` uses Hull's worked examples).
+- A row keeps its `source`. A history, a rank or a ratio only compares rows of one source: `optionsHistoryQuery` returns the newest row's source only (`sameSource`), the board reads `options_board_v2`. Pages name the source and quote time through `source.ts`, never a hard-coded provider name.
+- A chain is stored only when it is today's finished session (`judgeChain` in `src/lib/jobs/options-collect.ts`): before the open Yahoo shows zero bids, and a half-stale chain would price a wrong straddle.
+- Collection: the worker after the close, the scheduled `options` job as second lane, the page reader when Yahoo refuses (`src/lib/jobs/AGENTS.md`). Fetching is in `yahoo-fetch.server.ts` and `collect.server.ts`; the Yahoo session is kept in `ai_cache` (`yahoo-session:v1`, service role only).
+- Report "priced vs past" uses `markets/reactions.json` from `scripts/earnings-reactions.ts`; options figures stay context until enough history exists to test them (IV rank needs 20 recorded days of one source).

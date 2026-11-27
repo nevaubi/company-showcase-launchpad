@@ -14,7 +14,8 @@ import { insiderSummary, insiderWindowCaption, fmtTradeUsd, roleLabel, tradeAmou
 import { optionsContext, shortTrend } from "@/lib/company/positioning";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { fmtDate, fmtPrice } from "@/lib/format";
-import { cboeQuotePage, IV_RANK_MIN_DAYS } from "@/lib/options/core";
+import { IV_RANK_MIN_DAYS } from "@/lib/options/core";
+import { quoteMoment, quotePage, sourceName } from "@/lib/options/source";
 import { optionsHistoryQuery } from "@/lib/options/data";
 import { cn } from "@/lib/utils";
 import { Spark } from "./spark";
@@ -149,7 +150,7 @@ function Options({ ticker, data }: { ticker: string; data: CompanyDataset }) {
   if (!c && !q.isLoading && !q.isError) return null;
   return (
     <div className="min-w-0 px-4 py-3" data-section="Options context">
-      <Head title="Options" note={c ? `Close of ${fmtDate(c.asOf)}${last ? ` at ${fmtPrice(last.price)}` : ""} · Cboe delayed chain · ${c.recorded} recorded day${c.recorded === 1 ? "" : "s"}` : q.isLoading ? "Loading" : "Cboe delayed chain"} />
+      <Head title="Options" note={c ? `${fmtDate(c.asOf)}, ${quoteMoment(last?.meta)}${last ? ` at ${fmtPrice(last.price)}` : ""} · ${sourceName(last)} chain · ${c.recorded} recorded day${c.recorded === 1 ? "" : "s"}` : q.isLoading ? "Loading" : "Option chain"} />
       {c ? (
         <>
           <dl className="mt-2 grid grid-cols-3 gap-3">
@@ -178,8 +179,8 @@ function Options({ ticker, data }: { ticker: string; data: CompanyDataset }) {
       )}
       <p className={cn("mt-1.5", IR.caption)}>
         Context, not a signal: the history is only as long as the recorded days.{" "}
-        <a href={cboeQuotePage(ticker)} target="_blank" rel="noreferrer" className="text-link hover:underline">
-          Cboe chain
+        <a href={quotePage(ticker, last)} target="_blank" rel="noreferrer" className="text-link hover:underline">
+          {sourceName(last)} chain
         </a>
       </p>
     </div>
@@ -191,7 +192,7 @@ export function PositioningPanel({ ticker, data }: { ticker: string; data: Compa
     <IrPanel
       section="Ownership and positioning"
       title="Ownership and positioning"
-      subtitle="Insider trades from Form 4, short sale volume from FINRA and options from Cboe where they are on file · each block states its date"
+      subtitle="Insider trades from Form 4, short sale volume from FINRA and stored option quotes where they are on file · each block states its date"
       bodyClassName="p-0"
       actions={
         <Button size="xs" variant="ghost" asChild>

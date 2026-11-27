@@ -26,11 +26,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { args, dbGate, sb } from "./lib/supa";
 import { CONFIG_STATUS_LIKE, REREAD_WINDOW_DAYS, requeueEnabled, requeueLimit, requeuePlan, rereadTickers, type FailedDoc } from "./lib/ir-requeue";
 import { canonResetAllowed, catchupDueAfter, clearStalePausesNow, countsAgainstCompany, creditStopAfter, exitCode, healConfigDue, healedSince, laneBudget, LOOP_REQUEST_MAX, LOOP_REQUEST_PREFIX, loopRunRow, loopSleepMs, nextDue, planLoopRequests, proseMode, stepLimit } from "./lib/loop-schedule";
+import { heldLanes, heldNow, working } from "./lib/lanes";
 import { loadRank } from "./lib/rank";
 import { besideEnabled, REBUILD_STATE, rebuildSettings, staleLane, type LaneInput, type RebuildState } from "./lib/ir-rebuild-stale";
 import { FRESH_MAX_TRIES, freshCompanies, freshDue, freshLine, freshOutcome, freshSettings, freshSince, planFresh, settleFresh, type FreshDoc, type FreshPlan } from "./lib/ir-fresh";
 import { priorityCampaign, priorityCandidates, priorityKey, priorityList, priorityMaxRuns, restorePriority, settlePriority, unknownGroups, type PriorityState } from "./lib/ir-priority";
 import { COVERAGE } from "@/lib/coverage";
+import { loopLane } from "@/lib/jobs/lanes";
+import { inCollectWindow } from "@/lib/jobs/options-collect";
 import { fairOrder } from "@/lib/jobs/priority";
 import { providerKey, routeDecision, routeOf, type CircuitDecision, type CircuitRow, type ProviderId } from "@/lib/jobs/provider-health";
 import { circuitEnabled, clearStaleReaderPauses, providerStates, resetProviderCache } from "@/lib/jobs/provider-health.server";
@@ -172,6 +175,8 @@ interface LoopState {
   pendingReread?: string[];
   lastForm4Repair?: string | null;
   lastRegistrantDrift?: string | null;
+  /** coverage ledger (scripts/coverage.ts): once a day after the night's feeds */
+  lastCoverage?: string | null;
   /** priority campaign (IR_PRIORITY_GROUP / IR_PRIORITY_TICKERS); kept while the settings are unchanged */
   priority?: PriorityState | null;
   /** fresh lane: lane tries per file id (at most FRESH_MAX_TRIES, then the file is left to the normal order) */
@@ -199,6 +204,53 @@ const state = await loadState();
 for (const t of (args.seed ?? "").split(",").filter(Boolean)) if (!state.attempted.includes(t)) state.attempted.push(t);
 await saveState(state);
 
+// ---------- owner holds (src/lib/jobs/lanes.ts) ----------
+/** Exit code of a step that did not start, or was stopped, because the owner holds its lane. */
+const HELD_EXIT = 75;
+/** Steps that run as part of another step's lane. */
+const LANE_OF_STEP: Record<string, string> = { import: "mirror", "medicare-states": "sod", tri: "sod" };
+const holdLaneOf = (step: string) => loopLane(LANE_OF_STEP[step] ?? step);
+/** Lanes under an owner hold, as read at the top of the pass (lib/lanes.ts keeps it at most 20 s old). */
+let holds: ReadonlyMap<string, string> = new Map();
+/** Running children by lane, so a hold placed while one runs stops it. */
+const live = new Map<string, Set<{ pid: number; heldStop: boolean }>>();
+/** The owner holds this step's lane. Also stamps the hold as seen by this worker. */
+const held = (step: string): boolean => holds.has(holdLaneOf(step)) && heldNow(holdLaneOf(step)) != null;
+const heldLogged = new Set<string>();
+/** Read the holds; stop the children of lanes held since the last pass; say once when a lane is held or let go. */
+async function applyHolds() {
+  holds = await heldLanes();
+  for (const [lane, why] of holds) {
+    if (!lane.startsWith("loop:")) continue;
+    heldNow(lane);
+    if (!heldLogged.has(lane)) {
+      heldLogged.add(lane);
+      log(`${lane.slice(5)}: stopped by the owner (${why.slice(0, 140)})`);
+    }
+    for (const c of live.get(lane) ?? []) {
+      if (c.heldStop || !c.pid) continue;
+      c.heldStop = true;
+      try {
+        process.kill(-c.pid, "SIGTERM");
+      } catch {
+        /* already gone */
+      }
+      setTimeout(() => {
+        try {
+          process.kill(-c.pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }, 30_000).unref();
+    }
+  }
+  for (const lane of [...heldLogged])
+    if (!holds.has(lane)) {
+      heldLogged.delete(lane);
+      log(`${lane.slice(5)}: released by the owner`);
+    }
+}
+
 // ---------- helpers ----------
 /**
  * Run a child script with a deadline (`stepLimit(step)`): past it the child's process group gets
@@ -207,10 +259,16 @@ await saveState(state);
  * `job_runs` row `loop:<step>` (ok = exit 0, detail.code, detail.ms). Exit 124 = killed on deadline.
  */
 function run(step: string, script: string, argv: string[], logFile: string, env: NodeJS.ProcessEnv = process.env) {
+  // The owner stopped this step's lane: nothing starts (the callers check first; this is the net).
+  if (held(step)) return Promise.resolve(HELD_EXIT);
   const t0 = Date.now();
   const limit = stepLimit(step);
+  const lane = holdLaneOf(step);
+  const done = working(lane);
   return new Promise<number>((resolve) => {
     const p = spawn("sh", ["-c", `exec bun ${script} ${argv.map((a) => `'${a}'`).join(" ")} >> ${logFile} 2>&1`], { stdio: "ignore", env, detached: true });
+    const child = { pid: p.pid ?? 0, heldStop: false };
+    (live.get(lane) ?? live.set(lane, new Set()).get(lane)!).add(child);
     let timedOut = false;
     const kill = (sig: NodeJS.Signals) => {
       try {
@@ -229,16 +287,22 @@ function run(step: string, script: string, argv: string[], logFile: string, env:
     p.on("exit", (code, signal) => {
       clearTimeout(timer);
       // `exec` makes bun the direct child: a kernel OOM kill is (null, SIGKILL), recorded as 137.
-      const c = exitCode(code, signal, timedOut);
-      void sb.from("job_runs").insert(loopRunRow(step, t0, Date.now(), c, timedOut) as never).then(undefined, () => undefined);
+      const c = child.heldStop ? HELD_EXIT : exitCode(code, signal, timedOut);
+      done();
+      live.get(lane)?.delete(child);
+      const row = loopRunRow(step, t0, Date.now(), c, timedOut);
+      if (child.heldStop) Object.assign(row, { ok: true, detail: { ...row.detail, stopped: "stopped by the owner's hold" } });
+      void sb.from("job_runs").insert(row as never).then(undefined, () => undefined);
       resolve(c);
     });
   });
 }
 
-type LastKey = "lastRegistrantDrift" | "lastForm4Repair" | "lastMirror" | "lastDetail" | "lastSod" | "lastDatedReactions" | "lastProse" | "lastIrSite" | "lastCanon" | "lastAltSlow" | "lastVerify" | "lastCatchup" | "lastHealConfig";
+type LastKey = "lastCoverage" | "lastRegistrantDrift" | "lastForm4Repair" | "lastMirror" | "lastDetail" | "lastSod" | "lastDatedReactions" | "lastProse" | "lastIrSite" | "lastCanon" | "lastAltSlow" | "lastVerify" | "lastCatchup" | "lastHealConfig";
 /** A periodic step finished: its timer moves only after a zero exit; a failure retries after a backoff. */
 function settle(step: string, key: LastKey, intervalMs: number, code: number) {
+  // Stopped by the owner: no timer moves, so the step is due the moment the hold is released.
+  if (code === HELD_EXIT) return;
   const r = nextDue(Date.now(), code === 0, intervalMs, state.failStreak?.[step] ?? 0);
   state[key] = r.last;
   (state.failStreak ??= {})[step] = r.attempts;
@@ -526,17 +590,17 @@ async function maybeAltSlow() {
   });
 }
 
-// ---------- options when Cboe refuses the app server ----------
+// ---------- options: one snapshot per session, after the close ----------
 /**
- * Every 10 minutes: `options-snapshot.ts --night` decides itself (src/lib/jobs/options-worker.ts)
- * whether tonight's snapshot needs the worker (the app job is blocked or not collecting), resumes
- * from `options-worker` and records its own pause. Network-bound and paced, so it runs beside the
- * other side jobs.
+ * Every 10 minutes inside the collection window (16:20 to 23:30 New York on weekdays; no process is
+ * started outside it): `options-snapshot.ts --night` collects the session's chains from Yahoo Finance
+ * (rules in src/lib/jobs/options-collect.ts), resumes from `options-collect` and records its own
+ * pause. Network-bound and paced, so it runs beside the other side jobs.
  */
 let optioning = false;
 let lastOptions = 0;
 function maybeOptions() {
-  if (optioning || Date.now() - lastOptions < 10 * 60_000 || process.env.OPTIONS_WORKER === "0") return;
+  if (optioning || Date.now() - lastOptions < 10 * 60_000 || process.env.OPTIONS_WORKER === "0" || !inCollectWindow(Date.now())) return;
   optioning = true;
   lastOptions = Date.now();
   void run("options-night", "scripts/options-snapshot.ts", ["--night", "--minutes=50"], `${OUT}/options.log`).finally(() => { optioning = false; });
@@ -696,6 +760,25 @@ function maybeRegistrantDrift() {
   void run("registrant-drift", "scripts/registrant-drift.ts", [], `${OUT}/registrant-drift.log`).then((code) => {
     driftChecking = false;
     settle("registrant-drift", "lastRegistrantDrift", 7 * 86_400_000, code);
+  });
+}
+
+// ---------- coverage ledger (daily) ----------
+/**
+ * Once a day after 07:00 UTC (the night's options pass and the partner's screener build are done by
+ * then): what the app holds per company and corpus, measured in the database, judged by the rules in
+ * src/lib/coverage/corpora.ts and stored in `corpus_coverage`. Ten seconds of database work, no
+ * model and no outside call besides the screener file.
+ */
+const COVERAGE_EVERY_MS = 20 * 3_600_000;
+let coverageRunning = false;
+function maybeCoverage() {
+  if (coverageRunning || Date.now() - STARTED < 5 * 60_000 || new Date().getUTCHours() < 7) return;
+  if (state.lastCoverage && Date.now() - Date.parse(state.lastCoverage) < COVERAGE_EVERY_MS) return;
+  coverageRunning = true;
+  void run("coverage", "scripts/coverage.ts", [], `${OUT}/coverage.log`).then((code) => {
+    coverageRunning = false;
+    settle("coverage", "lastCoverage", COVERAGE_EVERY_MS, code);
   });
 }
 
@@ -953,6 +1036,11 @@ async function runCompany(t: string) {
   let stopped: string | null = code === 0 ? null : `exit ${code}`;
   if (existsSync(lastRun)) stopped = (JSON.parse(readFileSync(lastRun, "utf8")) as { stopped: string | null }).stopped ?? stopped;
   delete state.stage![t];
+  if (code === HELD_EXIT) {
+    // Stopped by the owner's hold: no strike; the company resumes where it stopped after the release.
+    log(`${t}: stopped by the owner's hold; it resumes after the release`);
+    return;
+  }
   if (stopped && /quota|auth|credit|payment|402|outage/i.test(stopped)) {
     // The circuit row now says when to probe; re-read it at once so no other lane starts meanwhile.
     await refreshCircuits(true);
@@ -1057,6 +1145,11 @@ async function runFresh(plan: FreshPlan) {
   const lastRun = `${out}/last-run.json`;
   rmSync(lastRun, { force: true });
   const code = await run("fresh", "scripts/ir-deep.ts", [`--tickers=${plan.tickers.join(",")}`, `--fresh-ids=${plan.ids.join(",")}`, `--out=${out}`], `${OUT}/fresh.run.log`, childEnv);
+  if (code === HELD_EXIT) {
+    // Stopped by the owner's hold: no try is counted, the files stay waiting.
+    log("fresh lane: stopped by the owner's hold; the files stay waiting");
+    return;
+  }
   let stopped: string | null = code === 0 ? null : `exit ${code}`;
   let done: { read?: number; facts?: number; rebuilt?: string[] } = {};
   if (existsSync(lastRun)) {
@@ -1141,22 +1234,25 @@ for (;;) {
   if (reader.cls === "config") healConfigIdle = false;
   await clearStalePauses();
   await takeLoopRequests().catch((e) => log(`loop requests: ${(e as Error).message.slice(0, 160)}`));
-  await maybeMirror();
-  await maybeDetail();
-  await maybeIrSite();
-  maybeReports();
-  maybeFilingSteps();
+  // Owner holds: a held lane starts nothing this pass, and a child of a lane just held is stopped.
+  await applyHolds();
+  if (!held("mirror")) await maybeMirror();
+  if (!held("detail")) await maybeDetail();
+  if (!held("ir-site")) await maybeIrSite();
+  if (!held("reports")) maybeReports();
+  if (!held("filing-steps")) maybeFilingSteps();
   maybeFreshness();
-  maybeOptions();
-  await maybeAnalytics().catch((e) => log(`analytics check failed: ${(e as Error).message}`));
-  await maybeCanon();
-  await maybeAltSlow();
-  await maybeSod();
-  await maybeReactions();
-  await verifySweep();
-  await maybeDiscoverCatchup();
-  maybeForm4Repair();
-  maybeRegistrantDrift();
+  if (!held("options-night")) maybeOptions();
+  if (!held("analytics")) await maybeAnalytics().catch((e) => log(`analytics check failed: ${(e as Error).message}`));
+  if (!held("canon")) await maybeCanon();
+  if (!held("alt-slow")) await maybeAltSlow();
+  if (!held("sod")) await maybeSod();
+  if (!held("reactions")) await maybeReactions();
+  if (!held("verify")) await verifySweep();
+  if (!held("sec-catchup")) await maybeDiscoverCatchup();
+  if (!held("form4-repair")) maybeForm4Repair();
+  if (!held("registrant-drift")) maybeRegistrantDrift();
+  if (!held("coverage")) maybeCoverage();
   await maybeReap();
   await maybeHealConfigFailures();
   // self-heal: done with files but no figures, once (never for companies set aside)
@@ -1169,7 +1265,7 @@ for (;;) {
     state.healed.push(t);
     log(`${t}: marked done with no figures — queued again`);
   }
-  await startRequestedHistoryFill();
+  if (!held("ir-rebuild")) await startRequestedHistoryFill();
   const lanes = BATCH_ARG ?? LANES;
   // One decision for every lane: none while the route is open, one probe lane when it is due, and
   // after a heal one more lane every 5 minutes. The memory guard stays in force on top of it.
@@ -1180,11 +1276,13 @@ for (;;) {
   while (!creditStop && (BESIDE || !rebuildingStale) && allowed > 0 && memUsedGB() < MEM_GB * 0.8 && lanesBusy() < readingLanes) {
     allowed--;
     // Fresh lane: one pass of newest files before the next company (off with IR_FRESH_DAYS=0).
-    if (await startFresh()) {
+    if (!held("fresh") && (await startFresh())) {
       idleLogged = false;
       laneStarted = true;
       continue;
     }
+    // Deep builds stopped by the owner: no company starts (the newest-files lane is its own lane).
+    if (held("company")) break;
     const t = await pickNext(withFresh(busy));
     if (!t) break;
     companiesSinceFresh++;
@@ -1200,10 +1298,10 @@ for (;;) {
     });
   }
   // After the lanes: with no lane to take a due probe, the text sweep may be the probe (review F4).
-  await maybeProse(laneStarted);
+  if (!held("prose")) await maybeProse(laneStarted);
   // Idle or closed on credit (no lane started, none running): rebuild stale payloads, which needs no model.
-  await maybeRebuildStale(laneStarted);
-  if (!lanesBusy() && !creditStop && !idleLogged) {
+  if (!held("ir-rebuild")) await maybeRebuildStale(laneStarted);
+  if (!lanesBusy() && !creditStop && !idleLogged && !held("company")) {
     log("nothing readable left — waiting for the mirror to bring more files");
     idleLogged = true;
   }

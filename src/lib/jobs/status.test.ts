@@ -38,8 +38,8 @@ describe("pipeline status", () => {
     expect(unfinishedRate(j)).toMatchObject({ runs: 170, unfinished: 40 });
   });
   it("stalled rotation cursors, with the slice's tries; prices only count in market hours", () => {
-    const rows = [s("options", 804, null, "2026-11-20T03:50:00Z"), s("options-slice", 8042, null, "x"), s("macro", 12, null, "2026-11-20T04:35:00Z"), s("prices", 1, null, "2026-11-19T22:54:00Z")];
-    expect(stalledCursors(rows, NOW)).toEqual([{ job: "options", label: "Options (Cboe)", cursor: 804, movedAt: "2026-11-20T03:50:00Z", limitMin: 30, attempts: 2 }]);
+    const rows = [s("sec", 804, null, "2026-11-20T03:50:00Z"), s("sec-slice", 8042, null, "x"), s("macro", 12, null, "2026-11-20T04:35:00Z"), s("prices", 1, null, "2026-11-19T22:54:00Z")];
+    expect(stalledCursors(rows, NOW)).toEqual([{ job: "sec", label: "SEC filings & Form 4", cursor: 804, movedAt: "2026-11-20T03:50:00Z", limitMin: 18, attempts: 2 }]);
   });
   it("coverage: least covered of the top 1,000 first, numbers parsed", () => {
     const c = coverageOrder([
@@ -50,11 +50,20 @@ describe("pipeline status", () => {
     expect(c[0].median_age_hours).toBe(5.9);
     expect(c[0].top100).toBe(74);
   });
-  it("weekend nights are not options stalls; weekday nights are (review R13)", () => {
-    const rows = [s("options", 804, null, "2026-11-20T03:50:00Z")];
-    expect(stalledCursors(rows, Date.parse("2026-11-21T23:00:00Z"))).toEqual([]); // Saturday night
-    expect(stalledCursors(rows, Date.parse("2026-11-23T02:00:00Z"))).toEqual([]); // early Monday
-    expect(stalledCursors(rows, Date.parse("2026-11-24T02:00:00Z")).map((x) => x.job)).toEqual(["options"]); // early Tuesday
+  it("the options collection is behind only inside its window, and only when neither lane moved", () => {
+    // Friday 20 Nov 2026: the window opens 21:20 UTC (16:20 New York); 45 minutes without progress counts
+    const fri = (hm: string) => Date.parse(`2026-11-20T${hm}:00Z`);
+    const worker = s("options-collect", 300, "session:20261120", "2026-11-20T21:40:00Z");
+    expect(stalledCursors([worker], fri("22:20"))).toEqual([]);
+    expect(stalledCursors([worker], fri("22:30"))).toEqual([{ job: "options-collect", label: "Options (Yahoo Finance)", cursor: 300, movedAt: "2026-11-20T21:40:00Z", limitMin: 45, attempts: 0 }]);
+    // the app job moving is progress too
+    expect(stalledCursors([worker, s("options-app", 40, "session:20261120", "2026-11-20T22:25:00Z")], fri("22:30"))).toEqual([]);
+    // finished, a holiday, the weekend and the hours outside the window are not stalls
+    expect(stalledCursors([s("options-collect", 1844, "session:20261120 done", "2026-11-20T21:59:00Z")], fri("23:30"))).toEqual([]);
+    expect(stalledCursors([worker], Date.parse("2026-11-21T23:00:00Z"))).toEqual([]);
+    expect(stalledCursors([worker], fri("15:00"))).toEqual([]);
+    // nothing started 45 minutes into the window
+    expect(stalledCursors([], fri("22:05")).map((x) => x.job)).toEqual(["options-collect"]);
   });
   it("cleared episodes waiting out their recovery hold are not open alerts", () => {
     expect(openAlerts([s("alert:stale:macro", 1, "cleared sent: x", "y"), s("alert:worker-heartbeat", 2, "sent: y", "z")]).map((a) => a.key)).toEqual(["worker-heartbeat"]);

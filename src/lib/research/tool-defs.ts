@@ -85,7 +85,7 @@ export const TOOL_DEFS = [
     type: "function",
     name: "get_options",
     description:
-      "Options-market context from nightly Cboe delayed-quote snapshots. With a ticker: 30-day implied volatility (with IV rank/percentile once 20+ days are recorded), 20-day realized volatility and implied ÷ realized, 25-delta skew, put/call open interest and volume, the move priced to each upcoming expiry (at-the-money straddle ÷ price), and for the next earnings report the priced move against the stock's past report reactions (how many past reports moved more). Without a ticker: every stock ranked by sort (iv, iv_rank, iv_change, put_call, volume = option volume vs its 20-day average, skew, earnings = biggest priced report moves). Use for 'what does the market expect for earnings', vol/positioning screens and to size a setup's expected move; it is market pricing, not a forecast.",
+      "Options-market context from one stored snapshot per stock and trading day (Yahoo Finance option quotes since 27 Nov 2026, with implied volatility and delta computed from the quoted prices; Cboe delayed quotes before that; each answer names its source and quote time). With a ticker: 30-day implied volatility (with IV rank/percentile once 20+ days are recorded), 20-day realized volatility and implied ÷ realized, 25-delta skew, put/call open interest and volume, the move priced to each upcoming expiry (at-the-money straddle ÷ price), and for the next earnings report the priced move against the stock's past report reactions (how many past reports moved more). Without a ticker: every stock ranked by sort (iv, iv_rank, iv_change, put_call, volume = option volume vs its 20-day average, skew, earnings = biggest priced report moves). Use for 'what does the market expect for earnings', vol/positioning screens and to size a setup's expected move; it is market pricing, not a forecast.",
     parameters: obj(
       {
         ticker: nullable(str("Ticker for one company; null for the cross-stock ranking")),
@@ -398,6 +398,13 @@ export const TOOL_DEFS = [
     type: "function",
     name: "get_earnings_workup",
     description: "Everything precomputed about a company's earnings: next report date, consensus EPS and revenue, the last report's surprise and next-day stock move vs SPY, KPIs to watch with their quotes, the scorecard of the latest results filing (actuals vs consensus, guidance given and whether last quarter's guidance was met) and the sector's beat rate this season. Use first for earnings previews, reviews and 'did they beat'.",
+    parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_data_coverage",
+    description: "What FiledUnder holds for one company, by kind of data (statements, filing detail, SEC filing index, earnings releases, filing changes, insider trades, prices, analyst estimates, options, alt data, IR documents, IR figures, call transcripts, commitments, supply links, tagged customer shares, supply intelligence, reports): complete, partial, not stored yet, stopped or not applicable, each with its count, newest date and the reason. Call it whenever another tool comes back empty or thin for a company, and before saying a company has no calls, no supply links, no IR figures, no estimates or no options: 'not stored yet' is a gap in the app's data, not a fact about the company. Also answers 'what do you have on X' and 'how complete is your data on X'.",
     parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
     strict: true,
   },
@@ -872,6 +879,7 @@ export const TOOL_LABELS: Record<string, string> = {
   get_filing_changes: "Compared filings",
   get_industry_workup: "Read industry evidence",
   get_company_dossier: "Built company dossier",
+  get_data_coverage: "Checked what is stored",
   simulate_supply_shock: "Simulated shock",
   navigate_to: "Opened page",
   get_page_context: "Read your screen",
@@ -953,6 +961,7 @@ export const TOOL_RUNNING: Record<string, string> = {
   get_filing_changes: "Comparing filings",
   get_industry_workup: "Reading industry evidence",
   get_company_dossier: "Building company dossier",
+  get_data_coverage: "Checking what is stored",
   simulate_supply_shock: "Simulating shock",
   navigate_to: "Opening page",
   get_page_context: "Reading your screen",

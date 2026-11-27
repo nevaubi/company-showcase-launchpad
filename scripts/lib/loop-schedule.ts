@@ -28,6 +28,8 @@ export const STEP_LIMITS_MS: Record<string, number> = {
   "sec-catchup": 50 * 60_000,
   "form4-repair": 30 * 60_000,
   "registrant-drift": 10 * 60_000,
+  // scripts/coverage.ts: about ten seconds of database work; the limit only catches a hung read
+  coverage: 10 * 60_000,
   company: 6 * 3600_000,
   // fresh lane: at most IR_FRESH_MAX_FILES newest files and their rebuilds (scripts/lib/ir-fresh.ts)
   fresh: 90 * 60_000,

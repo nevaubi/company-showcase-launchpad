@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowRight, ChevronLeft, ChevronRight, GitCompareArrows, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { Panel, Empty } from "@/components/app/page-header";
+import { CoverageNote } from "@/components/company/coverage-note";
+import { CORPUS } from "@/lib/coverage/corpora";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -157,7 +159,13 @@ function RedlinePage() {
   };
 
   if (company.isLoading) return <Skeleton className="h-96" />;
-  if (!filings.length) return <Empty title={`No ${form} filings to compare`} icon={<GitCompareArrows />}>Pick another form type.</Empty>;
+  if (!filings.length)
+    return (
+      <Empty title={`No ${form} filings to compare`} icon={<GitCompareArrows />}>
+        Pick another form type.
+        <CoverageNote ticker={ticker} corpus={CORPUS.redlines} className="mt-2" />
+      </Empty>
+    );
 
   const compared = (verdict?.sections ?? []).filter((s) => s.found === "both");
   const order = compared.map((s) => s.key);

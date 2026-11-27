@@ -1,5 +1,6 @@
 // Plain-text options context for the research assistant. Pure.
-import { earningsPricing, impliedMoveBy, ivRank, cboeQuotePage } from "./core";
+import { earningsPricing, impliedMoveBy, ivRank } from "./core";
+import { iv30Basis, quoteMoment, quotePage, sourceName, volMethod } from "./source";
 import type { OptionsBoardRow, OptionsRow } from "./data";
 import { boardIvRank, volumeRatio } from "./data";
 import { fmtSigned } from "@/lib/format";
@@ -13,14 +14,14 @@ export function optionsCompanyText(
   rows: OptionsRow[],
   ctx: { report?: { date: string; estimated: boolean } | null; pastMoves?: number[]; realized?: number | null } = {},
 ): string {
-  if (!rows.length) return `${ticker}: no options snapshot recorded (no listed options, or not read yet). Snapshots are taken nightly from Cboe delayed quotes.`;
+  if (!rows.length) return `${ticker}: no options snapshot recorded (no listed options, or not read yet). Snapshots are taken once every trading day from Yahoo Finance option quotes.`;
   const [s, ...prior] = rows;
   const out: string[] = [];
-  out.push(`${ticker} options, Cboe delayed quotes for ${s.date} (stock ${s.price.toFixed(2)}; check at ${cboeQuotePage(ticker)}):`);
+  out.push(`${ticker} options, ${sourceName(s)} quotes for ${s.date}, ${quoteMoment(s.meta)} (stock ${s.price.toFixed(2)}; check at ${quotePage(ticker, s)}; ${volMethod(s)}):`);
   const rank = s.iv30 != null ? ivRank(prior.map((r) => r.iv30 ?? NaN), s.iv30) : null;
   const rv = ctx.realized;
   out.push(
-    `- 30-day implied volatility ${pct(s.iv30)}` +
+    `- 30-day implied volatility ${pct(s.iv30)}${s.iv30 != null ? ` [${iv30Basis(s)}]` : ""}` +
       (rank ? ` (IV rank ${(rank.rank * 100).toFixed(0)} / percentile ${(rank.pct * 100).toFixed(0)} over ${rank.n} recorded days, range ${pct(rank.min)}–${pct(rank.max)})` : ` (only ${prior.length + 1} day(s) recorded so far, too few for an IV rank)`) +
       (rv != null ? `; 20-day realized volatility ${pct(rv)}, implied ÷ realized ${s.iv30 && rv > 0 ? (s.iv30 / rv).toFixed(2) : "n/a"}` : ""),
   );
@@ -93,5 +94,5 @@ export function optionsBoardText(
       p ? `current calendar ${d}, stored quote ±${pct(p.point.m)} (${p.point.e} expiry)` : null,
     ].filter(Boolean).join(" · ");
   };
-  return `Options snapshots (Cboe delayed quotes, latest ${date}; ${rows.length} stocks with listed options), sorted by ${by.replace("_", " ")}, highest first. The straddle divided by the stock price covers the full period from quote to expiry. Upcoming report dates use the current calendar, including subsequent schedule changes.\n${ranked.slice(0, limit).map((x) => line(x.r)).join("\n")}`;
+  return `Options snapshots (stored option quotes, Yahoo Finance since 27 Nov 2026 and Cboe before; each stock is ranked only against its own earlier days from the same source; latest ${date}; ${rows.length} stocks with listed options), sorted by ${by.replace("_", " ")}, highest first. The straddle divided by the stock price covers the full period from quote to expiry. Upcoming report dates use the current calendar, including subsequent schedule changes.\n${ranked.slice(0, limit).map((x) => line(x.r)).join("\n")}`;
 }

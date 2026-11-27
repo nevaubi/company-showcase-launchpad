@@ -8,7 +8,8 @@
  *   job-silent:<job>     a scheduled job has not run for 3x its cadence
  *   unfinished:<job>     30% or more of 20+ runs in 24 h never recorded a finish (scheduler cut-off)
  *   provider:<id>        a provider circuit open on quota or configuration for 2 h
- *   options-blocked      Cboe refuses option chains (the options job is backing off)
+ *   options-blocked      Yahoo refuses option chains by both routes (the collector is backing off)
+ *   options-behind       today's collection has not moved for 45 minutes inside its window
  *   registrant:<ticker>  SEC's ticker file maps a covered ticker to another CIK (weekly check)
  *   stale:<key>          a dataset is stale: at once when it has no automatic remedy, after 6 h of
  *                        staleness when it has one (the remedy's own timing does not matter)
@@ -24,6 +25,7 @@
  * last send).
  */
 import { parseReason } from "./provider-health";
+import { APP_KEY, COLLECT_KEY, collectBlock, collectStalled } from "./options-collect";
 import { SOURCES } from "./freshness";
 import type { DataFreshness } from "./data-freshness";
 
@@ -59,7 +61,7 @@ export interface Alert {
 export interface WatchdogInput {
   freshness: DataFreshness[];
   jobs: JobHealthRow[];
-  /** `provider:*`, `options-backoff`, `remedy:*`, `registrant-drift:*` rows */
+  /** `provider:*`, `options-collect`, `options-app`, `remedy:*`, `registrant-drift:*` rows */
   states: StateRow[];
   /** jobs whose runs could not be read (job health computed from job_runs): never judged silent */
   unread?: readonly string[];
@@ -167,15 +169,27 @@ export function alerts(input: WatchdogInput, nowMs: number, remedies: RemedyKeys
         graceMin: 0,
       });
     }
-    if (r.job === "options-backoff" && r.paused_reason && (r.cursor ?? 0) > 0)
-      out.push({
-        key: "options-blocked",
-        title: `Options collection blocked: ${r.paused_reason.replace(/^blocked: /, "")}`,
-        tried: "the job holds its place and backs off from 2 to 60 minutes between tries",
-        action: "Check whether Cboe blocks the app host, and decide on a slower pace or another source.",
-        graceMin: 30,
-      });
   }
+  // Options: the worker collects after the close; the app job is the second lane (options-collect.ts).
+  const collect = input.states.find((r) => r.job === COLLECT_KEY);
+  const app = input.states.find((r) => r.job === APP_KEY);
+  const block = collectBlock(collect, nowMs) ?? collectBlock(app, nowMs);
+  if (block)
+    out.push({
+      key: "options-blocked",
+      title: `Options collection blocked: ${block}`,
+      tried: "the collector went through the page reader up to its allowance, holds its place and tries again after 5 to 60 minutes",
+      action: "Nothing while it recovers by itself the same evening. If it repeats over several sessions, lower the pace (DIRECT_GAP_MS) or raise the page reader allowance (READER_MAX_PER_SESSION).",
+      graceMin: 60,
+    });
+  else if (collectStalled(collect, nowMs) && collectStalled(app, nowMs))
+    out.push({
+      key: "options-behind",
+      title: "Options collection has not moved for 45 minutes inside its window (16:20 to 23:30 New York)",
+      tried: "the app's scheduled options job reads a few stocks a call while the worker is silent",
+      action: "Check the Render worker (the loop step options-night) and the app's options schedule.",
+      graceMin: 30,
+    });
 
   const receipts = new Map(input.states.filter((r) => r.job.startsWith("remedy:")).map((r) => [r.job.slice("remedy:".length), r]));
   for (const f of input.freshness) {

@@ -1,28 +1,45 @@
-// Options-market context from Cboe's delayed option chains. Pure: no fetches, no storage.
+// Options-market context from listed option chains. Pure: no fetches, no storage.
 //
-// One snapshot per stock and trading day: Cboe's 30-day implied volatility, the at-the-money straddle
-// for each of the first expiries (the move the market prices to that date), 25-delta skew around 30
-// days, and put/call open interest and volume. Snapshots are recorded nightly, so implied-volatility
-// rank and every later comparison only ever use readings that existed on that day.
+// One snapshot per stock and trading day: 30-day implied volatility, the at-the-money straddle for
+// each of the first expiries (the move the market prices to that date), 25-delta skew around 30 days,
+// and put/call open interest and volume. Snapshots are recorded once per session, so
+// implied-volatility rank and every later comparison only ever use readings that existed on that day.
+//
+// Sources (`OptionsSource`): Yahoo Finance chains since 27 Nov 2026 (`yahoo.ts`: implied volatility
+// and delta are computed here from the quoted prices, 30-day volatility by interpolating
+// at-the-money variance), Cboe delayed chains before that (Cboe's own volatility, delta and IV30).
+// A row keeps its source, and a rank or a ratio only compares rows of one source.
 
-export interface CboeOption {
+import { varianceInterpolate } from "./pricing";
+
+export type OptionsSource = "yahoo" | "cboe";
+export const SOURCE_NAME: Record<OptionsSource, string> = { yahoo: "Yahoo Finance", cboe: "Cboe" };
+
+/** One quoted contract, whatever chain it came from. `option` is its OCC symbol. */
+export interface ChainOption {
   option: string;
   bid: number;
   ask: number;
+  /** implied volatility (annualised fraction); 0 when the quote carries none */
   iv: number;
   open_interest: number;
   volume: number;
   delta: number;
 }
-export interface CboeChain {
+export interface OptionChain {
   symbol: string;
   current_price?: number;
   close?: number;
   prev_day_close?: number;
+  /** the source's own 30-day implied volatility in percent (Cboe); absent, it is computed from the chain */
   iv30?: number;
+  /** when the quotes were taken; its first ten characters are the trading day */
   last_trade_time?: string;
-  options: CboeOption[];
+  options: ChainOption[];
 }
+/** @deprecated the names from when Cboe was the only source */
+export type CboeOption = ChainOption;
+export type CboeChain = OptionChain;
 
 /** The at-the-money straddle for one expiry. */
 export interface TermPoint {
@@ -32,7 +49,7 @@ export interface TermPoint {
   d: number;
   /** straddle mid ÷ stock price: the absolute move the market prices by that expiry */
   m: number;
-  /** at-the-money implied volatility (annualised), when Cboe has one */
+  /** at-the-money implied volatility (annualised), when the quotes carry one */
   iv: number | null;
   /** strike(s) the straddle was read at */
   k: number;
@@ -43,8 +60,10 @@ export interface OptionsSnapshot {
   /** trading day the quotes belong to */
   date: string;
   price: number;
-  /** Cboe's 30-day implied volatility (annualised fraction) */
+  /** 30-day implied volatility (annualised fraction): the source's own, or computed (`iv30From`) */
   iv30: number | null;
+  /** what `iv30` was read from */
+  iv30From: Iv30Basis | null;
   /** at-the-money implied volatility at the expiry nearest 30 days */
   atmIv: number | null;
   /** 25-delta put IV − 25-delta call IV at the expiry nearest 30 days (positive = downside protection costs more) */
@@ -54,6 +73,45 @@ export interface OptionsSnapshot {
   callVol: number;
   putVol: number;
   term: TermPoint[];
+}
+
+/** One expiry's at-the-money volatility, as used for the 30-day figure. */
+export interface IvPoint {
+  e: string;
+  d: number;
+  iv: number;
+}
+/**
+ * How the 30-day implied volatility was read: the source's own figure; interpolated in total variance
+ * between the expiries either side of 30 days; or one expiry's at-the-money volatility when only one
+ * side is listed.
+ */
+export type Iv30Basis = { kind: "source" } | { kind: "between"; lo: IvPoint; hi: IvPoint } | { kind: "single"; at: IvPoint };
+
+/** Expiries closer than this are too noisy to anchor a 30-day figure. */
+export const IV30_MIN_DAYS = 7;
+/** A single expiry stands in for 30 days only inside this range. */
+export const IV30_SINGLE_DAYS: readonly [number, number] = [14, 60];
+/** The far side of a bracket may be at most this many days out. */
+export const IV30_MAX_DAYS = 120;
+
+/**
+ * 30-day at-the-money implied volatility from the expiries' at-the-money volatilities (`points`,
+ * any order). With an expiry on each side of 30 days, total variance is interpolated between the
+ * nearest two; with one side only, that expiry's own volatility when it is 14 to 60 days out;
+ * otherwise nothing.
+ */
+export function constantMaturityIv(points: readonly IvPoint[], days = 30): { iv: number; basis: Iv30Basis } | null {
+  const ok = points.filter((p) => p.iv > 0 && p.d >= IV30_MIN_DAYS && p.d <= IV30_MAX_DAYS).sort((a, b) => a.d - b.d);
+  const lo = [...ok].reverse().find((p) => p.d <= days);
+  const hi = ok.find((p) => p.d >= days);
+  if (lo && hi) {
+    if (lo.d === hi.d) return { iv: lo.iv, basis: { kind: "single", at: lo } };
+    const iv = varianceInterpolate(lo, hi, days);
+    return iv != null ? { iv, basis: { kind: "between", lo, hi } } : null;
+  }
+  const only = lo ?? hi;
+  return only && only.d >= IV30_SINGLE_DAYS[0] && only.d <= IV30_SINGLE_DAYS[1] ? { iv: only.iv, basis: { kind: "single", at: only } } : null;
 }
 
 /** Our tickers use "-" for share classes; Cboe uses "." (BRK-B → BRK.B). */
@@ -70,9 +128,9 @@ export function parseOcc(sym: string): { root: string; expiry: string; type: "C"
 }
 
 const days = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
-const mid = (o: CboeOption) => (o.bid + o.ask) / 2;
+const mid = (o: ChainOption) => (o.bid + o.ask) / 2;
 /** A two-sided quote tight enough to trust its midpoint. */
-const quoted = (o: CboeOption | undefined): o is CboeOption =>
+const quoted = (o: ChainOption | undefined): o is ChainOption =>
   !!o && o.bid > 0 && o.ask >= o.bid && (o.ask - o.bid) / mid(o) <= 0.6;
 
 const MAX_TERM = 24;
@@ -84,13 +142,13 @@ const isMonthly = (e: string) => {
   return day >= 15 && day <= 21;
 };
 
-export function summarizeChain(ticker: string, chain: CboeChain): OptionsSnapshot | null {
+export function summarizeChain(ticker: string, chain: OptionChain): OptionsSnapshot | null {
   const price = chain.current_price || chain.close || 0;
   const date = (chain.last_trade_time ?? "").slice(0, 10);
   if (!(price > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
   // OCC roots drop the class dot (BRK.B options trade as BRKB…)
   const root = cboeSymbol(ticker).replace(/\./g, "");
-  const byExp = new Map<string, Map<number, { c?: CboeOption; p?: CboeOption }>>();
+  const byExp = new Map<string, Map<number, { c?: ChainOption; p?: ChainOption }>>();
   let callOi = 0, putOi = 0, callVol = 0, putVol = 0;
   for (const o of chain.options ?? []) {
     const s = parseOcc(o.option);
@@ -105,6 +163,7 @@ export function summarizeChain(ticker: string, chain: CboeChain): OptionsSnapsho
     ks.set(s.strike, pair);
   }
   const term: TermPoint[] = [];
+  const atm: IvPoint[] = [];
   let skew25: number | null = null;
   let atmIv: number | null = null;
   let best30 = Infinity;
@@ -119,7 +178,7 @@ export function summarizeChain(ticker: string, chain: CboeChain): OptionsSnapsho
     let straddle: number;
     let k: number;
     let iv: number | null;
-    const ivOf = (p: { c?: CboeOption; p?: CboeOption }) => {
+    const ivOf = (p: { c?: ChainOption; p?: ChainOption }) => {
       const a = p.c!.iv, b = p.p!.iv;
       return a > 0 && b > 0 ? (a + b) / 2 : a > 0 ? a : b > 0 ? b : null;
     };
@@ -139,12 +198,13 @@ export function summarizeChain(ticker: string, chain: CboeChain): OptionsSnapsho
       k = k0;
       iv = ivOf(p0);
     }
+    if (iv != null && iv > 0) atm.push({ e, d, iv: round(iv, 4) });
     if (term.length < MAX_TERM && (d <= WEEKLY_DAYS || (isMonthly(e) && !term.some((t) => t.e.slice(0, 7) === e.slice(0, 7) && t.d > WEEKLY_DAYS))))
       term.push({ e, d, m: round(straddle / price, 5), iv: iv != null ? round(iv, 4) : null, k });
     // skew and at-the-money IV at the expiry nearest 30 days (at least a week out)
     if (d >= 7 && Math.abs(d - 30) < best30) {
       const near = (want: number, side: "c" | "p") => {
-        let pick: CboeOption | null = null;
+        let pick: ChainOption | null = null;
         for (const [, p] of ks) {
           const o = p[side];
           if (!quoted(o) || !(o.iv > 0)) continue;
@@ -159,9 +219,13 @@ export function summarizeChain(ticker: string, chain: CboeChain): OptionsSnapsho
       atmIv = iv != null ? round(iv, 4) : null;
     }
   }
-  const iv30 = chain.iv30 && chain.iv30 > 0 ? round(chain.iv30 / 100, 4) : null;
+  // the source's own 30-day figure when it publishes one; otherwise read off the chain's at-the-money volatilities
+  const own = chain.iv30 && chain.iv30 > 0 ? round(chain.iv30 / 100, 4) : null;
+  const built = own == null ? constantMaturityIv(atm) : null;
+  const iv30 = own ?? (built ? round(built.iv, 4) : null);
+  const iv30From: Iv30Basis | null = own != null ? { kind: "source" } : (built?.basis ?? null);
   if (!term.length && iv30 == null) return null;
-  return { ticker: ticker.toUpperCase(), date, price, iv30, atmIv, skew25, callOi, putOi, callVol, putVol, term };
+  return { ticker: ticker.toUpperCase(), date, price, iv30, iv30From, atmIv, skew25, callOi, putOi, callVol, putVol, term };
 }
 
 const round = (x: number, n: number) => Math.round(x * 10 ** n) / 10 ** n;
@@ -210,8 +274,8 @@ export function ivRank(history: number[], current: number): { rank: number; pct:
   return { rank, pct, n: xs.length, min, max };
 }
 
-/** Row shape of `options_daily`. */
-export function snapshotRow(s: OptionsSnapshot) {
+/** Row shape of `options_daily`. `source` and `meta` say where the quotes came from and how they were read. */
+export function snapshotRow(s: OptionsSnapshot, from?: { source: OptionsSource; meta?: Record<string, unknown> | null }) {
   return {
     ticker: s.ticker,
     date: s.date,
@@ -226,6 +290,7 @@ export function snapshotRow(s: OptionsSnapshot) {
     pc_oi: s.callOi > 0 ? round(s.putOi / s.callOi, 4) : null,
     pc_vol: s.callVol > 0 ? round(s.putVol / s.callVol, 4) : null,
     term: s.term,
+    ...(from ? { source: from.source, meta: { ...(from.meta ?? {}), iv30From: s.iv30From } } : {}),
   };
 }
 

@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sb, dbGate, log, sleep } from "./lib/supa";
+import { heldReason, working } from "./lib/lanes";
 import {
   SOURCE_WORKER_JOB,
   SOURCE_REFRESH_JOB,
@@ -25,6 +26,9 @@ import {
   absAfterRun,
   absLeftFromReceipt,
   absNextTurn,
+  ABS_SEEN_KEY,
+  absSeenFromJson,
+  absSeenToJson,
   type AbsSeen,
   type AbsStay,
 } from "./lib/official-worker-plan";
@@ -80,7 +84,26 @@ function hasMemoryHeadroom(): boolean {
   );
 }
 
+/** A lane the owner stopped looks again this often; it starts nothing meanwhile. */
+const HELD_LOOK_MS = 60_000;
+const heldSaid = new Set<string>();
+/** The owner holds this lane (src/lib/jobs/lanes.ts): say so once, wait, and tell the loop there is no lease. */
+async function heldWait(job: string): Promise<boolean> {
+  const why = await heldReason(job);
+  if (why == null) {
+    if (heldSaid.delete(job)) log(job, "released by the owner");
+    return false;
+  }
+  if (!heldSaid.has(job)) {
+    heldSaid.add(job);
+    log(job, `stopped by the owner (${why.slice(0, 140)})`);
+  }
+  await sleep(HELD_LOOK_MS);
+  return true;
+}
+
 async function claim(job: string): Promise<Lease | null> {
+  if (await heldWait(job)) return null;
   await dbGate(job);
   const seeded = await sb
     .from("job_state")
@@ -162,7 +185,9 @@ async function childRun(
   children.add(child);
   if (replay) replayChild = child;
   let killed = false;
+  let heldStop = false;
   let renewing = false;
+  const done = working(lease.job);
   const stop = () => {
     killed = true;
     child.kill("SIGTERM");
@@ -172,8 +197,14 @@ async function childRun(
   const heartbeat = setInterval(() => {
     if (renewing) return;
     renewing = true;
-    void lease
-      .renew()
+    void (async () => {
+      // A hold placed while the child runs stops it at the next heartbeat.
+      if ((await heldReason(lease.job)) != null) {
+        heldStop = true;
+        return false;
+      }
+      return lease.renew();
+    })()
       .then((ok) => {
         if (!ok) stop();
       }, stop)
@@ -187,6 +218,7 @@ async function childRun(
   });
   clearTimeout(timer);
   clearInterval(heartbeat);
+  done();
   children.delete(child);
   if (replayChild === child) replayChild = null;
   const result = killed ? 124 : code;
@@ -200,7 +232,8 @@ async function childRun(
     seconds: (Date.now() - Date.parse(started)) / 1000,
     told,
   });
-  if (after) Object.assign(row.detail, await after().catch((e: unknown) => ({ after_error: safeError(e) })));
+  if (heldStop) Object.assign(row.detail, { stopped: "stopped by the owner's hold" });
+  if (after && !heldStop) Object.assign(row.detail, await after().catch((e: unknown) => ({ after_error: safeError(e) })));
   const receipt = await sb.from("job_runs").insert({
     job: lease.job,
     started_at: started,
@@ -352,9 +385,23 @@ async function absLoop() {
   const cache = join(WORK, "sec");
   mkdirSync(cache, { recursive: true });
   let failures = 0;
-  // What this process knows of each watched CIK, by index: when it was last worked and what it had
-  // left (rules: absNextTurn, absAfterRun). Lost on restart, which only means one more look at each.
-  const seen = new Map<number, AbsSeen>();
+  // What the lane knows of each watched CIK, by index: when it was last worked and what it had left
+  // (rules: absNextTurn, absAfterRun). Looks that left nothing are kept in job_state, so a restart of
+  // the worker does not look at all 91 issuers again.
+  const ciks = watch.map((w) => w.cik);
+  let seen = new Map<number, AbsSeen>();
+  try {
+    const kept = await sb.from("job_state").select("paused_reason").eq("job", ABS_SEEN_KEY).maybeSingle();
+    if (kept.error) throw new Error(kept.error.message);
+    seen = absSeenFromJson(kept.data?.paused_reason, ciks, Date.now());
+    if (seen.size) log(ABS_WORKER_JOB, `${seen.size} of ${watch.length} issuers were looked at within six hours and are not looked at again yet`);
+  } catch (e) {
+    log(ABS_WORKER_JOB, "what was looked at before the restart could not be read", safeError(e));
+  }
+  const keepSeen = async () => {
+    const r = await sb.from("job_state").upsert({ job: ABS_SEEN_KEY, cursor: seen.size, paused_reason: absSeenToJson(seen, ciks), updated_at: new Date().toISOString() });
+    if (r.error) log(ABS_WORKER_JOB, "what was looked at could not be kept", safeError(r.error));
+  };
   let stay: AbsStay | null = null;
   while (!stopped && watch.length) {
     let lease: Lease | null = null;
@@ -404,6 +451,7 @@ async function absLoop() {
           });
           if (after.seen) seen.set(turn.index, after.seen);
           else seen.delete(turn.index);
+          await keepSeen();
           stay = after.stay;
           pause = after.pauseMs;
           failures = code === 0 ? 0 : failures + 1;

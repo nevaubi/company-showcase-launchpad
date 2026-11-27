@@ -539,6 +539,7 @@ export function NextReport({
   consensus,
   pricing,
   pricedAsOf,
+  pricedFrom = "the close",
   typical,
   guidance,
   listenFor,
@@ -547,6 +548,8 @@ export function NextReport({
   consensus: PeriodEstimate | null;
   pricing: EarningsPricing | null;
   pricedAsOf: string | null;
+  /** where and when the option quotes were taken, e.g. "the Yahoo Finance close" */
+  pricedFrom?: string;
   typical: ReactionSummary | null;
   guidance: { quote: string; summary: string; callQuarter: string | null; callDate: string; url: string }[];
   listenFor: string[];
@@ -598,7 +601,7 @@ export function NextReport({
             // An expiry weeks after the report also prices ordinary movement, so it is not set beside
             // the typical reaction (earnings-M1); the options panel below still shows it.
             pricingNear
-              ? `At-the-money straddle to ${fmtDate(pricing!.point.e)}, the ${span} days from the Cboe close of ${fmtDate(pricedAsOf!, { month: "short", day: "numeric" })}${
+              ? `At-the-money straddle to ${fmtDate(pricing!.point.e)}, the ${span} days from ${pricedFrom} of ${fmtDate(pricedAsOf!, { month: "short", day: "numeric" })}${
                   pricing!.lag > 0 ? `, ${pricing!.lag} ${pricing!.lag === 1 ? "day" : "days"} after the report` : ""
                 }`
               : pricing && pricing.lag > REPORT_EXPIRY_LAG

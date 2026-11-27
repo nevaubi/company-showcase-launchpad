@@ -5,6 +5,7 @@ import { useSource } from "@/components/source/source-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtDate, ordinal } from "@/lib/format";
 import { optionsHistoryQuery } from "@/lib/options/data";
+import { sourceName } from "@/lib/options/source";
 import type { Technicals } from "@/lib/technicals/analysis";
 import type { Horizon } from "@/lib/technicals/evidence";
 import { METRICS, peersQuery, rowsOf, type CrossFile, type CrossRow } from "@/lib/technicals/cross";
@@ -237,7 +238,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
               <p className={cn("px-3 py-2", S.caption)}>
                 Realised: {pc(M.volatility.rv21, 1)} a year over the last 21 sessions, scaled by the square root of time.{" "}
                 {iv?.iv30 != null
-                  ? `Options: 30-day implied volatility ${pc(iv.iv30, 1)} from the Cboe snapshot of ${fmtDate(iv.date)}, scaled the same way.`
+                  ? `Options: 30-day implied volatility ${pc(iv.iv30, 1)} from the ${sourceName(iv)} snapshot of ${fmtDate(iv.date)}, scaled the same way.`
                   : covered
                     ? "No option snapshot is stored for this stock."
                     : "Option snapshots are kept for covered companies only."}
@@ -326,7 +327,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
               </p>
             </div>
             <div>
-              <SubTitle caption={snap ? `straddle price ÷ share price, Cboe snapshot of ${fmtDate(snap.date)}` : undefined}>Priced by options</SubTitle>
+              <SubTitle caption={snap ? `straddle price ÷ share price, ${sourceName(snap)} snapshot of ${fmtDate(snap.date)}` : undefined}>Priced by options</SubTitle>
               {term.length > 0 && snap ? (
                 <>
                   <TableWrap min={400}>

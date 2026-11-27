@@ -187,3 +187,147 @@ export class HourlyBudget {
     return spent + next <= this.limit || spent === 0;
   }
 }
+
+// ---------------------------------------------------------------------------------------------
+// What is already settled (repairs of 27 Nov 2026)
+//
+// Before these, every restart walked all companies again from the first: each stored file was
+// downloaded to learn that it exists (16 GB a pass), and requests that can never be answered were
+// asked again on every pass (5,016 refusals of 227 companies' segments in three days).
+//
+//   stored     a file in the archive, known from a listing of the archive folders, not a download
+//   answered   the provider said something that will not change by asking again:
+//                expired    HTTP 409 "request already completed, its response is no longer kept":
+//                           this request id can never return data (a new id is a new, charged call;
+//                           that is the owner's decision, never the collector's). All 232 on file on
+//                           27 Nov 2026 had first answered "not found" at no charge; the refusal is
+//                           that same answer after the provider dropped its copy.
+//                not_found  the provider has no such company or no such data: asked again after 30 days
+//                           (same request id: the provider repeats the answer or refuses, which is final)
+//                no_match   no identifier to match the company on, or no verified match: again after 30 days
+//              kept as one ledger row each (`unavailable`), read back at the start
+// ---------------------------------------------------------------------------------------------
+
+export type AnswerKind = 'expired' | 'not_found' | 'no_match';
+export interface Answer { kind: AnswerKind; at: number }
+/** How long a "not there" answer stands before the provider is asked again. `expired` stands for good. */
+export const ANSWER_RECHECK_MS = 30 * 86_400_000;
+export const answerKey = (provider: string, capability: string, name: string) => `${provider}/${capability}/${name}`;
+
+/** HTTP 409: the request ran once and its response was dropped; this request id can never return it. */
+export function providerExpired(status: number, body: Json): boolean {
+  return status === 409 && /request already completed/i.test(JSON.stringify(body)) && /no longer kept/i.test(JSON.stringify(body));
+}
+
+/** Whether a recorded answer still stands at `now`. */
+export function answerStands(a: Answer | undefined, now: number): boolean {
+  if (!a) return false;
+  return a.kind === 'expired' || now - a.at < ANSWER_RECHECK_MS;
+}
+
+/** The answers on file, from their ledger rows (`detail.unavailable`); the newest row of a key wins. */
+export function answersFromLedger(rows: readonly { started_at: string; detail: Json }[]): Map<string, Answer> {
+  const out = new Map<string, Answer>();
+  for (const r of rows) {
+    const d = r.detail ?? {};
+    const kind = d.unavailable as AnswerKind | undefined;
+    if ((kind !== 'expired' && kind !== 'not_found' && kind !== 'no_match') || !d.provider || !d.capability || !d.name) continue;
+    const key = answerKey(String(d.provider), String(d.capability), String(d.name));
+    const at = Date.parse(r.started_at);
+    const prev = out.get(key);
+    if (!prev || at >= prev.at) out.set(key, { kind, at });
+  }
+  return out;
+}
+
+export interface PhaseATodo {
+  /** fiscal.ai capabilities still to fetch, in the collection order */
+  fiscal: string[];
+  /** the transcripts file is missing while the list of IR events is stored or still to fetch */
+  transcripts: boolean;
+  /** EODHD capabilities still to fetch */
+  eod: string[];
+  /** the Data Legion match is still to try */
+  legion: boolean;
+  /** Benzinga capabilities still to fetch */
+  benzinga: string[];
+  /** the company profile itself is still to fetch */
+  profile: boolean;
+  /** nothing left: no call, no download */
+  done: boolean;
+}
+
+export const PHASE_A_EOD_CAPABILITIES = ['fundamentals/company', 'corporate-actions/dividends', 'corporate-actions/splits'] as const;
+export const PHASE_A_BENZINGA_CAPABILITIES = ['calendar/ratings', 'calendar/consensus-ratings'] as const;
+
+/**
+ * What Phase A still has to do for one company: every piece that is neither stored nor answered.
+ * Without a profile (the provider does not know the company) nothing of fiscal.ai can be asked, so
+ * its capabilities are not counted as missing.
+ */
+export function phaseATodo(ticker: string, stored: ReadonlySet<string>, answers: ReadonlyMap<string, Answer>, now: number): PhaseATodo {
+  const settled = (provider: string, cap: string) => stored.has(fileKey(provider, cap, ticker)) || answerStands(answers.get(answerKey(provider, cap, ticker)), now);
+  const profile = !settled('fiscal-ai', 'company/profile');
+  const known = stored.has(fileKey('fiscal-ai', 'company/profile', ticker));
+  const fiscal = known || profile ? PHASE_A_FISCAL_CAPABILITIES.filter((cap) => !settled('fiscal-ai', cap)) : [];
+  // transcripts hang off the IR events list: asked for only when that list exists or is still to come
+  const events = stored.has(fileKey('fiscal-ai', 'events/ir-events', ticker)) || fiscal.includes('events/ir-events');
+  const transcripts = (known || profile) && events && !settled('fiscal-ai', 'events/transcript');
+  const eod = PHASE_A_EOD_CAPABILITIES.filter((cap) => !settled('eodhd', cap));
+  const legion = !settled('datalegion', 'companies/enrich-premium');
+  const benzinga = PHASE_A_BENZINGA_CAPABILITIES.filter((cap) => !settled('benzinga', cap));
+  const done = !profile && !fiscal.length && !transcripts && !eod.length && !legion && !benzinga.length;
+  return { profile, fiscal, transcripts, eod, legion, benzinga, done };
+}
+
+/** Counts over the whole universe, for the plan report and the progress row. */
+export function phaseASummary(tickers: readonly string[], stored: ReadonlySet<string>, answers: ReadonlyMap<string, Answer>, now: number) {
+  const missing: Record<string, number> = {};
+  let done = 0;
+  const add = (k: string) => (missing[k] = (missing[k] ?? 0) + 1);
+  for (const t of tickers) {
+    const todo = phaseATodo(t, stored, answers, now);
+    if (todo.done) { done++; continue; }
+    if (todo.profile) add('fiscal-ai/company/profile');
+    for (const c of todo.fiscal) add(`fiscal-ai/${c}`);
+    if (todo.transcripts) add('fiscal-ai/events/transcript');
+    for (const c of todo.eod) add(`eodhd/${c}`);
+    if (todo.legion) add('datalegion/companies/enrich-premium');
+    for (const c of todo.benzinga) add(`benzinga/${c}`);
+  }
+  return { companies: tickers.length, done, open: tickers.length - done, missing };
+}
+
+/**
+ * A local checkpoint (one provider response kept on the worker's disk) as text, or null when the
+ * file is not whole. A checkpoint cut off while it was written (the worker was stopped mid-write)
+ * ends before its closing brace: reading one of these with JSON.parse ended the clean-up step after
+ * Phase A on every pass, so Phases B and C never started.
+ */
+export function parseCheckpoint(text: string): Json | null {
+  try {
+    const v = JSON.parse(text);
+    return v && typeof v === 'object' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a checkpoint's first bytes say it is a page of `provider`/`capability` (it is written with those two keys first). */
+export function checkpointIs(head: string, provider: string, capability: string): boolean {
+  return head.includes(`"provider":${JSON.stringify(provider)}`) && head.includes(`"capability":${JSON.stringify(capability)}`);
+}
+
+/**
+ * After a whole pass (Phases A, B, C and both clean-ups ended without a stop) the collector rests:
+ * the worker restarts it thirty seconds after it exits, and a pass that finds nothing new would
+ * otherwise repeat for ever. A week matches the withdrawal clean-up; "not there" answers are asked
+ * again after thirty days, within a later pass.
+ */
+export const PASS_REST_MS = 7 * 86_400_000;
+/** Milliseconds the collector still has to rest at `now`; 0 when no pass finished or the rest is over. */
+export function passRestLeft(lastFinishedAt: string | null | undefined, now: number): number {
+  const at = lastFinishedAt ? Date.parse(lastFinishedAt) : NaN;
+  if (!Number.isFinite(at) || at > now) return 0;
+  return Math.max(0, at + PASS_REST_MS - now);
+}

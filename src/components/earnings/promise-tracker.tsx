@@ -1,6 +1,8 @@
 // Management promise tracker: what management committed to on its calls (verbatim, checked against
 // the transcript by vetPromises), grouped by state, each with the later call's words that graded it.
 import { MachineWritten } from "./figures";
+import { CoverageNote } from "@/components/company/coverage-note";
+import { CORPUS } from "@/lib/coverage/corpora";
 import { ExternalLink } from "lucide-react";
 import { credibility, groupPromises, type PromiseStatus, type TrackedPromise } from "@/lib/earnings/promises";
 import { quoteLink } from "@/lib/supply/counterparty";
@@ -16,11 +18,13 @@ const STATUS: Record<PromiseStatus, { label: string; group: string; dot: string 
 };
 
 export function PromiseTracker({
+  ticker,
   loading,
   data,
   error,
   shownElsewhere,
 }: {
+  ticker: string;
   loading: boolean;
   data?: { promises: TrackedPromise[]; calls: { date: string }[]; error?: string };
   error: Error | null;
@@ -44,7 +48,9 @@ export function PromiseTracker({
       ) : error || data?.error ? (
         <Quiet>{error?.message ?? data?.error}</Quiet>
       ) : !ps.length ? (
-        <Quiet>No verifiable commitments in the recent calls.</Quiet>
+        <Quiet>
+          <CoverageNote ticker={ticker} corpus={CORPUS.promises} fallback="No verifiable commitments in the recent calls." />
+        </Quiet>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-4 py-2.5">

@@ -3,10 +3,14 @@
  * problems first, rotation cursors that stopped moving, and the top-1,000 coverage table.
  */
 import { decide, parseReason, PROVIDER_IDS, providerIdOf, type CircuitRow } from "./provider-health";
+import { APP_KEY, COLLECT_KEY, collectStalled } from "./options-collect";
 import { SOURCES } from "./freshness";
 import { HTTP_JOBS } from "./reaper";
 import type { HealthRow } from "./job-health";
 import type { JobHealthRow, StateRow } from "./watchdog";
+
+/** Minutes without progress, inside the collection window, before the options collection counts as behind. */
+export const OPTIONS_STALL_MIN = 45;
 
 export interface ProviderStatus {
   id: string;
@@ -103,7 +107,6 @@ export const ROTATION_CURSORS: { job: string; source: string }[] = [
   { job: "sec", source: "sec" },
   { job: "alt-data", source: "alt-data" },
   { job: "filing-cache", source: "filing-cache" },
-  { job: "options", source: "options" },
 ];
 
 export interface StalledCursor {
@@ -117,13 +120,6 @@ export interface StalledCursor {
   attempts: number;
 }
 
-/** True inside the options schedule: 22:00-23:59 UTC Monday to Friday and 00:00-05:59 Tuesday to Saturday (review R13: weekend nights are not stalls). */
-export function optionsScheduled(d: Date): boolean {
-  const h = d.getUTCHours();
-  const day = d.getUTCDay();
-  return (h >= 22 && day >= 1 && day <= 5) || (h < 6 && day >= 2 && day <= 6);
-}
-
 /** Cursors that have not moved for three times their job's cadence (not counted while the job is not expected to run). */
 export function stalledCursors(rows: readonly StateRow[], nowMs: number): StalledCursor[] {
   const by = new Map(rows.map((r) => [r.job, r]));
@@ -135,13 +131,18 @@ export function stalledCursors(rows: readonly StateRow[], nowMs: number): Stalle
     const row = by.get(c.job);
     if (!s || !row) continue;
     if (s.marketHours && !inMarketHours(now)) continue;
-    // Options run 22:00 to 05:59 UTC on weekday nights only (cron: 22-23 Mon-Fri, 0-5 Tue-Sat).
-    if (c.job === "options" && !optionsScheduled(now)) continue;
-    const limitMin = c.job === "options" ? 30 : 3 * s.everyMin;
+    const limitMin = 3 * s.everyMin;
     const moved = row.updated_at ? Date.parse(row.updated_at) : 0;
     if (nowMs - moved <= limitMin * 60_000) continue;
     const tries = Number(by.get(`${c.job}-slice`)?.cursor ?? 0) % 10;
     out.push({ job: c.job, label: s.label, cursor: Number(row.cursor ?? 0), movedAt: row.updated_at, limitMin, attempts: tries });
+  }
+  // Options: one collection per session after the close; behind only when neither lane moved (options-collect.ts).
+  const worker = collectStalled(by.get(COLLECT_KEY), nowMs, OPTIONS_STALL_MIN);
+  const app = collectStalled(by.get(APP_KEY), nowMs, OPTIONS_STALL_MIN);
+  if (worker && app) {
+    const lead = (worker.movedAt ?? "") >= (app.movedAt ?? "") ? worker : app;
+    out.push({ job: COLLECT_KEY, label: src.get("options")?.label ?? "Options", cursor: lead.cursor, movedAt: lead.movedAt, limitMin: OPTIONS_STALL_MIN, attempts: 0 });
   }
   return out;
 }

@@ -16,7 +16,7 @@ export const getDataFreshness = createServerFn({ method: "GET" })
     if (!isAdmin) throw new Error("Admins only");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { readJobHealth } = await import("@/lib/jobs/job-health.server");
-    const cursorJobs = ["prices", "macro", "sec", "alt-data", "filing-cache", "options"];
+    const cursorJobs = ["prices", "macro", "sec", "alt-data", "filing-cache"];
     const [fresh, paused, health, coverage, special] = await Promise.all([
       supabaseAdmin.rpc("data_freshness"),
       supabaseAdmin.from("job_state").select("job,paused_reason,updated_at").not("paused_reason", "is", null).limit(1000),
@@ -26,7 +26,7 @@ export const getDataFreshness = createServerFn({ method: "GET" })
       supabaseAdmin
         .from("job_state")
         .select("job,cursor,paused_reason,updated_at")
-        .or(`job.like."provider:*",job.like."alert:*",job.in.(${[...cursorJobs, ...cursorJobs.map((j) => `${j}-slice`)].join(",")}),paused_reason.like."${OWNER_HOLD_PREFIX}*"`)
+        .or(`job.like."provider:*",job.like."alert:*",job.in.(${[...cursorJobs, ...cursorJobs.map((j) => `${j}-slice`), "options-collect", "options-app"].join(",")}),paused_reason.like."${OWNER_HOLD_PREFIX}*"`)
         .limit(1000),
     ]);
     if (fresh.error) throw new Error(fresh.error.message);

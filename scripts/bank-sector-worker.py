@@ -57,6 +57,51 @@ def cloud(route, body=None, upsert=False):
     return json.loads(raw) if raw else None
 
 
+# ---- lane board (src/lib/jobs/lanes.ts): owner hold, running marker, run receipt ----
+LANE = "bank-sector"
+HOLD_PREFIX = "owner: hold."
+
+
+def lane_rest(method, route, body=None, prefer=None):
+    """One small call to job_state or job_runs. Never raises: the lane's bookkeeping must not stop a refresh."""
+    try:
+        url=(os.environ.get("SUPABASE_URL") or os.environ["VITE_SUPABASE_URL"]).rstrip("/")
+        key=os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        headers={"apikey":key,"Authorization":"Bearer "+key,"Content-Type":"application/json"}
+        if prefer:
+            headers["Prefer"]=prefer
+        req=Request(url+"/rest/v1/"+route,data=(json.dumps(body).encode() if body is not None else None),headers=headers,method=method)
+        with urlopen(req,timeout=20) as r:
+            raw=r.read()
+        return json.loads(raw) if raw else None
+    except Exception as exc:  # noqa: BLE001
+        print(f"lane bookkeeping skipped ({method} {route.split('?')[0]}): {exc}",file=sys.stderr,flush=True)
+        return None
+
+
+def now_iso(offset=0):
+    return (dt.datetime.now(dt.timezone.utc)+dt.timedelta(seconds=offset)).isoformat()
+
+
+def held_reason():
+    """The owner's hold on this lane, or None. An unreadable answer counts as no hold."""
+    rows=lane_rest("GET","job_state?select=paused_reason&job=eq.hold%3A"+LANE)
+    reason=(rows[0].get("paused_reason") if rows else None) or ""
+    if not reason.startswith(HOLD_PREFIX):
+        return None
+    # stamp the hold as seen; updated_at stays the time it was placed
+    lane_rest("PATCH","job_state?job=eq.hold%3A"+LANE+"&paused_reason=like.owner%3A%20hold.*",{"cursor":int(time.time())},"return=minimal")
+    return reason[len(HOLD_PREFIX):].strip()
+
+
+def mark_running(started, running):
+    lane_rest("POST","job_state?on_conflict=job",{"job":"lane:"+LANE,"cursor":0,"paused_reason":None,"lease_until":(now_iso(6*3600) if running else None),"updated_at":started},"resolution=merge-duplicates,return=minimal")
+
+
+def receipt(started, ok, note):
+    lane_rest("POST","job_runs",{"job":LANE,"started_at":started,"finished_at":now_iso(),"ok":ok,"items":1 if ok and note.startswith("Activated") else 0,"detail":{"note":note[:300]}},"return=minimal")
+
+
 def snapshots(folder):
     for path in FILES:
         dest=folder/path
@@ -189,16 +234,37 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once",action="store_true")
     args=parser.parse_args()
+    held_said=False
     while True:
+        # The owner stopped this lane: nothing is read or stored until it is released.
+        why=held_reason()
+        if why is not None:
+            if not held_said:
+                print(f"Bank sector refresh stopped by the owner ({why[:140]})",flush=True)
+            held_said=True
+            if args.once:
+                break
+            time.sleep(300)
+            continue
+        if held_said:
+            print("Bank sector refresh released by the owner",flush=True)
+        held_said=False
+        started=now_iso()
+        mark_running(started,True)
         try:
             with tempfile.TemporaryDirectory(prefix="bank-sector-") as tmp:
-                print(refresh(Path(tmp)),flush=True)
+                said=refresh(Path(tmp))
+                print(said,flush=True)
+            receipt(started,True,said)
         except Exception as exc:
             print(f"Bank sector refresh held at last verified release: {exc}",file=sys.stderr,flush=True)
+            receipt(started,False,f"held at the last verified release: {exc}")
+            mark_running(started,False)
             if args.once:
                 raise
             time.sleep(1800)
             continue
+        mark_running(started,False)
         if args.once:
             break
         time.sleep(3*3600)

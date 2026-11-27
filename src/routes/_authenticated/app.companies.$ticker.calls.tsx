@@ -6,6 +6,8 @@ import { ExternalLink, Mic, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CallReader } from "@/components/earnings/call-reader";
+import { CoverageNote } from "@/components/company/coverage-note";
+import { CORPUS } from "@/lib/coverage/corpora";
 import { coverageOf } from "@/lib/coverage";
 import { fmtDate } from "@/lib/format";
 import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
@@ -82,7 +84,10 @@ function Calls() {
       <section data-section="Earnings calls" className="flex flex-col items-center gap-3 border-y bg-card/40 py-12 text-center">
         <Mic className="size-6 text-muted-foreground" />
         <p className="text-[13px] font-medium">No archived earnings calls for {co?.shortName ?? ticker}</p>
-        <p className="max-w-md text-[11px] text-muted-foreground">{calls.data?.error ?? calls.error?.message ?? "Try again in a moment."}</p>
+        <p className="max-w-md text-[11px] text-muted-foreground">
+          {/* a read that failed says so; otherwise the coverage ledger says why there is none */}
+          {calls.error ? calls.error.message : <CoverageNote ticker={ticker} corpus={CORPUS.calls} fallback={calls.data?.error ?? "Try again in a moment."} />}
+        </p>
         <Button size="sm" variant="outline" onClick={() => calls.refetch()}>
           <RefreshCw /> Try again
         </Button>

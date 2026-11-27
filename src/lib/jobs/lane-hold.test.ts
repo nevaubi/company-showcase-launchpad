@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { HOLD_LEASE_UNTIL, HOLDABLE_LANES, holdPatch, holdText, isHoldableLane, isOwnerHold, ownerHoldReason, ownerHolds, releasePatch } from "./lane-hold";
+import { HOLD_LEASE_UNTIL, holdPatch, holdRowPatch, holdText, isOwnerHold, ownerHoldReason, ownerHolds, placeHold, releasePatch } from "./lane-hold";
+import { laneById } from "./lanes";
 import { ROUTINE_REASON_RE, pausedJobs } from "./data-freshness";
 
 const NOW = new Date("2026-11-27T12:15:00Z");
@@ -46,9 +47,17 @@ describe("owner holds", () => {
     expect(pausedJobs([{ job: "vendor-backfill", paused_reason: reason, updated_at: "x" }])).toEqual([]);
   });
 
-  it("only lanes that check for a hold can be held", () => {
-    expect(HOLDABLE_LANES).toEqual(["vendor-backfill"]);
-    expect(isHoldableLane("vendor-backfill")).toBe(true);
-    expect(isHoldableLane("ir-deep-loop")).toBe(false);
+  it("only lanes on the list can be held: each of them checks for its hold", () => {
+    expect(laneById("vendor-backfill")).toBeDefined();
+    // the IR loop's own lease row is not a lane: its steps are (loop:company, loop:mirror, …)
+    expect(laneById("ir-deep-loop")).toBeUndefined();
   });
+
+  it("a hold on a hold:<lane> row carries no lease and starts unseen; on a lane's own lease row it locks the lease", () => {
+    expect(holdRowPatch("Stopped", NOW)).toEqual({ paused_reason: "owner: hold. Stopped (since 2026-11-27)", lease_until: null, cursor: 0, updated_at: NOW.toISOString() });
+    expect(holdPatch("Stopped", NOW)).toEqual({ paused_reason: "owner: hold. Stopped (since 2026-11-27)", lease_until: HOLD_LEASE_UNTIL, updated_at: NOW.toISOString() });
+    expect(placeHold("Stopped", NOW, false)).toEqual(holdRowPatch("Stopped", NOW));
+    expect(placeHold("Stopped", NOW, true)).toEqual(holdPatch("Stopped", NOW));
+  });
+
 });

@@ -7,6 +7,7 @@ import {
   nextTranscriptDemand,
 } from "@/lib/transcripts/issuer-jobs.server";
 import { args, dbGate, sb, sleep } from "./lib/supa";
+import { heldReason, working } from "./lib/lanes";
 
 type Outcome = {
   items: number;
@@ -14,10 +15,23 @@ type Outcome = {
 };
 async function superviseLane(job: string, cadenceMs: number, work: () => Promise<Outcome>) {
   let lastReceipt = 0;
+  let heldSaid = false;
   do {
+    // The owner stopped this lane (src/lib/jobs/lanes.ts): nothing is read or asked until it is released.
+    const why = await heldReason(job);
+    if (why != null) {
+      if (!heldSaid) console.log(job, `stopped by the owner (${why.slice(0, 140)})`);
+      heldSaid = true;
+      if (args.once) return;
+      await sleep(60_000);
+      continue;
+    }
+    if (heldSaid) console.log(job, "released by the owner");
+    heldSaid = false;
     const started = new Date().toISOString();
     let ok = true;
     let outcome: Outcome;
+    const done = working(job);
     try {
       await dbGate(job);
       outcome = await work();
@@ -30,6 +44,8 @@ async function superviseLane(job: string, cadenceMs: number, work: () => Promise
         },
       };
       console.error(job, outcome.detail?.error);
+    } finally {
+      done();
     }
     if (!ok || outcome.items > 0 || Date.now() - lastReceipt >= 5 * 60_000) {
       const receipt = await sb.from("job_runs").insert({

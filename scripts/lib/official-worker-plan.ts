@@ -77,8 +77,12 @@ export function safeError(error: unknown): string {
 // ABS lane rotation (review rev-workers S7)
 // ---------------------------------------------------------------------------------------------
 
-/** A CIK whose last look found nothing to do is not looked at again for an hour. */
-export const ABS_IDLE_RECHECK_MS = 3_600_000;
+/**
+ * A CIK whose last look found nothing to do is not looked at again for six hours. Asset-level files
+ * arrive once a month per deal, and one look is one process: at an hour, 91 watched issuers kept the
+ * lane starting a process every minute around the clock with nothing to store.
+ */
+export const ABS_IDLE_RECHECK_MS = 6 * 3_600_000;
 /** Pause between two runs on the same CIK while it has filings left; the child keeps SEC at 2 a second. */
 export const ABS_STAY_PAUSE_MS = 5_000;
 /** Pause before the next CIK, as before: at most one CIK a minute. */
@@ -119,6 +123,48 @@ export function absNextTurn(i: {
     soonest = Math.min(soonest, seen.at + ABS_IDLE_RECHECK_MS - i.now);
   }
   return { waitMs: Math.max(1_000, Math.min(ABS_IDLE_RECHECK_MS, soonest)) };
+}
+
+/** job_state row that keeps `seen` across restarts (JSON in paused_reason; bookkeeping, not a pause). */
+export const ABS_SEEN_KEY = "abs-bulk-seen";
+
+/**
+ * What the lane remembers, to store: by CIK, so a change to the watch list cannot attach a memory to
+ * another issuer. Only looks that left nothing are kept: a CIK with work left is taken up again anyway.
+ */
+export function absSeenToJson(seen: ReadonlyMap<number, AbsSeen>, ciks: readonly number[]): string {
+  const out: Record<string, number> = {};
+  for (const [index, s] of seen) {
+    const cik = ciks[index];
+    if (cik != null && s.left === 0 && Number.isFinite(s.at)) out[String(cik)] = Math.floor(s.at / 1000);
+  }
+  return JSON.stringify({ v: 1, idle: out });
+}
+
+/**
+ * The stored memory, read back for this watch list. Anything unreadable, in the future or older than
+ * the recheck interval is dropped, which only means one more look at that CIK.
+ */
+export function absSeenFromJson(text: string | null | undefined, ciks: readonly number[], now: number): Map<number, AbsSeen> {
+  const seen = new Map<number, AbsSeen>();
+  if (!text) return seen;
+  let idle: unknown;
+  try {
+    const j = JSON.parse(text) as { v?: number; idle?: unknown };
+    if (j.v !== 1) return seen;
+    idle = j.idle;
+  } catch {
+    return seen;
+  }
+  if (!idle || typeof idle !== "object") return seen;
+  const index = new Map(ciks.map((c, i) => [String(c), i]));
+  for (const [cik, atS] of Object.entries(idle as Record<string, unknown>)) {
+    const i = index.get(cik);
+    const at = typeof atS === "number" && Number.isFinite(atS) ? atS * 1000 : NaN;
+    if (i == null || !(at > 0) || at > now || now - at >= ABS_IDLE_RECHECK_MS) continue;
+    seen.set(i, { at, left: 0 });
+  }
+  return seen;
 }
 
 /**

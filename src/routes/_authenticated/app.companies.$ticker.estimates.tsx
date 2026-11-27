@@ -1,4 +1,6 @@
 import { ForecastRangeCell } from "@/components/estimates/forecast-range";
+import { CoverageNote } from "@/components/company/coverage-note";
+import { CORPUS } from "@/lib/coverage/corpora";
 import { coverageLabel, forecastRange } from "@/lib/estimates/range-quality";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -124,7 +126,7 @@ function EstimatesPage() {
     return (
       <Panel title="Estimates & analysts">
         <p className="p-4 text-sm text-muted-foreground">
-          {q.data?.error ?? "Estimates are temporarily unavailable."} Try again in a few minutes.
+          <CoverageNote ticker={ticker} corpus={CORPUS.estimates} only={["not_applicable"]} fallback={<>{q.data?.error ?? "Estimates are temporarily unavailable."} Try again in a few minutes.</>} />
         </p>
       </Panel>
     );

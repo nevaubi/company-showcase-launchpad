@@ -34,6 +34,8 @@ import { isAppPath, siteMapText } from "@/lib/research/site-map";
 import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/views";
 import { viewLabel } from "@/lib/research/view-spec";
 import { partnerFile } from "@/lib/data";
+import { coverageText } from "@/lib/coverage/assistant-text";
+import { companyCoverageQuery } from "@/lib/coverage/read";
 import { adjustedSummary, suspectNotices, type CommentsFile, type Form144File } from "@/lib/filings/review";
 import { irPageKey, loadIrPage } from "@/lib/ir/client";
 import { irSearch, type IrFreq } from "@/lib/research/ir-search";
@@ -508,6 +510,12 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     }
     case "get_earnings_workup": {
       const r = await getEarningsWorkup(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_data_coverage": {
+      const ticker = String(args.ticker ?? "").toUpperCase();
+      const cov = await qc.fetchQuery(companyCoverageQuery(ticker));
+      const r = coverageText(ticker, coverageOf(ticker)?.shortName, cov.rows, cov.checked);
       return { output: r.output, summary: r.summary };
     }
     case "get_earnings_season": {

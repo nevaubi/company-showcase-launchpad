@@ -10,6 +10,7 @@ import { TickerMark } from "@/components/app/ticker";
 import { Button } from "@/components/ui/button";
 import { impliedMoveBy } from "@/lib/options/core";
 import { setupQuoteQuery } from "@/lib/options/data";
+import { sourceName } from "@/lib/options/source";
 import { LISTED, type EvidenceBook } from "@/lib/signals/evidence";
 import { evidenceLine, liveLine } from "@/lib/signals/explain";
 import { dayLong, dayShort, holdLabel, num, pct, price, tidyDetail, usdCompact, ruleNameOf } from "@/lib/signals/format";
@@ -223,7 +224,7 @@ function SetupDetail({ r, listed, bar, gap, peers, onTrack, tracking }: { r: Ran
       </div>
       <p className={CAPTION}>
         {listed ? planNote : ""}
-        {o ? `Cboe snapshot ${dayShort(o.date)} at ${price(o.price)}. ${o.skew != null ? `25Δ put–call skew ${num(100 * o.skew, 1)} vol pts. ` : ""}${o.putCall != null ? `Put/call open interest ${num(o.putCall, 2)}×. ` : ""}` : opts.isError ? "Options lookup unavailable. " : !opts.isPending ? `No stored Cboe quote for ${dayShort(r.firedAt)}. ` : ""}
+        {o ? `${sourceName(o)} snapshot ${dayShort(o.date)} at ${price(o.price)}. ${o.skew != null ? `25Δ put–call skew ${num(100 * o.skew, 1)} vol pts. ` : ""}${o.putCall != null ? `Put/call open interest ${num(o.putCall, 2)}×. ` : ""}` : opts.isError ? "Options lookup unavailable. " : !opts.isPending ? `No stored option quote for ${dayShort(r.firedAt)}. ` : ""}
         {listed && priced && priced.m > 0 && o && r.priceOn === o.date && Math.abs(o.price / r.price - 1) <= 0.02 && r.barsOk ? `The target is ${num(Math.abs(toTarget) / priced.m, 1)} times the move options price in by ${dayShort(priced.e)}. ` : ""}
         Strength orders signals inside a rule only: on the live record so far it shows no link to the outcome.
       </p>

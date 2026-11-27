@@ -1,7 +1,9 @@
 // A company's options market: the move priced for the next report against past report reactions,
 // implied vs realized volatility, skew, put/call positioning and the priced move to each expiry.
-// Every figure opens the Cboe quote it came from; every past reaction opens its earnings 8-K.
+// Every figure opens the quote page of its source; every past reaction opens its earnings 8-K.
 import { useMemo } from "react";
+import { CoverageNote } from "@/components/company/coverage-note";
+import { CORPUS } from "@/lib/coverage/corpora";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
@@ -9,7 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSource, type SourceTarget } from "@/components/source/source-context";
 import { usePrices } from "@/lib/data";
 import { quoteHistory } from "@/lib/options/as-of";
-import { cboeQuotePage, earningsPricing, ivRank, REPORT_EXPIRY_LAG, type TermPoint } from "@/lib/options/core";
+import { earningsPricing, ivRank, REPORT_EXPIRY_LAG, type TermPoint } from "@/lib/options/core";
+import { iv30Basis, quoteMoment, quotePage, sourceName, sourceQuotes, volMethod } from "@/lib/options/source";
 import { optionsHistoryQuery, type OptionsRow } from "@/lib/options/data";
 import type { NextEarnings } from "@/lib/company/catalysts";
 import type { EarningsRelease } from "@/lib/financials/types";
@@ -34,8 +37,10 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
   if (q.error) return null;
   if (!s)
     return (
-      <Panel title="Options market" subtitle="Cboe delayed quotes" collapse={false}>
-        <p data-section="Options market" className="px-3.5 py-4 text-sm text-muted-foreground">No options snapshot yet. Stocks with listed options are read every weekday evening from Cboe; this one either has no listed options or hasn't been read.</p>
+      <Panel title="Options market" subtitle="Yahoo Finance quotes" collapse={false}>
+        <p data-section="Options market" className="px-3.5 py-4 text-sm text-muted-foreground">
+          <CoverageNote ticker={ticker} corpus={CORPUS.options} only={["not_applicable", "held"]} fallback={<>No options snapshot yet. Stocks with listed options are read once every trading day from Yahoo Finance; this one either has no listed options, had no two-sided quotes, or hasn't been read.</>} />
+        </p>
       </Panel>
     );
 
@@ -45,7 +50,7 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
     unit,
     value,
     periodLabel: fmtDate(s.date),
-    external: { url: cboeQuotePage(ticker), date: s.date, quote },
+    external: { url: quotePage(ticker, s), date: s.date, quote },
   });
   const rank = s.iv30 != null ? ivRank(rows.slice(1).map((r) => r.iv30 ?? NaN), s.iv30) : null;
   const pricing = next ? earningsPricing(s.term, next.date, s.date, reactions.map((r) => r.move)) : null;
@@ -53,11 +58,11 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
   return (
     <Panel
       title="Options market"
-      subtitle={`Cboe delayed quotes · ${fmtDate(s.date)} · stock ${s.price.toFixed(2)}`}
+      subtitle={`${sourceQuotes(s)} · ${fmtDate(s.date)}, ${quoteMoment(s.meta)} · stock ${s.price.toFixed(2)}`}
       collapse={false}
       actions={
-        <a href={cboeQuotePage(ticker)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          Cboe quotes <ExternalLink className="size-3" />
+        <a href={quotePage(ticker, s)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          {sourceName(s)} quotes <ExternalLink className="size-3" />
         </a>
       }
     >
@@ -75,7 +80,7 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
               label="Implied vol · 30d"
               value={fmtPct(s.iv30, 1)}
               hint={rank ? `IV rank ${(rank.rank * 100).toFixed(0)} of ${rank.n + 1} days` : `recording since ${fmtDate(rows.at(-1)!.date, { month: "short", day: "numeric" })}`}
-              onClick={s.iv30 != null ? () => open(ext("30-day implied volatility", s.iv30!, "pct", "Cboe IV30 for the stock")) : undefined}
+              onClick={s.iv30 != null ? () => open(ext("30-day implied volatility", s.iv30!, "pct", iv30Basis(s))) : undefined}
             />
             <Tile
               label="Realized vol · 20d"
@@ -92,7 +97,7 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
               label="Skew · 25Δ, ~30d"
               value={pts(s.skew25)}
               hint={s.skew25 == null ? undefined : s.skew25 > 0 ? "puts priced above calls" : "calls priced above puts"}
-              onClick={s.skew25 != null ? () => open(ext("25-delta skew (put IV − call IV)", s.skew25!, "pct", "25-delta put implied volatility minus 25-delta call implied volatility, expiry nearest 30 days")) : undefined}
+              onClick={s.skew25 != null ? () => open(ext("25-delta skew (put IV − call IV)", s.skew25!, "pct", `25-delta put implied volatility minus 25-delta call implied volatility, expiry nearest 30 days; ${volMethod(s)}`)) : undefined}
             />
           </div>
           <IvHistory rows={rows} />

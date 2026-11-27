@@ -14,6 +14,7 @@ const ALLOWED: Record<string, string> = {
   "src/lib/supply/extract.server.ts": "writes the table (delete and insert per filer)",
   "scripts/supply-revalidate.ts": "reports what the read-time checks remove, so it must read stored rows unscreened",
   "src/lib/jobs/data-freshness.ts": "freshness key only, no query",
+  "src/lib/coverage/corpora.ts": "the coverage ledger's corpus id only, no query (counts come from corpus_measure in the database)",
   "src/integrations/supabase/types.ts": "generated database types",
 };
 
