@@ -4,6 +4,7 @@ const ctx = vi.hoisted(() => ({
   cache: new Map<string, unknown>(),
   jobs: [] as string[],
   searches: vi.fn(),
+  fireSearch: vi.fn(),
   scrapes: vi.fn(),
 }));
 vi.mock("@/integrations/supabase/client.server", () => ({
@@ -43,7 +44,11 @@ vi.mock("@/integrations/supabase/client.server", () => ({
     }),
   },
 }));
-vi.mock("@/lib/web.server", () => ({ tavilySearch: ctx.searches, firecrawlScrape: ctx.scrapes }));
+vi.mock("@/lib/web.server", () => ({
+  tavilySearch: ctx.searches,
+  firecrawlTranscriptUrls: ctx.fireSearch,
+  firecrawlScrape: ctx.scrapes,
+}));
 vi.mock("@/lib/ai.server", () => ({
   cached: async (key: string, _ttl: number, fn: () => Promise<unknown>) => {
     if (!ctx.cache.has(key)) ctx.cache.set(key, await fn());
@@ -84,6 +89,10 @@ const index = {
 };
 describe("archive-only page requests", () => {
   beforeEach(() => {
+    ctx.searches.mockReset();
+    ctx.scrapes.mockReset();
+    ctx.fireSearch.mockReset();
+    vi.stubEnv("TAVILY_API_KEY", "test-search");
     ctx.cache.clear();
     ctx.rows.clear();
     ctx.jobs.length = 0;
@@ -155,6 +164,55 @@ describe("archive-only page requests", () => {
       remaining: [],
     });
   });
+  it.each([
+    ["fc-test", "https://api.firecrawl.dev/v2"],
+    ["lovc_test", "https://connector-gateway.lovable.dev/firecrawl/v2"],
+  ])(
+    "discovers and stores a verified publisher transcript using only Firecrawl (%s)",
+    async (key, base) => {
+      vi.stubEnv("TAVILY_API_KEY", "");
+      vi.stubEnv("FIRECRAWL_API_KEY", key);
+      vi.stubEnv("LOVABLE_API_KEY", "test-gateway");
+      const url =
+        "https://www.fool.com/earnings/call-transcripts/2026/10/13/jpmorgan-chase-jpm-q3-2026-earnings-call-transcript";
+      const actual = await vi.importActual<typeof import("@/lib/web.server")>("@/lib/web.server");
+      ctx.fireSearch.mockImplementation(actual.firecrawlTranscriptUrls);
+      ctx.scrapes.mockImplementation(actual.firecrawlScrape);
+      const fetcher = vi.fn(async (path: string, init: RequestInit) => {
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        const body = JSON.parse(init.body as string);
+        if (path === base + "/search") {
+          expect(body).toMatchObject({ includeDomains: ["fool.com"], sources: ["web"] });
+          return Response.json({
+            success: true,
+            data: {
+              web: [
+                { url: url.replace("www.fool.com", "other.example") },
+                { url: url.replace("jpmorgan-chase-jpm", "citigroup-c") },
+                { url },
+              ],
+            },
+          });
+        }
+        expect(path).toBe(base + "/scrape");
+        expect(body.url).toBe(url);
+        return Response.json({
+          data: {
+            metadata: { sourceURL: url },
+            markdown:
+              "## Prepared Remarks\n\n**Operator:** Welcome, everyone.\n\n**Jane Doe:** Sales increased.\n\n**Sam Smith:** The quarter ended yesterday.\n\n**Operator:** Please proceed.\n\n**Jane Doe:** Thank you.",
+          },
+        });
+      });
+      vi.stubGlobal("fetch", fetcher);
+      expect(await refreshWebCalls(co)).toBe(0);
+      expect(ctx.rows.get("call-web-ready:v1:JPM")).toMatchObject({
+        calls: [expect.objectContaining({ url })],
+      });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(ctx.searches).not.toHaveBeenCalled();
+    },
+  );
   it("filters the historical AAPL/APLE mismatch before any download and queues an empty catalog", async () => {
     vi.stubGlobal("fetch", async () => new Response(null, { status: 404 }));
     const url =

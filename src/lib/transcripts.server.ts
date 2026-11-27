@@ -150,16 +150,31 @@ async function findCalls(
   name: string,
   signal?: AbortSignal,
 ): Promise<{ calls: TranscriptRef[]; error?: string }> {
-  const { tavilySearch } = await import("@/lib/web.server");
+  const { tavilySearch, firecrawlTranscriptUrls } = await import("@/lib/web.server");
   const q = `${name} ${ticker} earnings call transcript`;
-  const settled = await Promise.allSettled([
-    tavilySearch(q, { topic: "news", days: 200, maxResults: 12, domains: ["fool.com"], signal }),
-    tavilySearch(q, { maxResults: 15, domains: ["fool.com"], signal }),
-    tavilySearch(
-      `${name} ${ticker} quarterly earnings conference call transcript ${new Date().getUTCFullYear()}`,
-      { maxResults: 10, domains: ["fool.com"], signal },
-    ),
-  ]);
+  let settled: PromiseSettledResult<{ results: { url: string }[] }>[] = process.env.TAVILY_API_KEY
+    ? await Promise.allSettled([
+        tavilySearch(q, {
+          topic: "news",
+          days: 200,
+          maxResults: 12,
+          domains: ["fool.com"],
+          signal,
+        }),
+        tavilySearch(q, { maxResults: 15, domains: ["fool.com"], signal }),
+        tavilySearch(
+          `${name} ${ticker} quarterly earnings conference call transcript ${new Date().getUTCFullYear()}`,
+          { maxResults: 10, domains: ["fool.com"], signal },
+        ),
+      ])
+    : [];
+  if (
+    !settled.length ||
+    (settled.every((r) => r.status === "rejected") &&
+      process.env.FIRECRAWL_API_KEY &&
+      !signal?.aborted)
+  )
+    settled = await Promise.allSettled([firecrawlTranscriptUrls(q, signal)]);
   const results = settled.flatMap((s) => (s.status === "fulfilled" ? s.value.results : []));
   if (!results.length) {
     const err = settled.find((s) => s.status === "rejected") as PromiseRejectedResult | undefined;
@@ -167,7 +182,7 @@ async function findCalls(
   }
   const byQuarter = new Map<string, TranscriptRef>();
   for (const r of results) {
-    if (!transcriptMatches(r.url, ticker, name, ALT_TICKERS[ticker] ?? [])) continue;
+    if (!webUrl({ ticker, shortName: name }, r.url)) continue;
     const ref = transcriptRef(r.url);
     if (!ref.date) continue;
     const key = ref.quarter ?? ref.date;
@@ -244,7 +259,8 @@ export async function refreshWebCalls(co: Co, limit = 3) {
         continue;
       }
       attempted++;
-      if (await downloadWebTranscript(co, ref.url, signal)) transcript = await storedWeb(co, ref.url);
+      if (await downloadWebTranscript(co, ref.url, signal))
+        transcript = await storedWeb(co, ref.url);
     }
     if (transcript)
       calls.push({

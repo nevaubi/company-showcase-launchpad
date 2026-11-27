@@ -111,7 +111,7 @@ export async function firecrawlLinks(url: string): Promise<string[]> {
   return j.data?.links ?? j.links ?? [];
 }
 
-function firecrawlReq(path: string, init: { method?: string; body?: unknown } = {}) {
+function firecrawlReq(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}) {
   const key = process.env["FIRECRAWL_API_KEY"];
   if (!key) throw new Error("Page reader is not configured");
   const gateway = key.startsWith("lovc_");
@@ -121,7 +121,7 @@ function firecrawlReq(path: string, init: { method?: string; body?: unknown } = 
     headers["Authorization"] = `Bearer ${process.env["LOVABLE_API_KEY"] ?? ""}`;
     headers["X-Connection-Api-Key"] = key;
   } else headers["Authorization"] = `Bearer ${key}`;
-  return fetch(`${base}${path}`, { method: init.method ?? "POST", headers, body: init.body ? JSON.stringify(init.body) : undefined });
+  return fetch(`${base}${path}`, { method: init.method ?? "POST", headers, signal: init.signal, body: init.body ? JSON.stringify(init.body) : undefined });
 }
 
 async function okJson<T>(res: Response, what: string): Promise<T> {
@@ -131,6 +131,18 @@ async function okJson<T>(res: Response, what: string): Promise<T> {
     throw new Error(`${what} failed (${res.status}): ${body.slice(0, 200)}`);
   }
   return (await res.json()) as T;
+}
+
+/** Discover candidate call URLs; transcript text is acquired separately from verified publisher pages. */
+export async function firecrawlTranscriptUrls(query: string, signal?: AbortSignal): Promise<{results: {url: string}[]}> {
+  const res = await firecrawlReq("/search", {
+    signal,
+    body: { query, limit: 12, sources: ["web"], includeDomains: ["fool.com"], timeout: 30000 },
+  });
+  const result = await okJson<{success?: boolean; data?: {web?: {url?: string}[]}}>(res, "Transcript search");
+  if (result.success === false || !Array.isArray(result.data?.web))
+    throw new Error("Transcript search returned an incomplete result");
+  return { results: result.data.web.flatMap(row => typeof row.url === "string" ? [{url: row.url}] : []) };
 }
 
 /** Structured extraction from one page (Firecrawl json format, prompt-driven). */

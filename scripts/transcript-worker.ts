@@ -58,8 +58,8 @@ await Promise.all([
   }),
   superviseLane("call-discovery-worker", 5 * 60_000, async () => {
     await inspectCoverage();
-    if (!process.env.TAVILY_API_KEY || !process.env.FIRECRAWL_API_KEY)
-      throw new Error("Transcript search or page reader is not configured on this worker");
+    if (!process.env.FIRECRAWL_API_KEY)
+      throw new Error("Transcript page reader is not configured on this worker");
     return { items: Number(await nextTranscriptDemand(DEMAND_PREFIX)) };
   }),
   superviseLane("call-commitments-worker", 5 * 60_000, async () => ({
