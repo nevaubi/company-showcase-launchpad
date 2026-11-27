@@ -2563,6 +2563,7 @@ export type Database = {
         Row: {
           d: string
           ex: number
+          execution_version: number | null
           gross: number
           net: number
           ticker: string
@@ -2571,6 +2572,7 @@ export type Database = {
         Insert: {
           d: string
           ex: number
+          execution_version?: number | null
           gross: number
           net: number
           ticker: string
@@ -2579,6 +2581,7 @@ export type Database = {
         Update: {
           d?: string
           ex?: number
+          execution_version?: number | null
           gross?: number
           net?: number
           ticker?: string
@@ -2591,6 +2594,7 @@ export type Database = {
           bars: number | null
           claimed_at: string | null
           error: string | null
+          replay_version: number | null
           samples: number | null
           scanned_for: string | null
           sector: string | null
@@ -2601,6 +2605,7 @@ export type Database = {
           bars?: number | null
           claimed_at?: string | null
           error?: string | null
+          replay_version?: number | null
           samples?: number | null
           scanned_for?: string | null
           sector?: string | null
@@ -2611,6 +2616,7 @@ export type Database = {
           bars?: number | null
           claimed_at?: string | null
           error?: string | null
+          replay_version?: number | null
           samples?: number | null
           scanned_for?: string | null
           sector?: string | null
@@ -2685,6 +2691,7 @@ export type Database = {
           outcome_at: string | null
           outcome_ex: number | null
           outcome_net: number | null
+          outcome_version: number | null
           price: number | null
           sector: string | null
           side: number
@@ -2708,6 +2715,7 @@ export type Database = {
           outcome_at?: string | null
           outcome_ex?: number | null
           outcome_net?: number | null
+          outcome_version?: number | null
           price?: number | null
           sector?: string | null
           side: number
@@ -2731,6 +2739,7 @@ export type Database = {
           outcome_at?: string | null
           outcome_ex?: number | null
           outcome_net?: number | null
+          outcome_version?: number | null
           price?: number | null
           sector?: string | null
           side?: number
@@ -3134,6 +3143,57 @@ export type Database = {
           tier?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      supply_disclosures: {
+        Row: {
+          detail: string
+          id: string
+          pathway: string | null
+          product: string
+          provider_key: string
+          provider_name: string
+          publisher: string
+          recipient_key: string
+          recipient_name: string
+          reviewed_on: string
+          source_date: string
+          source_phrase: string
+          source_url: string
+          stage: string
+        }
+        Insert: {
+          detail: string
+          id: string
+          pathway?: string | null
+          product: string
+          provider_key: string
+          provider_name: string
+          publisher: string
+          recipient_key: string
+          recipient_name: string
+          reviewed_on: string
+          source_date: string
+          source_phrase: string
+          source_url: string
+          stage: string
+        }
+        Update: {
+          detail?: string
+          id?: string
+          pathway?: string | null
+          product?: string
+          provider_key?: string
+          provider_name?: string
+          publisher?: string
+          recipient_key?: string
+          recipient_name?: string
+          reviewed_on?: string
+          source_date?: string
+          source_phrase?: string
+          source_url?: string
+          stage?: string
         }
         Relationships: []
       }
@@ -4327,6 +4387,27 @@ export type Database = {
         Args: { _firm: string; _user: string }
         Returns: undefined
       }
+      replace_setup_sample_slice: {
+        Args: {
+          p_from: string
+          p_full?: boolean
+          p_rows: Json
+          p_tickers: string[]
+          p_to: string
+        }
+        Returns: undefined
+      }
+      replace_setup_sample_slice_v2: {
+        Args: {
+          p_from: string
+          p_full?: boolean
+          p_keep_links?: boolean
+          p_rows: Json
+          p_tickers: string[]
+          p_to: string
+        }
+        Returns: undefined
+      }
       replace_supply_signals: {
         Args: { _rows: Json; _source_kind: string; _ticker: string }
         Returns: number
@@ -4364,6 +4445,17 @@ export type Database = {
           variant: string
         }[]
       }
+      setup_forward_stats_v2: {
+        Args: never
+        Returns: {
+          avg_ex: number
+          avg_net: number
+          first_seen: string
+          hits: number
+          n: number
+          variant: string
+        }[]
+      }
       setup_lease: {
         Args: { _as_of: string; _phase: string; _secs: number }
         Returns: boolean
@@ -4373,6 +4465,7 @@ export type Database = {
         Returns: number
       }
       setup_variant_daily: { Args: { _variant: string }; Returns: Json }
+      setup_variant_daily_v2: { Args: { _variant: string }; Returns: Json }
       setup_variant_list: {
         Args: never
         Returns: {
