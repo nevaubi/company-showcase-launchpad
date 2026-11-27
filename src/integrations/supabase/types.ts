@@ -2673,6 +2673,35 @@ export type Database = {
         }
         Relationships: []
       }
+      setup_replay_adjustment_review: {
+        Row: {
+          as_of: string
+          event_dates: string[]
+          prior_receipt: Json | null
+          ticker: string
+        }
+        Insert: {
+          as_of: string
+          event_dates: string[]
+          prior_receipt?: Json | null
+          ticker: string
+        }
+        Update: {
+          as_of?: string
+          event_dates?: string[]
+          prior_receipt?: Json | null
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "setup_replay_adjustment_review_ticker_fkey"
+            columns: ["ticker"]
+            isOneToOne: false
+            referencedRelation: "setup_scan"
+            referencedColumns: ["ticker"]
+          },
+        ]
+      }
       setup_replay_work: {
         Row: {
           as_of: string | null
@@ -4469,6 +4498,14 @@ export type Database = {
         }[]
       }
       check_call_archive_evidence: { Args: never; Returns: number }
+      claim_setup_replay_adjusted_v2: {
+        Args: { p_as_of: string }
+        Returns: {
+          sector: string
+          ticker: string
+          token: string
+        }[]
+      }
       claim_setup_replay_after_filing_v2: {
         Args: { p_as_of: string }
         Returns: {
