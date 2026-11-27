@@ -2655,6 +2655,24 @@ export type Database = {
         }
         Relationships: []
       }
+      setup_finra_publications: {
+        Row: {
+          available_on: string | null
+          first_observed_at: string
+          trade_date: string
+        }
+        Insert: {
+          available_on?: string | null
+          first_observed_at: string
+          trade_date: string
+        }
+        Update: {
+          available_on?: string | null
+          first_observed_at?: string
+          trade_date?: string
+        }
+        Relationships: []
+      }
       setup_replay_work: {
         Row: {
           as_of: string | null
