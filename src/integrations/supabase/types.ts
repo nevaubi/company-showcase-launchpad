@@ -1701,6 +1701,39 @@ export type Database = {
         }
         Relationships: []
       }
+      issuer_directory: {
+        Row: {
+          checked_on: string
+          cik: string
+          evidence_text: string
+          evidence_url: string
+          kind: string
+          status: string
+          ticker: string
+          url: string | null
+        }
+        Insert: {
+          checked_on: string
+          cik: string
+          evidence_text: string
+          evidence_url: string
+          kind: string
+          status: string
+          ticker: string
+          url?: string | null
+        }
+        Update: {
+          checked_on?: string
+          cik?: string
+          evidence_text?: string
+          evidence_url?: string
+          kind?: string
+          status?: string
+          ticker?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       job_runs: {
         Row: {
           detail: Json | null
@@ -2505,6 +2538,87 @@ export type Database = {
           report?: string | null
           size?: number | null
           ticker?: string
+        }
+        Relationships: []
+      }
+      sector_bank_source_receipts: {
+        Row: {
+          as_of: string
+          cik: number
+          payload: Json
+          source_sha256: string
+          source_url: string
+          ticker: string
+        }
+        Insert: {
+          as_of: string
+          cik: number
+          payload: Json
+          source_sha256: string
+          source_url: string
+          ticker: string
+        }
+        Update: {
+          as_of?: string
+          cik?: number
+          payload?: Json
+          source_sha256?: string
+          source_url?: string
+          ticker?: string
+        }
+        Relationships: []
+      }
+      sector_dataset_releases: {
+        Row: {
+          activated_at: string
+          as_of: string
+          fiscal_quarter: string
+          gzip_sha256: string
+          input_sha256: string
+          parts: number
+          path: string
+          release_id: string
+        }
+        Insert: {
+          activated_at?: string
+          as_of: string
+          fiscal_quarter: string
+          gzip_sha256: string
+          input_sha256: string
+          parts: number
+          path: string
+          release_id: string
+        }
+        Update: {
+          activated_at?: string
+          as_of?: string
+          fiscal_quarter?: string
+          gzip_sha256?: string
+          input_sha256?: string
+          parts?: number
+          path?: string
+          release_id?: string
+        }
+        Relationships: []
+      }
+      sector_release_parts: {
+        Row: {
+          body: string
+          part: number
+          path: string
+          release_id: string
+        }
+        Insert: {
+          body: string
+          part: number
+          path: string
+          release_id: string
+        }
+        Update: {
+          body?: string
+          part?: number
+          path?: string
+          release_id?: string
         }
         Relationships: []
       }
@@ -4415,6 +4529,8 @@ export type Database = {
       request_bot_close: { Args: { _position: string }; Returns: undefined }
       require_feature: { Args: { _feature: string }; Returns: boolean }
       reset_paper_bot: { Args: { _bot: string }; Returns: undefined }
+      sector_dataset_release_v1: { Args: { _path: string }; Returns: Json }
+      seed_issuer_directory: { Args: { entries: Json }; Returns: number }
       set_firm_member_role: {
         Args: {
           _firm: string
