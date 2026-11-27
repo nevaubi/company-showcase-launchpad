@@ -74,7 +74,7 @@ await Promise.all(Array.from({ length: 16 }, async (_, w) => {
 {
   const officialFrom = new Date(Date.now() - 70 * 86400_000).toISOString().slice(0, 10);
   const rows = await selectAll<OfficialRow & { symbol: string }>((a, b) =>
-    sb.from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").gte("date", officialFrom).order("symbol").order("date").range(a, b));
+    sb.from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume, updated_at").gte("date", officialFrom).order("symbol").order("date").range(a, b));
   const bySymbol = new Map<string, OfficialRow[]>();
   for (const r of rows) (bySymbol.get(r.symbol) ?? bySymbol.set(r.symbol, []).get(r.symbol)!).push(r);
   const provisional: string[] = [];

@@ -12,6 +12,7 @@ import type { Bar } from "@/lib/financials/types";
 
 export interface OfficialRow {
   date: string;
+  updated_at?: string;
   open: number | string | null;
   high: number | string | null;
   low: number | string | null;
@@ -26,6 +27,7 @@ export interface MergedBars {
   provisional: string | null;
   /** Dates where the official bar replaced a partner bar whose close differed. */
   corrected: string[];
+  adjustments: { date: string; previous: string; officialStep: number; originalStep: number; vintage: string }[];
 }
 
 const num = (x: number | string | null | undefined) => (x == null || x === "" ? NaN : Number(x));
@@ -39,10 +41,12 @@ const pos = (x: number) => Number.isFinite(x) && x > 0;
  */
 export function mergeOfficialBars(file: Bar[], rows: OfficialRow[], from: string, asOf: string): MergedBars {
   const official = new Map<string, Bar>();
+  const vintages = new Map<string, string>();
   for (const r of rows) {
     const c = num(r.close);
     if (!pos(c) || r.date > asOf) continue;
     const adj = num(r.adj_close);
+    if (r.updated_at && pos(adj)) vintages.set(r.date, r.updated_at);
     const o = num(r.open), h = num(r.high), l = num(r.low), v = num(r.volume);
     official.set(r.date, [r.date, pos(o) ? o : 0, pos(h) ? h : c, pos(l) ? l : c, c, pos(adj) ? adj : c, Number.isFinite(v) ? v : 0]);
   }
@@ -78,5 +82,27 @@ export function mergeOfficialBars(file: Bar[], rows: OfficialRow[], from: string
   // Official sessions the file lacks (after its end, or a gap inside it).
   for (const m of official.values()) if (!seen.has(m[0])) out.push([m[0], m[1], m[2], m[3], m[4], m[5] * k, m[6]]);
   out.sort((x, y) => x[0].slice(0, 10).localeCompare(y[0].slice(0, 10)));
-  return { bars: out, provisional, corrected };
+  // The latest downloaded series may omit a recently processed corporate action. Compare adjacent
+  // adjusted/raw ratios only inside a single official fetch. Different vintages routinely contain
+  // different adjustment bases, even where nothing happened on the market that day.
+  const adjustments: MergedBars['adjustments'] = [];
+  let scale = 1;
+  for (let i = out.length - 1; i >= 0; i--) {
+    const bar = out[i], previous = out[i - 1];
+    const originalFactor = bar[5] / bar[4];
+    if (scale !== 1) out[i] = [bar[0], bar[1], bar[2], bar[3], bar[4], bar[5] * scale, bar[6]];
+    if (!previous) break;
+    const day = bar[0].slice(0, 10), priorDay = previous[0].slice(0, 10);
+    const vintage = vintages.get(day), before = official.get(priorDay), after = official.get(day);
+    if (!before || !after || !vintage || vintage !== vintages.get(priorDay) || before[6] <= 0 || after[6] <= 0 ||
+        Date.parse(day) - Date.parse(priorDay) > 7 * 86400000) continue;
+    const step = (after[5] / after[4]) / (before[5] / before[4]);
+    const originalStep = originalFactor / (previous[5] / previous[4]);
+    // The source rounds prices to four decimals. Allow that uncertainty on all four inputs.
+    const tolerance = Math.max(0.0005, 0.0001 * (1 / before[4] + 1 / before[5] + 1 / after[4] + 1 / after[5]));
+    if (!pos(originalStep) || !(step > 1 + tolerance) || Math.abs(step / originalStep - 1) <= tolerance) continue;
+    scale *= originalStep / step;
+    adjustments.push({ date: day, previous: priorDay, officialStep: step, originalStep, vintage });
+  }
+  return { bars: out, provisional, corrected, adjustments: adjustments.reverse() };
 }

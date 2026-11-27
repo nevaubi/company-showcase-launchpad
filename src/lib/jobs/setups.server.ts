@@ -409,7 +409,7 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
   const recentFrom = ctx.dates[Math.max(0, D - 45)];
   const [files, recent, earn, buys, shorts, sigs, fails, publications] = await Promise.all([
     Promise.all(tickers.map(priceFile)),
-    selectAll((a, b) => db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").in("symbol", tickers).gte("date", recentFrom).lte("date", asOf).order("symbol").order("date").range(a, b)),
+    selectAll((a, b) => db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume, updated_at").in("symbol", tickers).gte("date", recentFrom).lte("date", asOf).order("symbol").order("date").range(a, b)),
     selectAll((a, b) => db().from("earnings_events").select("ticker, filed").in("ticker", tickers).order("ticker").order("accn").range(a, b)),
     selectAll((a, b) => db().from("insider_buys").select("ticker, filed, owner, value, plan_10b5").in("ticker", tickers).order("accn").order("owner").range(a, b)),
     selectAll((a, b) => db().from("short_volume").select("symbol, date, short_vol, total_vol").in("symbol", tickers).gte("date", shortFrom).order("symbol").order("date").range(a, b)),

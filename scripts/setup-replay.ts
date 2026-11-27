@@ -25,7 +25,7 @@ try {
   const asOf = String(latest.as_of);
   let benchmark: { calendar: ReturnType<typeof replayCalendar>; hash: string } | undefined;
   for (let i = 0; i < limit && !interrupted && Date.now() < deadline; i++) {
-    const { data: claimed } = await sb.rpc('claim_setup_replay_after_filing_v2', { p_as_of: asOf }).abortSignal(signal()).throwOnError();
+    const { data: claimed } = await sb.rpc('claim_setup_replay_adjusted_v2', { p_as_of: asOf }).abortSignal(signal()).throwOnError();
     const claim = (claimed as { ticker: string; sector: string | null; token: string }[])?.[0];
     if (!claim) { idle = true; break; }
     const { ticker, sector, token } = claim;

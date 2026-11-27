@@ -35,8 +35,7 @@ export async function nextTranscriptDemand(prefix: string, downloadLimit = 3) {
   if (!claimed.data) return false;
   try {
     const co = coverageOf(job.slice(prefix.length));
-    if (!co) throw new Error("Unknown ticker");
-    if (prefix === DEMAND_PREFIX) {
+    if (co && prefix === DEMAND_PREFIX) {
       const remaining = await refreshWebCalls(co, downloadLimit);
       if (remaining) {
         const resumed = await sb
@@ -47,9 +46,13 @@ export async function nextTranscriptDemand(prefix: string, downloadLimit = 3) {
         if (resumed.error) throw resumed.error;
         return true;
       }
-    } else await analyzePromises(co);
+    } else if (co) await analyzePromises(co);
     const done = await sb.from("job_state").delete().eq("job", job).eq("lease_until", until);
     if (done.error) throw done.error;
+    if (!co) {
+      console.warn("Removed transcript request outside the current issuer directory", job);
+      return false;
+    }
     console.log("Stored call coverage", job);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Call refresh unavailable";

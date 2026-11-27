@@ -41,6 +41,28 @@ const plan = (bars: Bar[]) => {
   return { c: a.c[L], v: a.v[L], dv20: f.dv20[L], atr: f.atr14[L], r5: a.c[L] / a.c[L - 5] - 1, risk: riskPlan("momentum", 1, a.c[L], f.atr14[L]), series: Array.from(a.c) };
 };
 
+describe('corporate-action adjustments', () => {
+  const vintage = '2026-11-26T18:48:02.881Z';
+  const dates = ['2026-11-19', '2026-11-20', '2026-11-23', '2026-11-24'];
+  const series: Bar[] = dates.map(d => [d,100,101,99,100,100,1000000]);
+  const quotes: OfficialRow[] = dates.map((date,i) => ({date,open:100,high:101,low:99,close:100,
+    adj_close:i===3?100:99,volume:1000000,updated_at:vintage}));
+  it('recovers a missing adjustment from a single official fetch, preserving current price and prior relative returns', () => {
+    const result = mergeOfficialBars(series, quotes, dates[0], dates[3]);
+    expect(result.adjustments.map(a=>a.date)).toEqual([dates[3]]);
+    expect(result.bars.map(b=>b[5])).toEqual([99,99,99,100]);
+    const incoming = result.bars.map(b=>[...b] as Bar);
+    expect(mergeOfficialBars(incoming,quotes,dates[0],dates[3]).adjustments).toEqual([]);
+    expect(series.map(b=>b[5])).toEqual([100,100,100,100]);
+  });
+  it('refuses a change across different official snapshots or below raw price precision', () => {
+    const mixed=quotes.map((b,i)=>i===3?{...b,updated_at:'other batch'}:b);
+    expect(mergeOfficialBars(series,mixed,dates[0],dates[3]).adjustments).toEqual([]);
+    const rounded=quotes.map((b,i)=>({...b,close:0.1,adj_close:i===3?0.1:0.0999}));
+    expect(mergeOfficialBars(series,rounded,dates[0],dates[3]).adjustments).toEqual([]);
+  });
+});
+
 describe("mergeOfficialBars", () => {
   it("replaces an intraday partner bar with the official bar everywhere the scan uses it", () => {
     const m = mergeOfficialBars(intradayFile(), officialWithLast(), FROM, LAST);

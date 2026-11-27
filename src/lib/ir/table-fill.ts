@@ -220,27 +220,59 @@ const hasFigure = (row: GridRow) => labelOf(row).firstFig > 0;
  * a new group. An isolated percent sign can also be the unit of an actual level. */
 const COMPARISON_GROUP = /%\s*change\b|\bchanges?\s+(?:from|vs\.?|versus)\b|^(?:changes?|variances?|versus|vs\.?)$|\b(?:o\s*\/\s*\(?u\)?|over\s*\/\s*\(?under\)?)/i;
 
-const comparisonCache = new WeakMap<GridTable, { first: number; cols: Set<number> }>();
-export function comparisonColumns(table: GridTable, first = firstFigureRow(table)): Set<number> {
-  const cached = comparisonCache.get(table);
-  if (cached?.first === first) return cached.cols;
-  const cols = new Set<number>();
+interface HeaderLayout {
+  first: number;
+  comparisons: Set<number>;
+  ranges: Map<GridCell, [number, number]>;
+}
+const headerLayouts = new WeakMap<GridTable, HeaderLayout>();
+
+/** SEC comparative groups repeat prior dates. Restarting the descending date sequence marks the
+ * next group when each printed parent has one such sequence. This resolves misaligned colspans. */
+function datedGroupStarts(row: GridRow | undefined, count: number): number[] | null {
+  if (!row || count < 2) return null;
+  let previous = "";
+  const starts: number[] = [];
+  for (const cell of row.cells) {
+    if (!cell.col) continue;
+    const date = headDate(cell.text)?.end;
+    if (!date) continue;
+    if (!previous || date >= previous) starts.push(cell.col);
+    previous = date;
+  }
+  return starts.length === count ? starts : null;
+}
+
+function headerLayout(table: GridTable, first: number): HeaderLayout {
+  const cached = headerLayouts.get(table);
+  if (cached?.first === first) return cached;
+  const comparisons = new Set<number>();
+  const ranges = new Map<GridCell, [number, number]>();
   const width = table.rows.reduce((max, row) => {
     const last = row.cells.at(-1);
     return last ? Math.max(max, last.col + last.span) : max;
   }, 0);
-  for (const row of table.rows.slice(0, first)) {
-    if (row.hidden) continue;
+  const rows = table.rows.slice(0, first).filter((row) => !row.hidden);
+  for (const [index, row] of rows.entries()) {
     const headings = row.cells.filter((c) => c.col > 0 && c.text.trim());
-    for (let i = 0; i < headings.length; i++) {
-      const c = headings[i];
-      if (!COMPARISON_GROUP.test(c.text)) continue;
-      const end = headings[i + 1]?.col ?? width;
-      for (let g = c.col; g < end; g++) cols.add(g);
+    if (!headings.some((c) => COMPARISON_GROUP.test(c.text))) continue;
+    const starts = datedGroupStarts(rows[index + 1], headings.length);
+    for (const [i, cell] of headings.entries()) {
+      const compare = COMPARISON_GROUP.test(cell.text);
+      if (!compare && !starts) continue;
+      const start = starts?.[i] ?? cell.col;
+      const end = starts?.[i + 1] ?? headings[i + 1]?.col ?? width;
+      ranges.set(cell, [start, end]);
+      if (compare) for (let col = start; col < end; col++) comparisons.add(col);
     }
   }
-  comparisonCache.set(table,{first,cols});
-  return cols;
+  const layout = { first, comparisons, ranges };
+  headerLayouts.set(table, layout);
+  return layout;
+}
+
+export function comparisonColumns(table: GridTable, first = firstFigureRow(table)): Set<number> {
+  return headerLayout(table, first).comparisons;
 }
 
 export function isComparisonPosition(grid: GridTable[], locator: { t?: number; r?: number; c?: number } | null): boolean {
@@ -255,14 +287,16 @@ export function isComparisonPosition(grid: GridTable[], locator: { t?: number; r
 /** Header key per grid column: text of the header cells over it, label column left out. */
 function headerKeys(table: GridTable, first: number): Map<number, string> {
   const parts = new Map<number, string[]>();
+  const layout = headerLayout(table, first);
   for (const row of table.rows.slice(0, first)) {
     if (row.hidden) continue;
     for (const c of row.cells) {
       if (!c.text || c.col === 0) continue;
-      for (let g = c.col; g < c.col + c.span; g++) parts.set(g, [...(parts.get(g) ?? []), c.text]);
+      const [start, end] = layout.ranges.get(c) ?? [c.col, c.col + c.span];
+      for (let g = start; g < end; g++) parts.set(g, [...(parts.get(g) ?? []), c.text]);
     }
   }
-  for (const g of comparisonColumns(table, first)) parts.set(g, [...(parts.get(g) ?? []), "comparison change"]);
+  for (const g of layout.comparisons) parts.set(g, [...(parts.get(g) ?? []), "comparison change"]);
   return new Map([...parts].map(([g, xs]) => [g, xs.join("|").replace(/\s+/g, " ").toLowerCase()]));
 }
 const keyOver = (keys: Map<number, string>, c: GridCell): string | null => {
@@ -631,6 +665,22 @@ interface Located {
 const firstFigureRow = (t: GridTable) =>
   t.rows.findIndex((r) => !r.hidden && hasFigure(r) && labelOf(r).text.length > 0);
 
+/** Respect the basis printed above an equity reconciliation, including indented adjustments.
+ * Both an average for a reporting duration and a carrying value at period end can say "Goodwill". */
+function printedEquityBasis(table: GridTable, first: number): "average" | "point" | null {
+  const headings = table.rows.slice(0, first).filter(r => !r.hidden)
+    .map(row => row.cells.filter(c => c.text.trim()))
+    .filter(cells => cells.length === 1 && cells[0].col === 0)
+    .map(cells => cells[0].text.trim());
+  if (headings.some(h => /^return on average (?:tangible )?(?:common |shareholders.? )?equity\b/i.test(h))) return "average";
+  if (headings.some(h => /^(?:tangible )?book value per (?:common )?share\b/i.test(h))) return "point";
+  return null;
+}
+
+const EQUITY_CARRYING_AMOUNT = /^(?:(?:common|preferred) stock\b.{0,100}\bpar value\b|unearned (?:ESOP|employee stock ownership plan(?: \(ESOP\))?) shares\b)/i;
+
+const EQUITY_BALANCE = /^(?:(?:total|(?:tangible )?common(?: stockholders[’'s]*)?) equity)$/i;
+
 const unitScale = (f: IrFact, text: string): number | null => {
   const n = numberOf(text);
   if (n == null || n === 0) return null;
@@ -882,7 +932,7 @@ export function fillDocument(input: FillInput): DocFill {
     };
 
     // The period of a figure cell: the table's own fact column, else a column head the document settles.
-    const periodOf = (c: GridCell): Period | null => {
+    const resolvePeriod = (c: GridCell): Period | null => {
       const hits = own.filter((g) => overlaps(c, g.s, g.e));
       if (hits.length === 1) return hits[0].p;
       if (hits.length > 1) return null;
@@ -895,6 +945,16 @@ export function fillDocument(input: FillInput): DocFill {
       if (!p) return null;
       if (own.some((g) => g.p.end === p.end && g.p.months === p.months)) return null;
       return p;
+    };
+
+    const equityBasis = printedEquityBasis(table, first);
+    const periodOf = (c: GridCell): Period | null => {
+      const p = resolvePeriod(c);
+      if (!p || !equityBasis) return p;
+      if (equityBasis === "point") return { ...p, months: 0, point: true, start: null };
+      const h = headDate(keyOver(keys, c) ?? "");
+      if (h?.end !== p.end || !h.months || h.months < 1) return p;
+      return { end: h.end, months: h.months, start: known.flows.get(periodId({ end: h.end, months: h.months })) ?? null, point: false };
     };
 
     // Conflicts: the stored text at each fact position against what the document prints there.
@@ -1024,6 +1084,19 @@ export function fillDocument(input: FillInput): DocFill {
         }
       }
       if (hits >= 2 && seen.size === 1) moneyScale = [...seen][0];
+    }
+    // An equity reconciliation reports adjustments on its printed basis. On a money-scale table
+    // "unearned ESOP shares" and the par-value stock account are carrying amounts.
+    for (const x of xs) {
+      const p = equityBasis ? periodOf(x.cell) : null;
+      const usd = moneyScale != null && ((x.f.unit === "count" && EQUITY_CARRYING_AMOUNT.test(x.f.label)) ||
+        (x.f.unit === "usdPerShare" && capScale != null && EQUITY_BALANCE.test(x.f.label)));
+      const numeric = usd ? cellValue(table.rows[x.r], x.c) : null;
+      const basisChanges = p && p.end === x.f.period_end && p.months !== x.f.months;
+      if (!basisChanges && numeric == null) continue;
+      x.f = { ...x.f, ...(basisChanges ? { months: p.months, period_start: p.start } : {}),
+        ...(numeric != null ? { unit: "usd", value: numeric * moneyScale! } : {}) };
+      fixes.push(x.f);
     }
     const intOnly = xs.filter((x) => x.f.unit === "usd").every((x) => !/\.\d/.test(x.cell.text));
     // Table name of the filled lines: the readers' own name for the table, else its printed title.
@@ -1268,7 +1341,10 @@ export function fillDocument(input: FillInput): DocFill {
         /^(basic|diluted|basic and diluted|weighted[- ]average)$/i.test(label) && !lead
           ? heading
           : "";
-      if (lead && prevUnit && prevScale != null) {
+      if (moneyScale != null && (EQUITY_CARRYING_AMOUNT.test(label) || (capScale != null && EQUITY_BALANCE.test(label)))) {
+        unit = "usd";
+        scale = moneyScale;
+      } else if (lead && prevUnit && prevScale != null) {
         unit = prevUnit;
         scale = prevScale;
       } else if (short && SHARES.test(short.replace(PER_SHARE, ""))) {
@@ -1279,11 +1355,9 @@ export function fillDocument(input: FillInput): DocFill {
       } else if (PER_SHARE.test(context) && !SHARES.test(label.replace(PER_SHARE, ""))) {
         unit = "usdPerShare";
         scale = 1;
-      } else if (dollar && decimals && moneyScale != null && moneyScale > 1 && intOnly) {
-        // A dollar figure with cents in a table of whole millions is a per-share figure.
-        unit = "usdPerShare";
-        scale = 1;
-
+      } else if (dollar && decimals && moneyScale != null && moneyScale > 1 && intOnly &&
+        (PER_SHARE.test(unitLine) || PER_SHARE.test(heading) || adjacent.includes("usdPerShare"))) {
+        // Decimal currency may also be billions. Require a printed per-share basis or per-share neighbours.
         unit = "usdPerShare";
         scale = 1;
       } else if (pctPrinted) {
@@ -1369,7 +1443,8 @@ export function fillDocument(input: FillInput): DocFill {
         const kind = opening
           ? null
           : stockKind({ category: FILL_CATEGORY, metric: "other", label: name });
-        if (kind === "point") months = 0;
+        if (equityBasis) months = u.p.months;
+        else if (kind === "point") months = 0;
         else if (opening && u.p.point && u.p.months === 0) continue;
         else if (u.p.point && u.p.months > 0) {
           const near = [above, below]
@@ -1430,7 +1505,7 @@ export function fillDocument(input: FillInput): DocFill {
             a.value !== 0,
         ),
       );
-      if (repeats) for (const f of rowOut) Object.assign(f, { months: 0, period_start: null });
+      if (repeats && equityBasis !== "average") for (const f of rowOut) Object.assign(f, { months: 0, period_start: null });
       // One figure per period: a balance printed in both the quarter and the year-to-date column is read once,
       // and a period printed twice with different figures is left out.
       const byPeriod = new Map<string, IrFact[]>();

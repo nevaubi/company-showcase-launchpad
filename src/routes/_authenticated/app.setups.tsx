@@ -269,7 +269,7 @@ function TodayPanel({ data }: { data: SetupsData }) {
 }
 
 const SOURCES = [
-  ["Daily prices", "Yahoo Finance, with Nasdaq and Cboe as fallbacks; split and dividend adjusted", "https://finance.yahoo.com"],
+  ["Daily prices", "Yahoo Finance, Nasdaq and Cboe. Returns use the split and dividend adjustments present in the price history.", "https://finance.yahoo.com"],
   ["Earnings dates", "SEC 8-K filings with item 2.02", "https://www.sec.gov/edgar/search/"],
   ["Insider purchases", "SEC Form 4 and the SEC insider transactions data sets", "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets"],
   ["Short-sale volume", "FINRA daily short-sale volume files, from August 2018", "https://www.finra.org/finra-data/browse-catalog/short-sale-volume-data"],

@@ -31,7 +31,7 @@ export function replayHistory(calendar: ReturnType<typeof replayCalendar>, ticke
   if (inputs.earnings.some(d => d > asOf) || inputs.buys.some(b => b.filed > asOf) || inputs.short.some(s => s.date > asOf) || inputs.fails?.some(f => f.end > asOf)) {
     throw new Error('Event snapshot contains observations beyond the cutoff');
   }
-  const { bars, corrected } = mergeOfficialBars(file.bars, inputs.official, officialFrom, asOf);
+  const { bars, corrected, adjustments } = mergeOfficialBars(file.bars, inputs.official, officialFrom, asOf);
   const sessions = new Set(ctx.dates);
   const dated = bars.filter(b => sessions.has(b[0].slice(0, 10)));
   const observed = dated.filter(b => b[6] > 0);
@@ -46,6 +46,6 @@ export function replayHistory(calendar: ReturnType<typeof replayCalendar>, ticke
   if (!out) throw new Error(`Insufficient scan history for ${ticker}`);
   const rows = out.samples.map(s => ({ ticker, variant: s.variant, d: ctx.dates[s.i], net: +s.net.toFixed(6), ex: +s.ex.toFixed(6), gross: +s.gross.toFixed(6) }));
   return { rows, receipt: { asOf, firstSession: dated[0][0].slice(0, 10), observedSessions: observed.length, samples: rows.length,
-    filingCutoff: 'next-session-v1', scope: 'single-ticker price, event and confluence strategies', shortVolumeTiming: 'Next session close or later confirmed collection', corrected: corrected.length, sector, officialBars: inputs.official.length, earnings: inputs.earnings.length, insiderBuys: inputs.buys.length,
+    filingCutoff: 'next-session-v1', adjustmentReview: 'same-vintage-v1', adjustments, scope: 'single-ticker price, event and confluence strategies', shortVolumeTiming: 'Next session close or later confirmed collection', corrected: corrected.length, sector, officialBars: inputs.official.length, earnings: inputs.earnings.length, insiderBuys: inputs.buys.length,
     shortVolumeDays: inputs.short.length, settlementPeriods: inputs.fails?.length ?? 0, eventsAndOfficialBarsSha256: sha256(JSON.stringify(inputs)) } };
 }

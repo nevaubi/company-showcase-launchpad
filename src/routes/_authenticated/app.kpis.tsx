@@ -22,6 +22,8 @@ import {
 import { useSource } from "@/components/source/source-context";
 import { partnerFile, useQuotes, useUniverse } from "@/lib/data";
 import { COVERAGE_TICKERS, coverageOf } from "@/lib/coverage";
+import { useStandardLatest } from "@/lib/kpis/standard-data";
+import { compactBankAmount, type LatestPoint as Point } from "@/lib/kpis/verified-bank";
 import { kpiFileQuery, kpiItems, type KpiValue } from "@/lib/statements/filed";
 import { useSessionState } from "@/lib/use-session-state";
 import { fmtDate } from "@/lib/format";
@@ -58,15 +60,6 @@ interface TaxKpi {
   higher_is_better: boolean | null;
   coverage: { companies: number };
 }
-type Point = [string, number, string, number | null] | null;
-interface Latest {
-  generated: string;
-  kpis: Record<
-    string,
-    Record<string, { q: Point; a: Point; ind: string; sec: string; kpi_id: string }>
-  >;
-}
-
 const STALE_DAYS = 548;
 const MAX_COLS = 12;
 const STICKY = "top-[var(--sticky-top,3.5rem)]";
@@ -112,11 +105,7 @@ function KpiMatrix() {
     queryFn: () => partnerFile<{ kpis: TaxKpi[] }>("kpistd/taxonomy.json"),
     staleTime: 3600_000,
   });
-  const latest = useQuery({
-    queryKey: ["kpistd", "latest"],
-    queryFn: () => partnerFile<Latest>("kpistd/latest.json"),
-    staleTime: 3600_000,
-  });
+  const latest = useStandardLatest();
   const uni = useUniverse();
   const [K, setK] = useSessionState<"q" | "a">("fu:kpis:K", "q");
   const [scope, setScope] = useSessionState("fu:kpis:scope", "sec:Financials");
@@ -277,6 +266,16 @@ function KpiMatrix() {
 
   async function openCell(t: string, k: TaxKpi, kpiId: string, p: NonNullable<Point>) {
     const label = `${k.name} · ${p[2]}`;
+    const verified = latest.data?.kpis[k.id]?.[t]?.verified;
+    if (verified?.period_end === p[0] && verified.amount_usd === p[1]) {
+      return open({
+        ticker: t, label, periodLabel: fmtDate(p[0]), unit: "usd", value: p[1],
+        external: {
+          url: verified.filing_url, quote: verified.source_quote, date: p[0],
+          confidence: `${verified.source_section} · filed ${verified.published_on}`,
+        },
+      });
+    }
     try {
       const file = await qc.fetchQuery(kpiFileQuery(t));
       const it = kpiItems(file).find((x) => x.id === kpiId);
@@ -285,9 +284,7 @@ function KpiMatrix() {
       const v =
         buckets
           .map((b) => b[p[0]])
-          .find((x) => x && Math.abs(x.v - p[1]) <= Math.abs(p[1]) * 1e-6) ??
-        buckets.map((b) => b[p[0]]).find(Boolean) ??
-        buckets.flatMap((b) => Object.values(b)).find((x) => x.v === p[1]);
+          .find((x) => x && Math.abs(x.v - p[1]) <= Math.abs(p[1]) * 1e-6);
       if (v?.url)
         return open({
           ticker: t,
@@ -635,7 +632,7 @@ function KpiMatrix() {
                               e.stopPropagation();
                               void openCell(r.t, k, c.kpiId, c.p);
                             }}
-                            title={`${k.name} · ${c.p[2]} (period ending ${fmtDate(c.p[0])})\n${fmtK(c.p[1], k)} · change ${fmtChg(c.p[3], k) || "not reported a year earlier"}\nClick for the release it was read from`}
+                            title={`${k.name} · ${c.p[2]} (period ending ${fmtDate(c.p[0])})\n${c.kpiId.startsWith("filing:") ? compactBankAmount(c.p[1]) : fmtK(c.p[1], k)} · change ${fmtChg(c.p[3], k) || "not reported a year earlier"}\nClick for the release it was read from`}
                             className={cn("num flex h-7 w-full items-baseline justify-end gap-1.5 overflow-hidden whitespace-nowrap px-3 py-1 tabular-nums hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", sort.c === k.id && IR.strong)}
                             style={h != null ? { background: `color-mix(in oklab, ${h > 0 ? "var(--positive)" : "var(--negative)"} ${Math.round(Math.abs(h) * 14)}%, transparent)` } : undefined}
                           >

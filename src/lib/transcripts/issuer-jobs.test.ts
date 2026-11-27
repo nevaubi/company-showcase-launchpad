@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({
   calls: vi.fn(),
+  retiredJob: "web:NOT_A_LISTING",
+  deleted: vi.fn(),
   web: vi.fn(),
   commitments: vi.fn(),
   mirror: vi.fn(),
@@ -24,6 +26,25 @@ vi.mock("./issuer-archive.server", () => ({ issuerKeys: mock.keys }));
 vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: {
     from: () => ({
+      select: () => {
+        const q = {
+          like: () => q,
+          or: () => q,
+          order: () => q,
+          limit: () => q,
+          maybeSingle: async () => ({ data: { job: mock.retiredJob }, error: null }),
+        };
+        return q;
+      },
+      delete: () => {
+        const q = {
+          eq: (field: string, value: string) => {
+            mock.deleted(field, value);
+            return q;
+          },
+        };
+        return q;
+      },
       upsert: () => ({ abortSignal: async () => ({ error: null }) }),
       update: (values: Record<string, unknown>) => {
         mock.updates.push(values);
@@ -39,7 +60,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({
     }),
   },
 }));
-import { scheduledCallArchive } from "./issuer-jobs.server";
+import { nextTranscriptDemand, scheduledCallArchive } from "./issuer-jobs.server";
 
 describe("managed earnings-call refresh", () => {
   beforeEach(() => {
@@ -51,6 +72,14 @@ describe("managed earnings-call refresh", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+  it("retires an unsupported symbol once without a provider request or a six-hour failure lease", async () => {
+    expect(await nextTranscriptDemand("web:")).toBe(false);
+    expect(mock.deleted).toHaveBeenCalledWith("job", mock.retiredJob);
+    expect(mock.deleted).toHaveBeenCalledWith("lease_until", expect.any(String));
+    expect(mock.updates).toHaveLength(1);
+    expect(mock.web).not.toHaveBeenCalled();
+    expect(mock.commitments).not.toHaveBeenCalled();
   });
   it.each(["09:22", "09:26"])(
     "keeps the former external-provider slot %s local and advances across issuers",

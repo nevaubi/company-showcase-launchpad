@@ -8,40 +8,12 @@ import { IrPanel } from "@/components/ir/panel";
 import { DASH, IR } from "@/components/ir/typography";
 import { useSource } from "@/components/source/source-context";
 import { partnerFile } from "@/lib/data";
+import { useStandardCompany, useStandardLatest } from "@/lib/kpis/standard-data";
+import { compactBankAmount, filingBankTaxonomy, type StdCompany, type StdPoint, type StandardLatest } from "@/lib/kpis/verified-bank";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import "@/components/ir/table.css";
 
-/** [end, value, period label, doc id, page, quote, sheet, cell, derived formula, printed value] */
-type StdPoint = [
-  string,
-  number,
-  string,
-  string | null,
-  number | null,
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  number | null,
-];
-interface StdSeries {
-  kpi_id: string;
-  name: string;
-  unit: string | null;
-  Q: StdPoint[];
-  A: StdPoint[];
-  alts: unknown[];
-  current: boolean;
-}
-interface StdCompany {
-  ticker: string;
-  sector: string | null;
-  industry: string | null;
-  series: Record<string, StdSeries>;
-  /** id → [title, storage path, ext, url, kind, fiscal label, text path] */
-  docs: Record<string, (string | null)[]>;
-}
 interface TaxKpi {
   id: string;
   name: string;
@@ -51,14 +23,6 @@ interface TaxKpi {
   definition: string;
   higher_is_better: boolean | null;
 }
-type LatestPoint = [string, number, string, number | null] | null;
-interface Latest {
-  kpis: Record<
-    string,
-    Record<string, { q: LatestPoint; a: LatestPoint; ind: string; sec: string }>
-  >;
-}
-
 export interface StdRow {
   id: string;
   measure: string;
@@ -109,7 +73,7 @@ function yearBefore(pts: StdPoint[], p: StdPoint): StdPoint | undefined {
 export function standardRows(
   ticker: string,
   co: StdCompany,
-  latest: Latest,
+  latest: Pick<StandardLatest, "kpis">,
   tax: TaxKpi[],
 ): StdRow[] {
   const meta = new Map(tax.map((k) => [k.id, k]));
@@ -179,26 +143,25 @@ const ordinal = (n: number) =>
 
 export function IrStandardKpis({ ticker }: { ticker: string }) {
   const { open } = useSource();
-  const co = useQuery({
-    queryKey: ["kpistd", "t", ticker],
-    queryFn: () => partnerFile<StdCompany>(`kpistd/t/${ticker}.json`),
-    staleTime: 3600_000,
-    retry: 1,
-  });
-  const latest = useQuery({
-    queryKey: ["kpistd", "latest"],
-    queryFn: () => partnerFile<Latest>("kpistd/latest.json"),
-    staleTime: 3600_000,
-    retry: 1,
-  });
+  const co = useStandardCompany(ticker);
+  const latest = useStandardLatest();
   const tax = useQuery({
     queryKey: ["kpistd", "taxonomy"],
     queryFn: () => partnerFile<{ kpis: TaxKpi[] }>("kpistd/taxonomy.json"),
     staleTime: 3600_000,
     retry: 1,
   });
-  if (!co.data || !latest.data || !tax.data) return null;
-  const rows = standardRows(ticker, co.data, latest.data, tax.data.kpis);
+  if (!co.data) {
+    if (!co.verificationFailed && !co.verificationPending) return null;
+    return <IrPanel section="Standardized KPIs" title="Standardized KPIs">
+      <p role="status" className="px-4 py-3 text-sm text-muted-foreground">
+        {co.verificationFailed ? "Filing-backed operating measures are currently unavailable." : "Loading filing-backed operating measures…"}
+      </p>
+    </IrPanel>;
+  }
+  // The small local taxonomy describes only our filing-backed rows. Other series use the partner taxonomy.
+  const available = tax.data?.kpis ?? filingBankTaxonomy.filter((m) => co.data?.series[m.id]?.kpi_id.startsWith("filing:"));
+  const rows = standardRows(ticker, co.data, latest.data ?? { kpis: {} }, available);
   if (!rows.length) return null;
   const old = Object.values(co.data.series).filter((s) => s.current === false).length;
 
@@ -235,7 +198,12 @@ export function IrStandardKpis({ ticker }: { ticker: string }) {
     <IrPanel
       section="Standardized KPIs"
       title="Standardized KPIs"
-      subtitle={`${rows.length} of this company's current KPIs map to a standard measure${old ? ` (${old} more it no longer reports are on the peer pages)` : ""}. Click a value for its source, a measure for the peer comparison.`}
+      subtitle={[
+        co.filingOnly || !tax.data ? "Showing consolidated measures verified against issuer filings." : `${rows.length} current measures${old ? ` · ${old} historical series` : ""}.`,
+        !latest.data ? "Peer comparisons are currently unavailable." : "",
+        co.verificationFailed ? "Some consolidated measures are awaiting their filing sources." : "",
+        "Select a value to open its source.",
+      ].filter(Boolean).join(" ")}
       actions={
         <Link
           to="/app/kpis"
@@ -300,9 +268,9 @@ export function IrStandardKpis({ ticker }: { ticker: string }) {
                     type="button"
                     onClick={() => openPoint(r)}
                     className={cn(IR.cellButton, IR.num, "py-1.5")}
-                    title={`${r.point[2]} · ended ${fmtDate(r.point[0])}. Click to open the source.`}
+                    title={`${r.point[2]} · ended ${fmtDate(r.point[0])}${r.point[3]?.startsWith("filing:") ? ` · $${r.point[1].toLocaleString("en-US")}` : ""}. Click to open the source.`}
                   >
-                    <span className={IR.strong}>{fmtStd(r.point[1], r.uclass)}</span>
+                    <span className={IR.strong}>{r.point[3]?.startsWith("filing:") ? compactBankAmount(r.point[1]) : fmtStd(r.point[1], r.uclass)}</span>
                     <span className={cn("block", IR.caption)}>{r.point[2]}</span>
                   </button>
                 </td>
