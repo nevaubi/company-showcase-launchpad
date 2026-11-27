@@ -4361,6 +4361,7 @@ export type Database = {
           tickers: number
         }[]
       }
+      check_call_archive_evidence: { Args: never; Returns: number }
       consume_usage: { Args: { _kind: string }; Returns: Json }
       create_firm: { Args: { _name: string }; Returns: string }
       data_coverage: {
@@ -4385,6 +4386,7 @@ export type Database = {
         Args: { _status: string; _user: string }
         Returns: undefined
       }
+      dispatch_call_archive_job: { Args: never; Returns: number }
       effective_tier: { Args: { _user: string }; Returns: string }
       firm_role_rank: {
         Args: { _role: Database["public"]["Enums"]["firm_role"] }
