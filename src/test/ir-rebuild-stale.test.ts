@@ -49,6 +49,34 @@ describe("selection", () => {
     expect(staleTickers(rows, BUILD_FORMAT)).toEqual(["A", "C", "E", "G"]);
   });
 
+  it("a repair pass takes payloads at the current format written before the repair time, each once", () => {
+    const cut = Date.parse("2026-11-27T04:20:00Z");
+    const now = Date.parse("2026-11-27T06:00:00Z");
+    const waiting = { waiting: 5, pass: 1, at: "2026-11-27T02:00:00Z" };
+    const rows = [
+      { ticker: "OLD", build: BUILD_FORMAT - 1, built_at: "2026-11-20T00:00:00Z" },
+      { ticker: "THIN", build: BUILD_FORMAT, built_at: "2026-11-27T02:32:00Z" },
+      { ticker: "TEXT", build: String(BUILD_FORMAT), built_at: "2026-11-27T03:00:00Z" },
+      { ticker: "DONE", build: BUILD_FORMAT, built_at: "2026-11-27T04:45:00Z" },
+      { ticker: "FILL", build: BUILD_FORMAT, built_at: "2026-11-27T05:00:00Z", fill: waiting },
+      { ticker: "NEXT", build: BUILD_FORMAT + 1, built_at: "2026-11-27T01:00:00Z" },
+      { ticker: "NODATE", build: BUILD_FORMAT, built_at: null },
+    ];
+    const only = { stale: false, repairBefore: cut };
+    // Stale lane off: only the repair list, never an older format or a waiting fill.
+    expect(staleTickers(rows, BUILD_FORMAT, now, only)).toEqual(["THIN", "TEXT"]);
+    // Stale lane off and no repair time: nothing.
+    expect(staleTickers(rows, BUILD_FORMAT, now, { stale: false })).toEqual([]);
+    // Both on: the union.
+    const both = staleTickers(rows, BUILD_FORMAT, now, { repairBefore: cut });
+    expect(both).toEqual(["OLD", "THIN", "TEXT", "FILL"]);
+    // Rebuilt: its built_at is past the repair time.
+    const after = rows.map((r) =>
+      r.ticker === "THIN" ? { ...r, built_at: "2026-11-27T06:01:00Z" } : r,
+    );
+    expect(staleTickers(after, BUILD_FORMAT, now, only)).toEqual(["TEXT"]);
+  });
+
   it("the builder writes the build format into stats", () => {
     const p = buildPayload("T", []);
     expect(p.build).toBe(BUILD_FORMAT);
@@ -74,8 +102,23 @@ describe("order", () => {
 
 describe("settings", () => {
   it("is on by default and bounded", () => {
-    expect(rebuildSettings({})).toEqual({ enabled: true, maxCompanies: 20, maxMs: 15 * 60_000 });
+    expect(rebuildSettings({})).toEqual({
+      enabled: true,
+      maxCompanies: 20,
+      maxMs: 15 * 60_000,
+      stale: true,
+      repairBefore: null,
+    });
     expect(rebuildSettings({ IR_REBUILD_STALE: "0" }).enabled).toBe(false);
+    // A repair time lets a pass run with the stale lane off, and a value that is no time is ignored.
+    const repair = { IR_REBUILD_STALE: "0", IR_REBUILD_REPAIR_BEFORE: "2026-11-27T04:20:00Z" };
+    expect(rebuildSettings(repair)).toMatchObject({
+      enabled: true,
+      stale: false,
+      repairBefore: Date.parse("2026-11-27T04:20:00Z"),
+    });
+    const noTime = { IR_REBUILD_STALE: "0", IR_REBUILD_REPAIR_BEFORE: "soon" };
+    expect(rebuildSettings(noTime)).toMatchObject({ enabled: false, repairBefore: null });
     expect(rebuildSettings({ IR_REBUILD_MAX: "5000", IR_REBUILD_MINUTES: "500" })).toMatchObject({ maxCompanies: 200, maxMs: 30 * 60_000 });
     expect(rebuildSettings({ IR_REBUILD_MAX: "0", IR_REBUILD_MINUTES: "abc" })).toMatchObject({ maxCompanies: 20, maxMs: 15 * 60_000 });
   });

@@ -57,13 +57,14 @@ describe("standardized statement rows, from the row data", () => {
   it("renders AAPL's income statement: head strip, levels, subtotals, grand total, per-share and calculated lines", () => {
     const { container } = renderTable(income(aapl));
     expect(container.querySelector(".irt-root")).not.toBeNull();
-    expect(container.querySelector("thead.irt-colhead")).not.toBeNull();
+    expect(container.querySelector(".irg.irg-fin")).not.toBeNull();
+    expect(container.querySelector("thead.irg-head")).not.toBeNull();
     const heads = container.querySelectorAll("thead th");
     // Line item, five periods, CAGR, trend.
-    expect(heads[5].classList.contains("irt-latest")).toBe(true);
-    expect(heads[5].querySelector(".irt-period")?.textContent).toBe("FY2025");
-    expect(heads[5].querySelector(".irt-date")).not.toBeNull();
-    expect(container.querySelector("tbody.irt-body")).not.toBeNull();
+    expect(heads[5].classList.contains("irg-latest")).toBe(true);
+    expect(heads[5].querySelector(".irg-period")?.textContent).toBe("FY2025");
+    expect(heads[5].querySelector(".irg-date")).not.toBeNull();
+    expect(container.querySelector("tbody.irg-body")).not.toBeNull();
 
     const revenue = rowOf(container, "Revenue");
     expect(revenue.dataset.kind).toBe("sub");
@@ -87,12 +88,15 @@ describe("standardized statement rows, from the row data", () => {
     expect(ebitda.querySelector(".sr-only")?.textContent).toContain("calculated");
     expect(ebitda.querySelector("[aria-label=derived]")).toBeNull();
 
-    // Every other line of the block is banded.
-    const lines = [...container.querySelectorAll("tbody tr.irt-line")];
-    expect(lines[0].classList.contains("irt-stripe")).toBe(false);
-    expect(lines[1].classList.contains("irt-stripe")).toBe(true);
-    // The first column is sticky and carries the edge class.
-    expect(revenue.querySelector("th")!.classList).toContain("irt-fc");
+    // A quiet grid: no banded lines; one fixed label column; one width for every period column.
+    expect(container.querySelector("tbody tr.irt-stripe")).toBeNull();
+    expect(revenue.querySelector("th")!.classList).toContain("irg-fc");
+    // (column widths come from the grid's variables: one label width, one width for every period column)
+    expect(container.querySelectorAll("colgroup col")).toHaveLength(8);
+    expect((container.querySelector(".irg-fin") as HTMLElement).style.getPropertyValue("--col")).toMatch(/^max\(var\(--irt-colbase\)/);
+    // Digits line up: a positive figure keeps the room of a closing parenthesis.
+    const fig = revenue.querySelector("td button .irg-fig")!;
+    expect(fig.querySelector(".irg-paren")).not.toBeNull();
   });
 
   it("marks a period with no figure as missing, with a title", () => {

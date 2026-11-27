@@ -41,6 +41,7 @@ import {
 } from "@/components/ir/statement-section";
 import { IR } from "@/components/ir/typography";
 import { ScrollGroupContext, scrollGroup } from "@/components/ir/scroll-group";
+import { useGridFit } from "@/components/ir/grid-fit";
 import { filterOptions, missingNote, sectionFilter } from "@/components/ir/statement-nav";
 import {
   basisTag,
@@ -50,6 +51,7 @@ import {
   notePrinted,
   gridColWidth,
   FIGURE_CAP,
+  NOTED_CAP,
   gridFigure,
   sectionHeightCss,
   totalKinds,
@@ -197,7 +199,7 @@ function cellTitle(
   return [
     `${lineLabel(s)}, ${parseYtdKey(e) ? ytdLong(e) : periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m)}`,
     held ? `Held back: ${c.why ?? "its unit is contradicted by the documents"}` : null,
-    full && full.length > FIGURE_CAP ? `In full: ${full}` : null,
+    full && full.replace(/\)$/, "").length > FIGURE_CAP ? `In full: ${full}` : null,
     c.f ? `Calculated: ${c.f.formula}` : c.x ? `Printed as “${c.x}”` : null,
     !c.f && c.how === "printed" ? "Read from the document's own table" : null,
     doc ? `In the ${kind}${doc.filed ? ` filed ${doc.filed}` : ""}` : null,
@@ -318,6 +320,8 @@ function sectionView(
     const div = s.unit === "usd" || s.unit === "count" ? lineDiv(s) : 1;
     const shownDiv = s.unit === "usd" && sec.id === "text" ? 1e6 : div;
     const dec = printedDecimals(s);
+    // a quiet note after the name when the line's scale is not the section's ("in billions", "in dollars")
+    const note = sec.id === "text" ? "" : scaleNote(div, s, sec.div);
     const suffix = printedSuffix(s);
     const cells: (ShownCell | null)[] = cols.map((e) => {
       const c = m.cells[e] ?? m.held[e];
@@ -336,7 +340,19 @@ function sectionView(
       return {
         c,
         s: owner,
-        text: gridFigure(printedFigure(c.v, shownDiv, dec, suffix), c.v, shownDiv, suffix),
+        text: gridFigure(
+          printedFigure(c.v, shownDiv, dec, suffix),
+          c.v,
+          shownDiv,
+          suffix,
+          // Only a figure in full units has an exact short form ("50M" dollars); a figure in a printed
+          // scale (thousands of shares) is never shortened: "15M" would read as fifteen million.
+          shownDiv === 1 && (s.unit === "usd" || s.unit === "count")
+            ? note
+              ? NOTED_CAP
+              : FIGURE_CAP
+            : Infinity,
+        ),
         held: isHeld,
         check: chk,
         title: cellTitle(
@@ -360,7 +376,6 @@ function sectionView(
         total: r.total,
         cells: cells.map((x) => (x && !x.held ? x.c : null)),
       });
-    const note = sec.id === "text" ? (s.unit === "usd" ? "" : "") : scaleNote(div, s, sec.div);
     const label = rowLabel(r, byKey);
     return {
       kind: "line",
@@ -759,6 +774,8 @@ export function IrStatements({
           }
     return w;
   }, [views.out]);
+  // Whole period columns only, the label column taking the slack (grid-fit.ts).
+  useGridFit(gridRoot, gridCols.length, widest);
   // A period chip or the period type opens the grid at its newest columns again.
   useLayoutEffect(() => {
     const h = headRef.current;

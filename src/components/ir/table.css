@@ -288,7 +288,7 @@
 }
 @media (max-width: 639.98px) {
   .irg-table {
-    font-size: 12.5px;
+    font-size: 12px;
   }
 }
 .irg-table th,
@@ -387,11 +387,30 @@
 .irg-head .irg-fc {
   z-index: 2;
 }
-.irg[data-scrolled] .irg-fc {
+/* The frozen pane's edge: a firmer hairline, as a spreadsheet draws it; never a blur. */
+.irg-table th.irg-fc,
+.irg-table td.irg-fc {
   box-shadow:
-    inset -1px 0 0 var(--irg-line),
-    inset 0 -1px 0 var(--irg-line),
-    6px 0 6px -6px var(--irg-edge);
+    inset -1px 0 0 var(--irg-rule),
+    inset 0 -1px 0 var(--irg-line);
+}
+/* Measures the width of a tabular digit in the table's type (grid-fit.ts). */
+.irg-probe {
+  position: absolute;
+  visibility: hidden;
+  white-space: nowrap;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+@media (max-width: 639.98px) {
+  .irg-probe {
+    font-size: 12px;
+  }
+  .irg {
+    --irg-markw: 10px;
+    --irg-flagw: 8px;
+  }
 }
 .irg-label {
   display: block;
@@ -527,4 +546,34 @@
     inset 0 -3px 0 var(--bg),
     inset 0 -4px 0 var(--irg-rule-strong),
     inset -1px 0 0 var(--irg-line);
+}
+
+/* The Financials tab's statement table on the same grid (statement-table.tsx): no check slot, a head that
+   prints period, date and form, and a second line under each figure in the change and share views. */
+.irg-fin .irg-head th.irg-hcell {
+  padding-right: calc(var(--irg-markw) + 7px);
+}
+.irg-fin .irg-fig.irg-fig-top {
+  height: 24px;
+  padding-top: 4px;
+}
+.irg-fin .irg-sub {
+  display: block;
+  padding: 0 calc(var(--irg-markw) + 7px) 0 6px;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: right;
+  font-style: normal;
+}
+.irg-fin .irg-head th {
+  vertical-align: bottom;
+  padding-bottom: 6px;
+}
+
+/* Scroll frames hold their own positioned content (screen-reader text in cells, the hidden head row), so
+   nothing inside a frame scrolled sideways can widen the page. */
+.irg-scroll,
+.irg-headstrip,
+.irg-fin > div {
+  position: relative;
 }

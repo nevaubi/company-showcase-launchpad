@@ -67,11 +67,17 @@ if (import.meta.main) {
   let code = 0;
   try {
     // Only the ticker, stats->build and the fill's waiting count: ~700 small rows, no payload is read.
-    const rows = await pageAll<SeriesRow>((a, b) => sb.from("ir_company_series").select("ticker, build:stats->build, fill:stats->quality->fill").order("ticker").range(a, b));
-    const stale = staleTickers(rows, BUILD_FORMAT, Date.now());
+    const rows = await pageAll<SeriesRow>((a, b) => sb.from("ir_company_series").select("ticker, build:stats->build, fill:stats->quality->fill, built_at").order("ticker").range(a, b));
+    const { stale: staleOn, repairBefore } = settings;
+    const stale = staleTickers(rows, BUILD_FORMAT, Date.now(), { stale: staleOn, repairBefore });
     const order = rebuildOrder(stale, COVERAGE, await loadRank());
     const state = await loadState();
-    log(`${stale.length} of ${rows.length} payloads below build ${BUILD_FORMAT}; this pass takes up to ${settings.maxCompanies} companies in ${settings.maxMs / 60_000} min, first ${order.slice(0, 6).join(", ") || "none"}`);
+    if (repairBefore !== null) {
+      const before = new Date(repairBefore).toISOString();
+      const scope = staleOn ? "" : " only";
+      log(`repair: payloads at build ${BUILD_FORMAT} written before ${before}${scope}`);
+    }
+    log(`${stale.length} of ${rows.length} payloads to rebuild (build ${BUILD_FORMAT}); this pass takes up to ${settings.maxCompanies} companies in ${settings.maxMs / 60_000} min, first ${order.slice(0, 6).join(", ") || "none"}`);
     const r = await runPass(state, order, settings, {
       rebuild: async (t) => (await rebuildCompany(t, { dry: DRY })) !== null,
       gate: () => dbGate(REBUILD_JOB),

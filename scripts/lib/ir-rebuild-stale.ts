@@ -20,6 +20,11 @@
  *                               stops a pass outright at 45 min (`ir-rebuild` in loop-schedule.ts)
  *   IR_REBUILD_BESIDE=0         back to idle-only passes (default: the lane takes one reading lane's
  *                               place while stale payloads are left, `staleLane`)
+ *   IR_REBUILD_REPAIR_BEFORE=<ISO time>
+ *                               repair pass: payloads at the current build format written before that
+ *                               time are rebuilt once (a build rule was wrong until then). It runs with
+ *                               IR_REBUILD_STALE=0 too and then takes only those payloads: no payload of
+ *                               an older format and no waiting fill is touched. Unset: off.
  * Pure: the script (scripts/ir-rebuild-stale.ts) and the loop own the database and storage.
  */
 import { byRank } from "@/lib/jobs/priority";
@@ -36,9 +41,14 @@ export const REVIEW_AFTER = 3;
 export const IDLE_RECHECK_MS = 3_600_000;
 
 export interface RebuildSettings {
+  /** a pass may run: the stale lane is on, or a repair time is set */
   enabled: boolean;
   maxCompanies: number;
   maxMs: number;
+  /** IR_REBUILD_STALE: payloads below the build format and waiting fills are taken */
+  stale: boolean;
+  /** IR_REBUILD_REPAIR_BEFORE in ms: payloads at the current format built before it are taken; null when unset */
+  repairBefore: number | null;
 }
 
 const bounded = (v: string | undefined, def: number, lo: number, hi: number) => {
@@ -46,11 +56,19 @@ const bounded = (v: string | undefined, def: number, lo: number, hi: number) => 
   return Number.isFinite(n) && n >= lo ? Math.min(hi, n) : def;
 };
 
+/** What a pass itself reads of the settings: its bounds. */
+export type PassBounds = Pick<RebuildSettings, "enabled" | "maxCompanies" | "maxMs">;
+
 export function rebuildSettings(env: Record<string, string | undefined>): RebuildSettings {
+  const stale = env["IR_REBUILD_STALE"] !== "0";
+  const at = Date.parse(env["IR_REBUILD_REPAIR_BEFORE"] ?? "");
+  const repairBefore = Number.isFinite(at) ? at : null;
   return {
-    enabled: env["IR_REBUILD_STALE"] !== "0",
+    enabled: stale || repairBefore !== null,
     maxCompanies: bounded(env["IR_REBUILD_MAX"], 20, 1, 200),
     maxMs: bounded(env["IR_REBUILD_MINUTES"], 15, 1, 30) * 60_000,
+    stale,
+    repairBefore,
   };
 }
 
@@ -60,6 +78,8 @@ export interface SeriesRow {
   build: unknown;
   /** `stats->quality->fill` (waiting, pass, at), when the lane selects it */
   fill?: unknown;
+  /** when the payload was written, when the lane selects it (the repair pass reads it) */
+  built_at?: string | null;
 }
 
 /** Extra rebuilds of a company whose table fill left history documents waiting: at most this many in a row, */
@@ -71,17 +91,33 @@ export const FILL_PASS_GAP_MS = 3_600_000;
  * Tickers whose stored stats lack the current build format (missing, older, or not a number), and, with `nowMs`,
  * those whose table fill left documents waiting (history not yet read within one rebuild's downloads), at most
  * once an hour and `FILL_PASSES` times in a row (the count is the payload's own `fill.pass`, so it cannot loop).
+ * `pick.stale === false` leaves both groups alone (IR_REBUILD_STALE=0). `pick.repairBefore` adds the payloads
+ * at exactly the current format written before that time (the repair pass): once rebuilt, a payload's `built_at`
+ * is past it, so each is taken once.
  */
-export function staleTickers(rows: readonly SeriesRow[], format: number, nowMs?: number): string[] {
+export function staleTickers(
+  rows: readonly SeriesRow[],
+  format: number,
+  nowMs?: number,
+  pick: { stale?: boolean; repairBefore?: number | null } = {},
+): string[] {
   const out = new Set<string>();
+  const takeStale = pick.stale !== false;
   for (const r of rows) {
     const b = typeof r.build === "number" ? r.build : typeof r.build === "string" ? Number(r.build) : NaN;
-    if (!(Number.isFinite(b) && b >= format)) out.add(r.ticker);
-    else if (nowMs != null && r.fill && typeof r.fill === "object") {
+    if (!(Number.isFinite(b) && b >= format)) {
+      if (takeStale) out.add(r.ticker);
+      continue;
+    }
+    if (takeStale && nowMs != null && r.fill && typeof r.fill === "object") {
       const f = r.fill as { waiting?: unknown; pass?: unknown; at?: unknown };
       const at = typeof f.at === "string" ? Date.parse(f.at) : NaN;
       if (Number(f.waiting ?? 0) > 0 && Number(f.pass ?? 0) < FILL_PASSES && Number.isFinite(at) && nowMs - at >= FILL_PASS_GAP_MS)
         out.add(r.ticker);
+    }
+    if (pick.repairBefore != null && b === format) {
+      const built = typeof r.built_at === "string" ? Date.parse(r.built_at) : NaN;
+      if (Number.isFinite(built) && built < pick.repairBefore) out.add(r.ticker);
     }
   }
   return [...out];
@@ -185,7 +221,7 @@ export interface PassResult {
  * One bounded pass: the stale tickers in lane order, one at a time, stopping at `maxCompanies` or
  * once `maxMs` is spent. State is saved after every company.
  */
-export async function runPass(state: RebuildState, order: readonly string[], settings: RebuildSettings, deps: PassDeps): Promise<PassResult> {
+export async function runPass(state: RebuildState, order: readonly string[], settings: PassBounds, deps: PassDeps): Promise<PassResult> {
   const t0 = deps.now();
   pruneFailures(state, order);
   const todo = eligible(state, order, t0).filter((t) => !deps.skip?.has(t));

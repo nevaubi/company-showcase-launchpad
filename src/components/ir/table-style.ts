@@ -233,19 +233,61 @@ export const gridColWidth = (chars: number) =>
 /** Label padding for a printed level: a fixed gutter and 12 px per level, nothing else moves. */
 export const gridLabelPad = (depth: number) => GRID_GUTTER + Math.max(0, Math.round(depth)) * GRID_INDENT;
 
-/** Longest figure the grid's shared column width is set for, in characters ("(4,002,814)"). */
-export const FIGURE_CAP = 11;
+/** Longest figure the grid's shared column width is set for, in characters, a closing parenthesis aside ("(4,002,814"). */
+export const FIGURE_CAP = 10;
+/**
+ * The same for a line stated in another scale than its section (its name carries "in dollars", "in
+ * billions"): such a line's long figures are shown in short form sooner, so they never set the tab's width.
+ */
+export const NOTED_CAP = 7;
 
 /**
- * A figure for the grid: as printed, or, when it is longer than `FIGURE_CAP` characters (a line whose
- * figures are stated in full units inside a table in millions), in short form ("1.8T", "(658M)") so one
- * figure never widens every column of the tab; the cell's title keeps the full figure.
+ * A figure for the grid: as printed, or, when it is longer than `cap` characters, in short form ("1.8T",
+ * "(658M)") so one figure never widens every column of the tab; the cell's title keeps the full figure.
+ * Callers pass a cap only for figures in full units (`div` 1), whose short form is exact.
  */
-export function gridFigure(text: string, value: number, div: number, mark: string): string {
+export function gridFigure(text: string, value: number, div: number, mark: string, cap = FIGURE_CAP): string {
   const body = mark && text.endsWith(mark) ? text.slice(0, -mark.length) : text;
-  if (body.length <= FIGURE_CAP) return text;
+  if (body.replace(/\)$/, "").length <= cap) return text;
   const short = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(
     Math.abs(value / (div || 1)),
   );
   return `${value < 0 ? `(${short})` : short}${body === text ? "" : mark}`;
+}
+
+/** Room beside a figure on a phone, px (narrower mark and check slots). */
+export const FIGURE_ROOM_PHONE = 30;
+/** Label column a phone aims for, and the narrowest it gets so two period columns fit, px. */
+export const PHONE_LABEL = 150;
+export const LABEL_MIN = 112;
+
+/**
+ * Widths of the grid for a frame `w` px wide holding `n` period columns whose figures need `need` px, plus
+ * `extra` px of other columns (the Financials growth and trend columns): the frame shows whole columns only,
+ * newest at the right edge, the label column taking the slack, so no part of a column hides under the
+ * frozen labels. On a phone two period columns fit beside a label of about 150 px (the periods widen to
+ * fill the frame); on a wider screen the label keeps its set width unless the columns overflow, then it
+ * takes what is left after the whole columns that fit.
+ */
+export function fitGrid(
+  w: number,
+  n: number,
+  need: number,
+  phone: boolean,
+  extra = 0,
+): { label: number; col: number } {
+  const g = phone ? GRID.phone : GRID.desktop;
+  const room = Math.max(0, w - extra);
+  let col = Math.max(g.col, need);
+  if (phone) {
+    const k = Math.min(n, 2);
+    const wide = k ? (room - PHONE_LABEL) / k : col;
+    if (wide >= col) col = Math.floor(wide);
+    let label = room - k * col;
+    if (label < LABEL_MIN && k > 1) label = room - col;
+    return { label: Math.max(LABEL_MIN, Math.floor(label)), col };
+  }
+  if (g.label + n * col <= room) return { label: g.label, col };
+  const k = Math.max(1, Math.floor((room - g.label) / col));
+  return { label: Math.max(g.label, Math.floor(room - Math.min(k, n) * col)), col };
 }

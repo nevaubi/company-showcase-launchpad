@@ -133,3 +133,32 @@ describe("grid geometry", () => {
     expect([0, 1, 2, 3].map(gridLabelPad)).toEqual([12, 24, 36, 48]);
   });
 });
+
+describe("whole period columns", () => {
+  it("fits two period columns beside a label of about 150 px on a phone, the label taking the slack elsewhere", async () => {
+    const { fitGrid } = await import("./table-style");
+    // 390 px phone, frame 327: two columns of 88 px, the label takes the rest (about 150 px).
+    expect(fitGrid(327, 8, 80, true)).toEqual({ label: 151, col: 88 });
+    // 430 px phone, frame 367: two columns of 108 px.
+    expect(fitGrid(367, 8, 80, true)).toEqual({ label: 151, col: 108 });
+    // Figures that need more than half: the label gives way, never under 112 px.
+    expect(fitGrid(327, 8, 100, true)).toEqual({ label: 127, col: 100 });
+    // 768 px tablet, frame 704, desktop widths: label 320 + whole columns of 104 px, the label takes the rest.
+    const t = fitGrid(704, 8, 90, false);
+    expect(t.col).toBe(104);
+    expect((704 - t.label) % 104).toBe(0);
+    expect(t.label).toBe(392);
+    // Everything fits: the label keeps its width and the table is narrower than the frame.
+    expect(fitGrid(1160, 6, 90, false)).toEqual({ label: 320, col: 104 });
+  });
+});
+
+describe("short form of long figures", () => {
+  it("shortens only figures in full units, never a figure in a printed scale", async () => {
+    const { gridFigure } = await import("./table-style");
+    expect(gridFigure("50,000,000", 5e7, 1, "", 7)).toBe("50M");
+    expect(gridFigure("(1,800,000,000,000.0)", -1.8e12, 1, "", 10)).toBe("(1.8T)");
+    // Apple's shares in thousands stay as printed: "15M" would read as fifteen million shares.
+    expect(gridFigure("14,948,500", 1.49485e10, 1e3, "", Infinity)).toBe("14,948,500");
+  });
+});
