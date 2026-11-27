@@ -2709,6 +2709,7 @@ export type Database = {
           generated_at: string
           payload: Json
           receipt_completions: Json
+          scoring_identities: Json | null
         }
         Insert: {
           as_of: string
@@ -2716,6 +2717,7 @@ export type Database = {
           generated_at: string
           payload: Json
           receipt_completions: Json
+          scoring_identities?: Json | null
         }
         Update: {
           as_of?: string
@@ -2723,6 +2725,7 @@ export type Database = {
           generated_at?: string
           payload?: Json
           receipt_completions?: Json
+          scoring_identities?: Json | null
         }
         Relationships: []
       }
@@ -4804,6 +4807,7 @@ export type Database = {
         }
         Returns: Json
       }
+      setup_replay_scoring_sha_v1: { Args: { receipt: Json }; Returns: string }
       setup_take: {
         Args: { _as_of: string; _n: number; _phase: string }
         Returns: number
