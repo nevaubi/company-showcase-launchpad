@@ -3689,6 +3689,45 @@ export type Database = {
         }
         Relationships: []
       }
+      verified_bank_kpi_points: {
+        Row: {
+          amount_usd: number
+          filing_url: string
+          issuer_label: string
+          metric: string
+          period_end: string
+          period_label: string
+          published_on: string
+          source_quote: string
+          source_section: string
+          ticker: string
+        }
+        Insert: {
+          amount_usd: number
+          filing_url: string
+          issuer_label: string
+          metric: string
+          period_end: string
+          period_label: string
+          published_on: string
+          source_quote: string
+          source_section: string
+          ticker: string
+        }
+        Update: {
+          amount_usd?: number
+          filing_url?: string
+          issuer_label?: string
+          metric?: string
+          period_end?: string
+          period_label?: string
+          published_on?: string
+          source_quote?: string
+          source_section?: string
+          ticker?: string
+        }
+        Relationships: []
+      }
       waitlist: {
         Row: {
           created_at: string
