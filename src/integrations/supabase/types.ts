@@ -2702,6 +2702,30 @@ export type Database = {
           },
         ]
       }
+      setup_replay_scoreboards: {
+        Row: {
+          as_of: string
+          benchmark_sha256: string
+          generated_at: string
+          payload: Json
+          receipt_completions: Json
+        }
+        Insert: {
+          as_of: string
+          benchmark_sha256: string
+          generated_at: string
+          payload: Json
+          receipt_completions: Json
+        }
+        Update: {
+          as_of?: string
+          benchmark_sha256?: string
+          generated_at?: string
+          payload?: Json
+          receipt_completions?: Json
+        }
+        Relationships: []
+      }
       setup_replay_work: {
         Row: {
           as_of: string | null
@@ -4681,6 +4705,8 @@ export type Database = {
       }
       paper_bot_limit: { Args: { _user: string }; Returns: number }
       plan_limit: { Args: { _kind: string; _tier: string }; Returns: number }
+      read_setup_replay_scoreboard_v1: { Args: never; Returns: Json }
+      refresh_setup_replay_scoreboard_v1: { Args: never; Returns: Json }
       remove_firm_member: {
         Args: { _firm: string; _user: string }
         Returns: undefined
