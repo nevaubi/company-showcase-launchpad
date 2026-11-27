@@ -2655,6 +2655,50 @@ export type Database = {
         }
         Relationships: []
       }
+      setup_replay_work: {
+        Row: {
+          as_of: string | null
+          attempts: number
+          completed_at: string | null
+          error: string | null
+          lease_until: string | null
+          receipt: Json | null
+          retry_at: string | null
+          ticker: string
+          token: string | null
+        }
+        Insert: {
+          as_of?: string | null
+          attempts?: number
+          completed_at?: string | null
+          error?: string | null
+          lease_until?: string | null
+          receipt?: Json | null
+          retry_at?: string | null
+          ticker: string
+          token?: string | null
+        }
+        Update: {
+          as_of?: string | null
+          attempts?: number
+          completed_at?: string | null
+          error?: string | null
+          lease_until?: string | null
+          receipt?: Json | null
+          retry_at?: string | null
+          ticker?: string
+          token?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "setup_replay_work_ticker_fkey"
+            columns: ["ticker"]
+            isOneToOne: true
+            referencedRelation: "setup_scan"
+            referencedColumns: ["ticker"]
+          },
+        ]
+      }
       setup_results: {
         Row: {
           as_of: string
@@ -4362,6 +4406,14 @@ export type Database = {
         }[]
       }
       check_call_archive_evidence: { Args: never; Returns: number }
+      claim_setup_replay_v2: {
+        Args: { p_as_of: string }
+        Returns: {
+          sector: string
+          ticker: string
+          token: string
+        }[]
+      }
       consume_usage: { Args: { _kind: string }; Returns: Json }
       create_firm: { Args: { _name: string }; Returns: string }
       data_coverage: {
@@ -4387,6 +4439,19 @@ export type Database = {
         Returns: undefined
       }
       effective_tier: { Args: { _user: string }; Returns: string }
+      fail_setup_replay_v2: {
+        Args: { p_error: string; p_ticker: string; p_token: string }
+        Returns: undefined
+      }
+      finish_setup_replay_v2: {
+        Args: {
+          p_receipt: Json
+          p_rows: Json
+          p_ticker: string
+          p_token: string
+        }
+        Returns: boolean
+      }
       firm_role_rank: {
         Args: { _role: Database["public"]["Enums"]["firm_role"] }
         Returns: number
@@ -4586,6 +4651,15 @@ export type Database = {
       setup_lease: {
         Args: { _as_of: string; _phase: string; _secs: number }
         Returns: boolean
+      }
+      setup_replay_inputs_v2: {
+        Args: {
+          p_as_of: string
+          p_first: string
+          p_official_from: string
+          p_ticker: string
+        }
+        Returns: Json
       }
       setup_take: {
         Args: { _as_of: string; _n: number; _phase: string }
