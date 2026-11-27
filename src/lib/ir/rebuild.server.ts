@@ -2,6 +2,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
 import { buildPayload, type IrPayload } from "@/lib/ir/payload";
+import { scenarioDocument, isReportedMeasure } from "./reported-scope";
 import { isComparisonPosition } from "./table-fill";
 import { containsIrPeriod, type IrRequestedPeriod } from "./payload-view";
 import { BUDGET_BYTES, budgetPayload } from "@/lib/ir/payload-budget";
@@ -36,11 +37,11 @@ export const FACT_COLUMNS =
 
 /** Reconstruct a requested historical period from its stored filings, without replacing the current company cache. */
 export async function readFiledPeriod(ticker: string, period: IrRequestedPeriod, documents: {
-  id: string; kind: string; filed: string | null; extract_facts: number | null;
+  id: string; kind: string; filed: string | null; extract_facts: number | null; title?: string | null; source_url?: string | null;
 }[]): Promise<IrPayload | null> {
   const latest = new Date(Date.parse(period.end) + 135 * 86_400_000).toISOString().slice(0, 10);
   const kinds = ["supplement", "press-release", "data", "other"];
-  const candidates = documents.filter((d) => d.filed && d.filed >= period.end && d.filed <= latest &&
+  const candidates = documents.filter((d) => !scenarioDocument(d) && d.filed && d.filed >= period.end && d.filed <= latest &&
     Number(d.extract_facts) > 0 && kinds.includes(d.kind));
   candidates.sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || a.filed!.localeCompare(b.filed!) || a.id.localeCompare(b.id));
   const span = period.frequency === "y" ? 12 : period.frequency === "m" ? 1 : 3;
@@ -397,9 +398,10 @@ export async function rebuildCompany(
     refusedDocs(ticker),
   ]);
   const plan: DocPlan = planDocuments(docRows.filter((r) => !refused.has(r.id)));
+  for (const d of docRows) if (scenarioDocument(d)) refused.add(d.id);
   const stored = await loadFactsOf(ticker, plan.load);
   // Figures read from files of another company (reviewed list, source-guard.ts) never enter the series.
-  let facts = withoutGuardedFacts(stored, refused);
+  let facts = withoutGuardedFacts(stored, refused).filter(isReportedMeasure);
   const wantFill = opts.fill !== false && opts.captions !== false;
   // A company with no stored fact is still built when its documents print statements the fill can read.
   const [tableDocs, reports] = wantFill

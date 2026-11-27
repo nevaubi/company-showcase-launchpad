@@ -17,6 +17,8 @@
 // loaded.
 // Counts per reason go to stats.quality.plan.
 
+import { scenarioDocument } from "./reported-scope";
+
 /** A document row as the store keeps it (ir_documents). */
 export interface PlanDocRow {
   id: string;
@@ -33,7 +35,7 @@ export interface PlanDocRow {
   prose_facts?: number | null;
 }
 
-export type PlanSkip = "copy" | "deck" | "older" | "too-old" | "undated";
+export type PlanSkip = "scenario" | "copy" | "deck" | "older" | "too-old" | "undated";
 
 export interface DocPlan {
   /** documents whose facts are loaded, newest first */
@@ -149,8 +151,10 @@ export function planDocuments(rows: readonly PlanDocRow[]): DocPlan {
   const skip = (why: PlanSkip, n = 1) => {
     if (n) left[why] = (left[why] ?? 0) + n;
   };
-  const dated = rows.filter((r) => r.filed);
-  const undated = rows.filter((r) => !r.filed);
+  const reported = rows.filter((r) => !scenarioDocument(r));
+  skip("scenario", rows.length - reported.length);
+  const dated = reported.filter((r) => r.filed);
+  const undated = reported.filter((r) => !r.filed);
   const lag = filingLag(dated);
 
   // Families of dated documents: same kind, filed within 3 days, same title.

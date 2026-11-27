@@ -1,6 +1,7 @@
 // Consumes an explicit native history request. Each pass has a lease, preserves the prior
 // company object, and verifies canonical objects and the newly published chart before completion.
-import { rebuildCompany } from "../src/lib/ir/rebuild.server";
+import { reportedChartAudit, scenarioDocument } from "../src/lib/ir/reported-scope";
+import { documentRows, rebuildCompany } from "../src/lib/ir/rebuild.server";
 import { fillCachePath } from "../src/lib/ir/table-fill-cache";
 import {
   FILL_ATTEMPTS,
@@ -97,6 +98,17 @@ async function run(ticker: string) {
       .eq("ticker", ticker)
       .single();
     if (queryError) throw new Error(queryError.message);
+    const excluded = (await documentRows(ticker)).filter(scenarioDocument);
+    const scenarioIds = new Set(excluded.map((d) => d.id));
+    detail.excludedScenarioDocuments = excluded.map((d) => d.id);
+    if (scenarioIds.size && previous.payload_path) {
+      const prior = await sb.storage.from("ir-documents").download(previous.payload_path);
+      if (prior.data)
+        detail.previousReportedScope = reportedChartAudit(
+          JSON.parse(await prior.data.text()),
+          scenarioIds,
+        );
+    }
     const promoted = await promote(ticker);
     detail.promoted = promoted.size;
     const result = await rebuildCompany(ticker, { expectedBuiltAt: previous.built_at });
@@ -122,6 +134,10 @@ async function run(ticker: string) {
       sample.stats?.lastPeriod !== result.stats.lastPeriod
     )
       throw new Error("Published chart does not match this rebuild");
+    const scope = reportedChartAudit(sample, scenarioIds);
+    detail.publishedReportedScope = scope;
+    if (scope.scenarioSources.length || scope.projectionSeries)
+      throw new Error("Published chart contains scenario observations");
     const fill = sample.stats.quality?.fill;
     if (!fill || !Number.isInteger(fill.waiting) || fill.failed)
       throw new Error("Historical document fill is incomplete");

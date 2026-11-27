@@ -16,6 +16,10 @@ describe("consensus range quality", () => {
     const html = renderToStaticMarkup(<ForecastRangeCell raw={raw} count={count} format={fmt} />);
     expect(html).not.toContain("left:");
     expect(html).toContain(issue);
+    const collapsed = document.createElement("div");
+    collapsed.innerHTML = html;
+    collapsed.querySelector("details")?.remove();
+    expect(collapsed.textContent).not.toMatch(/Low |High /);
     expect(html).toContain(`low ${raw.low}, high ${raw.high}`);
     expect(raw).toEqual(original);
   });

@@ -1,3 +1,4 @@
+import { scenarioDocument } from "@/lib/ir/reported-scope";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -241,6 +242,7 @@ export function IrLibrary({
                 <KindIcon ext={d.ext} />
                 <button type="button" onClick={() => view(d)} className="min-w-0 flex-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <p className={cn("truncate hover:underline", IR.row)}>{docTitle(d)}</p>
+                  {scenarioDocument(d) && <p className="text-[11px] text-muted-foreground">Regulatory stress scenario · Hypothetical capital projections</p>}
                   <p className={cn("num truncate", IR.caption)}>
                     {d.filed ? fmtDate(d.filed) : "IR website"} · {d.exhibit ?? (d.ext ?? "").toUpperCase()}
                     {d.pages ? ` · ${d.pages} pp` : ""} · {((d.bytes ?? 0) / 1024).toFixed(0)} KB

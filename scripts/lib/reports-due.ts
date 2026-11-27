@@ -18,9 +18,25 @@ export const nextUtcDay = (nowMs: number) => {
   return Math.ceil(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 5) / 1000);
 };
 
-export interface DueSlot { ticker: string; kind: ReportKind; reason: string; retryAt?: number }
+export interface DueSlot { ticker: string; kind: ReportKind; reason: string; retryAt?: number; eventDate?: string }
+export const EVENT_TURNS_PER_REPAIR = 3;
+export type ReportLane = "event" | "repair";
 
-/** Recover empty shared slots when the event desk has spare capacity. The scheduled worker's
+/** Same-day earnings come first. Otherwise three successful event writes earn a repair turn.
+ * A completed repair attempt (even a bad input) gives the next ordinary event a turn. */
+export function nextReportSlot(
+  eligible: DueSlot[], recentTurns: ReportLane[], today: string, repairOnly = false,
+): DueSlot | undefined {
+  const urgent = eligible.find((s) => s.eventDate === today);
+  if (urgent) return repairOnly ? undefined : urgent;
+  const repair = eligible.find((s) => s.retryAt != null);
+  if (repairOnly) return repair;
+  const eventsSinceRepair = recentTurns.slice(0, EVENT_TURNS_PER_REPAIR);
+  if (repair && eventsSinceRepair.length === EVENT_TURNS_PER_REPAIR && eventsSinceRepair.every((lane) => lane === "event")) return repair;
+  return eligible.find((s) => s.retryAt == null) ?? repair;
+}
+
+/** Recover empty shared slots through the same writer. The scheduled worker's
  * provider circuit, allowances, daily cap and per-slot receipt still apply. */
 export function recoverySlots(
   failed: { ticker: string; kind: string; updated_at: string }[],
@@ -56,16 +72,16 @@ export function dueSlots(
   for (const e of events) if (covered.has(e.ticker) && (!latest.has(e.ticker) || e.filed > latest.get(e.ticker)!.filed)) latest.set(e.ticker, e);
   for (const [ticker, e] of [...latest].sort((a, b) => b[1].filed.localeCompare(a[1].filed))) {
     const r = by.get(`${ticker}:recap`);
-    if (r && r.status === "ready" && r.data_version.split("|")[1] === e.accn) continue;
-    const slot: DueSlot = { ticker, kind: "recap", reason: `8-K 2.02 ${e.accn} filed ${e.filed}` };
+    if (r?.status === "ready" && r.data_version.split("|")[1] === e.accn) continue;
+    const slot: DueSlot = { ticker, kind: "recap", eventDate: e.filed, reason: `8-K 2.02 ${e.accn} filed ${e.filed}` };
     if (!skip.has(slotKey(slot))) out.push(slot);
   }
   const weekAgo = new Date(Date.parse(`${today}T00:00:00Z`) - 6 * 86400000).toISOString();
   for (const u of [...upcoming].sort((a, b) => a.date.localeCompare(b.date))) {
     if (!covered.has(u.ticker) || latest.has(u.ticker)) continue;
     const r = by.get(`${u.ticker}:preview`);
-    if (r && r.status === "ready" && r.updated_at >= weekAgo) continue;
-    const slot: DueSlot = { ticker: u.ticker, kind: "preview", reason: `expected report ${u.date}` };
+    if (r?.status === "ready" && r.updated_at >= weekAgo) continue;
+    const slot: DueSlot = { ticker: u.ticker, kind: "preview", eventDate: u.date, reason: `expected report ${u.date}` };
     if (!skip.has(slotKey(slot))) out.push(slot);
   }
   return out;

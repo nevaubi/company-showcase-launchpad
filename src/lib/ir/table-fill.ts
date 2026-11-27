@@ -19,6 +19,7 @@
 // - a position a fact already holds is never written; where the stored fact and the document disagree
 //   at that position the fact stays and a conflict is recorded;
 // - filled facts carry method "printed" and an id "printed:<doc>:<t>:<r>:<c>".
+import { projectedMeasure } from "./reported-scope";
 import type { IrFact } from "@/lib/ir/kpis";
 import { normLabel } from "@/lib/ir/kpis";
 import { parseNumber } from "@/lib/ir/tables";
@@ -1206,6 +1207,7 @@ export function fillDocument(input: FillInput): DocFill {
       prevLabelOnly = null;
       prevRow = row;
       names.set(r, label);
+      if (projectedMeasure(label) || projectedMeasure(heading) || projectedMeasure(bd)) continue;
       const covered = rowsWithFacts.has(r);
       const bold = !!lab.cell?.bold || figs.some((c) => c.bold);
       const flags = (bold ? 1 : 0) | (ruleAbove ? 2 : 0);

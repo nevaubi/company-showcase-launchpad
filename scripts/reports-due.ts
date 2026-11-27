@@ -1,31 +1,41 @@
 /**
  * Scheduled standard reports, one slot per call (run by the Render worker loop every 10 minutes):
  * recaps for earnings 8-Ks of the last 3 days, previews for reports expected within 7 days. Bounded
- * by ensureReport's daily limit. In quiet slots the same worker recovers previously failed shared reports. An AI 402 is recorded once, pauses the job and is probed hourly.
+ * by ensureReport's daily limit. One in four eligible turns can recover a failed shared report;
+ * same-day earnings keep priority. An AI 402 is recorded once, pauses the job and is probed hourly.
  * Each call also returns slots whose lock is older than 2 hours to a retryable state. Failure classes
  * (src/lib/jobs/failure.ts): credit and allowance outages pause the job (and the provider circuit
  * holds every AI caller back); a wrong model or key pauses it too; any other failure counts against
  * that slot only, and a slot that failed 3 times is skipped so it cannot block every other report.
  * Every call writes a `job_runs` row `reports-due`.
- *   bun scripts/reports-due.ts [--dry]
+ *   bun scripts/reports-due.ts [--dry] [--repair-only]
+ * --repair-only runs at most one eligible failed slot, yielding to same-day earnings.
+ * A live operator run exits nonzero when it does not complete a repair, so a bounded batch stops.
  */
 import { args, log, sb, selectAll } from "./lib/supa";
 import { COVERAGE } from "@/lib/coverage";
 import { ensureReport, ReportLimitError } from "@/lib/reports/store.server";
 import { loadReportInputs } from "@/lib/reports/inputs.server";
-import { dueSlots, FAIL_PREFIX, failedSlots, failReceipt, failReceiptKey, nextUtcDay, staleReceipts, recoverySlots, slotKey, reportOutcome, REPORTS_JOB, REPORTS_PROBE_MS, STUCK_LOCK_MS } from "./lib/reports-due";
+import { dueSlots, EVENT_TURNS_PER_REPAIR, FAIL_PREFIX, failedSlots, failReceipt, failReceiptKey, nextReportSlot, nextUtcDay, staleReceipts, recoverySlots, slotKey, reportOutcome, REPORTS_JOB, REPORTS_PROBE_MS, STUCK_LOCK_MS, type ReportLane } from "./lib/reports-due";
 import { routeDecision, routeOf, type ProviderId } from "@/lib/jobs/provider-health";
 import { providerStates } from "@/lib/jobs/provider-health.server";
 
 const started = new Date().toISOString();
 async function finish(ok: boolean, detail: Record<string, unknown>, items = 0): Promise<never> {
-  if (!dry) await sb.from("job_runs").insert({ job: REPORTS_JOB, started_at: started, finished_at: new Date().toISOString(), ok, items, detail: detail as never });
-  process.exit(0);
+  if (!dry) {
+    const { error } = await sb.from("job_runs").insert({ job: REPORTS_JOB, started_at: started, finished_at: new Date().toISOString(), ok, items, detail: { ...detail, repairOnly } as never });
+    if (error) {
+      log(`${REPORTS_JOB}: could not record outcome: ${error.message}`);
+      process.exit(1);
+    }
+  }
+  process.exit(repairOnly && detail.outcome !== "ok" ? 2 : 0);
 }
 
 const now = () => new Date().toISOString();
 const today = now().slice(0, 10);
 const dry = args.dry !== undefined;
+const repairOnly = args["repair-only"] !== undefined;
 
 // 1. Stuck locks (writer died mid-report): back to a retryable state, never deleted.
 const cutoff = new Date(Date.now() - STUCK_LOCK_MS).toISOString();
@@ -59,7 +69,7 @@ try {
 // 3. What is due.
 const since = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
 const horizon = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-const [events, est, reps, failures, receipts] = await Promise.all([
+const [events, est, reps, failures, receipts, turns] = await Promise.all([
   selectAll<{ ticker: string; accn: string; filed: string }>((from, to) =>
     sb.from("earnings_events").select("ticker, accn, filed").gte("filed", since).order("ticker").order("accn").range(from, to)),
   selectAll<{ ticker: string; date: string | null }>((from, to) =>
@@ -73,7 +83,14 @@ const [events, est, reps, failures, receipts] = await Promise.all([
       .eq("status", "failed").is("content", null).order("ticker").order("kind").range(from, to)),
   selectAll<{ job: string; cursor: number; paused_reason: string | null }>((from, to) =>
     sb.from("job_state").select("job, cursor, paused_reason").like("job", `${FAIL_PREFIX}%`).order("job").range(from, to)),
+  // The job/started_at index serves this bounded lookback. Previous worker versions already
+  // recorded retryAt on repair slots. Ignore idle ticks, open circuits and exhausted budgets.
+  sb.from("job_runs").select("repairAt:detail->slot->>retryAt").eq("job", REPORTS_JOB)
+    .in("detail->>outcome", ["ok", "fail"]).or("items.eq.1,detail->>lane.eq.repair")
+    .order("started_at", { ascending: false }).limit(EVENT_TURNS_PER_REPAIR),
 ]);
+if (turns.error) throw new Error(`Cannot read report scheduling history: ${turns.error.message}`);
+const recentTurns: ReportLane[] = (turns.data ?? []).map((r) => r.repairAt == null ? "event" : "repair");
 const upcoming = est.flatMap((e) => e.date ? [{ ticker: e.ticker, date: e.date }] : []);
 const skip = failedSlots(receipts);
 const covered = new Set(COVERAGE.map((c) => c.ticker));
@@ -84,12 +101,15 @@ const due = candidates.filter((slot) => !skip.has(slotKey(slot)) && (slot.retryA
 // Keep receipts during cooldown so repeated input failures still stop after three claims.
 const stale = staleReceipts(receipts, candidates);
 if (stale.length && !dry) await sb.from("job_state").delete().in("job", stale).like("job", `${FAIL_PREFIX}%`);
-log(`${REPORTS_JOB}: ${due.length} due (${due.filter((d) => d.kind === "recap").length} recaps, ${due.filter((d) => d.kind === "preview").length} previews)${dry ? " — dry run" : ""}`);
+const chosen = nextReportSlot(due, recentTurns, today, repairOnly);
+const lane: ReportLane | null = chosen ? (chosen.retryAt != null ? "repair" : "event") : null;
+const decision = { due: due.length, recoveryCandidates: recovery.length, skipped: skip.size, repairOnly, lane };
+const deferred = repairOnly && due.some((s) => s.eventDate === today) ? "same-day earnings" : "no eligible report";
+log(`${REPORTS_JOB}: ${due.length} due; ${chosen ? `${lane} ${chosen.ticker}/${chosen.kind}` : deferred}${dry ? " — dry run" : ""}`);
 if (dry) process.exit(0);
-if (!due.length) await finish(true, { due: 0, skipped: skip.size });
 
 // 4. One slot per call.
-const slot = due[0];
+const slot = chosen ?? await finish(true, { ...decision, deferred });
 const FREE_PAUSE = "Free AI allowance spent for today; resumes after 00:00 UTC";
 const pause = async (reason: string | null, retryAt = 0) => sb.from("job_state").upsert({ job: REPORTS_JOB, cursor: retryAt, paused_reason: reason, updated_at: now() });
 const receipt = receipts.find((r) => r.job === failReceiptKey(slot)) ?? null;
@@ -98,7 +118,7 @@ let title: string | null = null;
 let limited = false;
 try {
   const row = await ensureReport(sb as never, { ticker: slot.ticker, kind: slot.kind, scope: "shared", firmId: null, firmName: null, userId: null, coverage: null, source: "pregen" }, () => loadReportInputs(slot.ticker));
-  if (row.status === "generating") await finish(true, { slot, outcome: "already running" });
+  if (row.status === "generating") await finish(true, { ...decision, slot, outcome: "already running" });
   error = row.error ?? null;
   title = row.title ?? null;
 } catch (e) {
@@ -126,4 +146,4 @@ else if (outcome === "allowance") {
   if (receipt) await sb.from("job_state").delete().eq("job", receipt.job);
   log(`✓ ${slot.ticker}/${slot.kind} (${slot.reason}) ${title ?? ""}`);
 }
-await finish(outcome === "ok" || outcome === "limit", { slot, outcome, error: error?.slice(0, 200) ?? null, due: due.length, recoveryCandidates: recovery.length, skipped: skip.size }, outcome === "ok" ? 1 : 0);
+await finish(outcome === "ok" || outcome === "limit", { ...decision, slot, outcome, error: error?.slice(0, 200) ?? null }, outcome === "ok" ? 1 : 0);

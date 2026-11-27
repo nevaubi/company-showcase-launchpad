@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { IrPayload } from "@/lib/ir/payload";
 import { oversizeOf, selectIrPayload } from "@/lib/ir/payload-view";
+import { scenarioDocument, type SourceScope } from "@/lib/ir/reported-scope";
 import { guardedDocIds, withoutGuardedCells, withoutGuardedDocs } from "@/lib/ir/source-guard";
 import type { StoreRef } from "@/lib/ir/store";
 
@@ -85,7 +86,9 @@ export const getIrData = createServerFn({ method: "GET" })
     // them are dropped from payloads built before the guard existed (source-guard.ts).
     const refused = guardedDocIds(data.ticker, allDocs as { id: string; source_url: string | null }[]);
     const docs = refused.size ? allDocs.filter((d) => !refused.has(String(d.id))) : allDocs;
-    if (payload && refused.size) payload = withoutGuardedCells(payload, refused);
+    const reportedExclusions = new Set(refused);
+    for (const doc of docs as unknown as SourceScope[]) if (scenarioDocument(doc)) reportedExclusions.add(doc.id);
+    if (payload) payload = withoutGuardedCells(payload, reportedExclusions, true);
     const readFacts = docs.reduce((n, d) => n + (Number(d.extract_facts) || 0), 0);
     const selected = await selectIrPayload(payload, data.period, async () => {
       if (!readFacts) return null;
@@ -116,7 +119,8 @@ export const getIrData = createServerFn({ method: "GET" })
         return null;
       }
     });
-    payload = selected.payload;
+    payload = selected.payload && selected.payload !== payload
+      ? withoutGuardedCells(selected.payload, reportedExclusions, true) : selected.payload;
     console.log(`[ir] ${data.ticker} docs=${docs.length}+${images}img facts=${readFacts} row=${series ? "yes" : "no"} payload=${payload ? payload.series.length : "none"} ${Date.now() - t0}ms`);
     const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
     const pending = documents.filter((d) => !d.extract_status && EXTRACTABLE.includes(d.kind) && d.viewable).length;

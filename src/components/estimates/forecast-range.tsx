@@ -11,6 +11,12 @@ export function ForecastRangeCell({ raw, count, format, pick }: {
   const value = (field: ForecastField, text: string, available: boolean) => pick && available
     ? <button type="button" onClick={() => pick(field)} className="text-inherit hover:underline">{text}</button>
     : <span>{text}</span>;
+  const bounds = !view.placeholder && (raw.low != null || raw.high != null) ? (
+    <div className="mt-0.5 flex justify-between gap-2 text-[10px] tabular-nums text-muted-foreground">
+      <span>Low {value("low", format(raw.low ?? null), raw.low != null)}</span>
+      <span>High {value("high", format(raw.high ?? null), raw.high != null)}</span>
+    </div>
+  ) : null;
   return <div className="min-w-[10rem]" title={source}>
     <div className="flex items-baseline justify-between gap-2">
       <span className="font-medium tabular-nums">{value("avg", format(view.mean), raw.avg != null)}</span>
@@ -22,10 +28,8 @@ export function ForecastRangeCell({ raw, count, format, pick }: {
     {view.issue && <details className="mt-0.5 text-left text-[10px] text-muted-foreground">
       <summary className="cursor-pointer">{view.issue}</summary>
       <p className="mt-1 max-w-52 leading-relaxed">{source}</p>
+      {pick && bounds}
     </details>}
-    {!view.placeholder && (raw.low != null || raw.high != null) && <div className="mt-0.5 flex justify-between gap-2 text-[10px] tabular-nums text-muted-foreground">
-      <span>Low {value("low", format(raw.low ?? null), raw.low != null)}</span>
-      <span>High {value("high", format(raw.high ?? null), raw.high != null)}</span>
-    </div>}
+    {!view.issue && bounds}
   </div>;
 }

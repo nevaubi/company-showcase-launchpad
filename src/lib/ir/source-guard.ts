@@ -3,6 +3,7 @@
 // readers (scripts/lib/runner.ts, ir-docling.ts), the series build (rebuild.server.ts), the page
 // (ir.functions.ts, external.ts) and the IR-site collectors.
 // It removes files known to be wrong. It does not certify that any other file is the company's.
+import { projectedMeasure } from "./reported-scope";
 import type { IrPayload, PayloadCell, PayloadSeries } from "@/lib/ir/payload";
 import { GUARDED_SOURCES, type GuardedSource } from "@/lib/ir/source-guard-list";
 
@@ -72,13 +73,14 @@ export function withoutGuardedFacts<T extends { document_id?: string | null }>(f
  * no cells, their group rows, groups left empty and checks of removed lines. Payloads built
  * before the guard existed may still hold such figures; the page must not show them.
  */
-export function withoutGuardedCells(payload: IrPayload, refused: Set<string>): IrPayload {
-  if (!refused.size) return payload;
+export function withoutGuardedCells(payload: IrPayload, refused: Set<string>, reportedOnly = false): IrPayload {
+  const excludedLines = new Set(reportedOnly ? payload.series.filter(s => projectedMeasure(s.label) || projectedMeasure(s.bd)).map(s => s.k) : []);
+  if (!refused.size && !excludedLines.size) return payload;
   const bad = new Set<number>();
   payload.docs.forEach((d, i) => {
     if (refused.has(d.id)) bad.add(i);
   });
-  if (!bad.size) return payload;
+  if (!bad.size && !excludedLines.size) return payload;
   const refusedCell = (c: PayloadCell) => (c.d != null && bad.has(c.d)) || !!c.f?.parts.some((p) => p.d != null && bad.has(p.d));
   const clean = (cells: Record<string, PayloadCell> | undefined): Record<string, PayloadCell> | undefined => {
     if (!cells) return cells;
@@ -95,20 +97,22 @@ export function withoutGuardedCells(payload: IrPayload, refused: Set<string>): I
   const count = (r: Record<string, PayloadCell> | undefined) => (r ? Object.keys(r).length : 0);
   const series: PayloadSeries[] = [];
   for (const s of payload.series) {
+    if (excludedLines.has(s.k)) continue;
     const q = clean(s.q) ?? {};
     const y = clean(s.y) ?? {};
     const mo = clean(s.mo);
     const held = s.held ? { q: clean(s.held.q), y: clean(s.held.y), mo: clean(s.held.mo) } : undefined;
     const n = count(q) + count(y) + count(mo) + count(held?.q) + count(held?.y) + count(held?.mo);
     if (!n) continue;
-    series.push({ ...s, q, y, ...(mo ? { mo } : {}), ...(held ? { held } : {}) });
+    series.push({ ...s, q, y, ...(s.at ? { at: s.at.filter(([d]) => !bad.has(d)) } : {}), ...(mo ? { mo } : {}), ...(held ? { held } : {}) });
   }
   const keep = new Set(series.map((s) => s.k));
   const groups = payload.groups
     .map((g) => ({ ...g, rows: g.rows.filter((r) => keep.has(r.k)), root: g.root && keep.has(g.root) ? g.root : null }))
     .filter((g) => g.rows.length > 0);
   const checks = payload.checks.filter((c) => keep.has(c.k));
-  return { ...payload, series, groups, checks, stats: { ...payload.stats, series: series.length, groups: groups.length } };
+  const tables = payload.tables && Object.fromEntries(Object.entries(payload.tables).filter(([key]) => !bad.has(Number(key.split(":")[0]))));
+  return { ...payload, series, groups, checks, ...(tables ? { tables } : {}), stats: { ...payload.stats, series: series.length, groups: groups.length } };
 }
 
 /** For the IR-site collectors: true when the site listed for a company is a reviewed wrong source. */

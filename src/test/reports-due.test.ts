@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { dueSlots, isAiCreditError, isFreeAllowanceSpent, nextUtcDay } from "../../scripts/lib/reports-due";
+import { dueSlots, isAiCreditError, isFreeAllowanceSpent, nextReportSlot, nextUtcDay, type DueSlot, type ReportLane } from "../../scripts/lib/reports-due";
 const covered = new Set(["A", "B", "C", "D"]);
 describe("scheduled standard reports", () => {
   it("writes a recap for an earnings 8-K in the last 3 days unless the recap already uses that accession", () => {
     const due = dueSlots(
       [{ ticker: "A", accn: "a1", filed: "2026-11-18" }, { ticker: "B", accn: "b1", filed: "2026-11-17" }],
       [], [{ ticker: "B", kind: "recap", status: "ready", data_version: "q|b1|2026-W47|5", updated_at: "2026-11-18T00:00:00Z" }], covered, "2026-11-19");
-    expect(due).toEqual([{ ticker: "A", kind: "recap", reason: "8-K 2.02 a1 filed 2026-11-18" }]);
+    expect(due).toEqual([{ ticker: "A", kind: "recap", eventDate: "2026-11-18", reason: "8-K 2.02 a1 filed 2026-11-18" }]);
   });
   it("writes previews for expected reports within 7 days, soonest first, skipping fresh ones and uncovered tickers", () => {
     const due = dueSlots([], [{ ticker: "D", date: "2026-11-24" }, { ticker: "C", date: "2026-11-20" }, { ticker: "Z", date: "2026-11-20" }, { ticker: "A", date: "2026-11-21" }],
@@ -71,6 +71,40 @@ describe("failure receipts are cleaned up (review F10)", () => {
 });
 
 describe("shared report recovery", () => {
+  const today = "2026-11-27";
+  const event: DueSlot = { ticker: "A", kind: "preview", eventDate: "2026-11-30", reason: "upcoming earnings" };
+  const repairs: DueSlot[] = ["B", "C"].map((ticker) => ({ ticker, kind: "primer", retryAt: 1, reason: "Recover shared report r7" }));
+
+  it("repairs one in four mixed turns while new earnings keep arriving", () => {
+    const history: ReportLane[] = [];
+    const turns: string[] = [];
+    for (let n = 0; n < 8; n++) {
+      const chosen = nextReportSlot([event, ...repairs], history, today)!;
+      const lane = chosen.retryAt != null ? "repair" : "event";
+      turns.push(lane);
+      history.unshift(lane);
+    }
+    expect(turns).toEqual(["event", "event", "event", "repair", "event", "event", "event", "repair"]);
+  });
+
+  it("yields even an operator repair to same-day recaps and previews", () => {
+    const oldest = { ...event, kind: "recap" as const, eventDate: "2026-11-25" };
+    for (const kind of ["recap", "preview"] as const) {
+      const urgent = { ...event, kind, eventDate: today };
+      const candidates = [oldest, urgent, ...repairs];
+      expect(nextReportSlot(candidates, ["event", "event", "event"], today)).toBe(urgent);
+      expect(nextReportSlot(candidates, ["event", "event", "event"], today, true)).toBeUndefined();
+    }
+  });
+
+  it("gives events a turn after a repair attempt, and works oldest eligible repairs immediately when quiet", () => {
+    expect(nextReportSlot([event, ...repairs], ["repair", "event", "event"], today)).toBe(event);
+    expect(nextReportSlot(repairs, ["repair"], today)).toBe(repairs[0]);
+    expect(nextReportSlot([event, ...repairs], [], today, true)).toBe(repairs[0]);
+    expect(nextReportSlot([event], ["event", "event", "event"], today, true)).toBeUndefined();
+    expect(nextReportSlot([event], ["event", "event", "event"], today)).toBe(event);
+  });
+
   it("preserves scheduled earnings priority and does not retry the same slot under a second receipt", async () => {
     const { recoverySlots } = await import("../../scripts/lib/reports-due");
     const event = { ticker: "B", kind: "recap" as const, reason: "new filing" };
