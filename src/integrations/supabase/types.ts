@@ -4386,7 +4386,6 @@ export type Database = {
         Args: { _status: string; _user: string }
         Returns: undefined
       }
-      dispatch_call_archive_job: { Args: never; Returns: number }
       effective_tier: { Args: { _user: string }; Returns: string }
       firm_role_rank: {
         Args: { _role: Database["public"]["Enums"]["firm_role"] }
