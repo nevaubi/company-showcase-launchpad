@@ -75,6 +75,15 @@ describe("event features", () => {
     const want = bars[401][5] / bars[398][5] - 1 - (bench[401] / bench[398] - 1);
     expect(ev.earnRet[401]).toBeCloseTo(want, 10);
   });
+  it("does not revise an expected earnings date before a date-only filing was available at a close", () => {
+    const past = { earnings: [dates[350]], buys: [], short: [] };
+    const extra = { ...past, earnings: [...past.earnings, dates[400]] };
+    const earlier = eventFeatures(dates, f, bench, past);
+    const updated = eventFeatures(dates, f, bench, extra);
+    expect(updated.earnAhead[400]).toEqual(earlier.earnAhead[400]);
+    expect(updated.earnAhead[401]).not.toEqual(earlier.earnAhead[401]);
+    expect(Number.isNaN(updated.earnZ[400])).toBe(true);
+  });
   it("counts distinct insiders buying within 30 days, ignoring planned and small buys", () => {
     const ev = eventFeatures(dates, f, bench, {
       earnings: [],
@@ -86,10 +95,31 @@ describe("event features", () => {
         { filed: dates[507], owner: "D", value: 90_000, plan: true },
       ],
     });
-    expect(ev.buyers30[500]).toBe(1);
-    expect(ev.buyers30[505]).toBe(2);
-    expect(ev.buyValue30[505]).toBe(130_000);
-    expect(ev.buyers30[506]).toBe(0);
+    expect(ev.buyers30[500]).toBe(0);
+    expect(ev.buyers30[501]).toBe(1);
+    expect(ev.buyers30[505]).toBe(0);
+    expect(ev.buyers30[506]).toBe(2);
+    expect(ev.buyValue30[506]).toBe(130_000);
+    expect(ev.buyers30[507]).toBe(0);
+  });
+  it("uses FINRA trade days only after their file was available, including late collections", () => {
+    const sessions = weekdays("2026-07-01", 115);
+    const bars = walk(sessions, 33), aligned = align(sessions, bars), featuresAt = features(aligned, aligned.c);
+    const share = sessions.map((date, i) => ({ date, ratio: 0.35 + (i % 5) * 0.02, availableOn: sessions[i + 1] }));
+    const trade = sessions.indexOf("2026-11-16"), available = sessions.indexOf("2026-11-20");
+    const run = (rows: typeof share) => eventFeatures(sessions, featuresAt, aligned.c, { earnings: [], buys: [], short: rows }).shortRatio5;
+    const spike = [...share];
+    spike[trade] = { date: sessions[trade], ratio: 0.99, availableOn: sessions[available] };
+    const missing = run(spike.filter(r => r.date !== sessions[trade]));
+    const late = run(spike);
+    for (let i = trade; i < available; i++) expect(late[i]).toEqual(missing[i]);
+    expect(late[available]).toBeGreaterThan(missing[available] + 0.08);
+    const noReceipt = spike.map(r => r.date === sessions[trade] ? { ...r, availableOn: undefined } : r);
+    expect(run(noReceipt as typeof share)[available]).toEqual(missing[available]);
+    const archived = share.map(r => ({ ...r, ratio: r.date === "2026-10-12" ? 1 : r.ratio }));
+    const t = sessions.indexOf("2026-10-12");
+    expect(run(archived)[t]).toEqual(run(share)[t]);
+    expect(run(archived)[t + 1]).toBeGreaterThan(run(share)[t + 1]);
   });
   it("flags abnormal short selling against its own prior 60 days", () => {
     const r = rng(4);

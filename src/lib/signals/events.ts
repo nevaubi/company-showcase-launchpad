@@ -16,7 +16,7 @@ export interface TickerEvents {
   earnings: string[];
   buys: InsiderBuy[];
   /** Daily short-sale volume ratio (short / total reported volume). */
-  short: { date: string; ratio: number }[];
+  short: { date: string; ratio: number; availableOn?: string | null }[];
   /** SEC fails-to-deliver per half-month: period end date and average daily fails balance in USD. */
   fails?: { end: string; value: number }[];
 }
@@ -27,7 +27,7 @@ export interface EventFeatures {
   earnRet: Float64Array;
   /** Trading days until the expected next announcement (same quarter last year + 52 weeks). */
   earnAhead: Float64Array;
-  /** On a bar where a purchase filing lands: distinct insiders buying in the trailing 30 days. */
+  /** At the first session close after a purchase filing date: distinct insiders buying in the trailing 30 days. */
   buyers30: Float64Array;
   buyValue30: Float64Array;
   /** 5-day mean short ratio vs the prior 60 days of 5-day means, in standard deviations. */
@@ -45,6 +45,8 @@ export interface EventFeatures {
  * `failsLagDays`: the SEC posts each half-month's file about two weeks after it ends; readings are
  * used only from period end + this many calendar days, so the backtest never sees a file early.
  */
+// First trade date with a verified native FINRA-file collection receipt. Older files have trade dates only.
+export const SHORT_RECEIPTS_FROM = '2026-11-16';
 export const EVENT_RULES = { minBuy: 25_000, buyWindowDays: 30, shortBase: 60, aheadBars: 5, failsLagDays: 16, failsBase: 12 };
 
 /** Half-month slot number for a period end date (…-15 → first half, otherwise second half). */
@@ -107,9 +109,9 @@ export function eventFeatures(dates: string[], f: Features, bench: ArrayLike<num
 
   // ---- expected next announcement
   if (ann.length) {
-    let k = 0; // announcements on or before dates[i]
+    let k = 0; // date-only filings from a prior calendar day are known at this session close
     for (let i = s; i < n; i++) {
-      while (k < ann.length && ann[k] <= dates[i]) k++;
+      while (k < ann.length && ann[k] < dates[i]) k++;
       const next = expectedNext(ann.slice(0, k));
       if (!next || next <= dates[i]) continue;
       const j = indexOnOrAfter(dates, next);
@@ -120,7 +122,7 @@ export function eventFeatures(dates: string[], f: Features, bench: ArrayLike<num
   // ---- insider purchase clusters
   const buys = ev.buys.filter((b) => !b.plan && b.value >= EVENT_RULES.minBuy).sort((a, b) => (a.filed < b.filed ? -1 : 1));
   for (let k = 0; k < buys.length; k++) {
-    const t = indexOnOrAfter(dates, buys[k].filed);
+    const t = indexOnOrAfter(dates, addDays(buys[k].filed, 1));
     if (t >= n || t < s) continue;
     const lo = addDays(buys[k].filed, -EVENT_RULES.buyWindowDays);
     const owners = new Set<string>();
@@ -142,22 +144,44 @@ export function eventFeatures(dates: string[], f: Features, bench: ArrayLike<num
   // ---- abnormal short-selling flow
   if (ev.short.length) {
     const ratio = nan();
+    const available = new Int32Array(n);
     for (const r of ev.short) {
       const t = indexOnOrAfter(dates, r.date);
-      if (t < n && dates[t] === r.date && r.ratio >= 0 && r.ratio <= 1) ratio[t] = r.ratio;
+      if (t >= n || dates[t] !== r.date || !(r.ratio >= 0 && r.ratio <= 1) || (r.date >= SHORT_RECEIPTS_FROM && !r.availableOn)) continue;
+      // An archived file is first used at the following session's close. A dated collection receipt can delay it further.
+      ratio[t] = r.ratio;
+      available[t] = Math.max(t + 1, r.availableOn ? indexOnOrAfter(dates, r.availableOn) : 0);
     }
     const m5 = nan();
+    const ready = new Int32Array(n);
     for (let i = 4; i < n; i++) {
       let sum = 0, cnt = 0;
-      for (let k = 0; k < 5; k++) if (Number.isFinite(ratio[i - k])) (sum += ratio[i - k]), cnt++;
+      for (let k = 0; k < 5; k++) {
+        if (!Number.isFinite(ratio[i - k])) continue;
+        sum += ratio[i - k];
+        cnt++;
+        ready[i] = Math.max(ready[i], available[i - k]);
+      }
       if (cnt >= 4) m5[i] = sum / cnt;
     }
+    // A later backfill must not remove a signal that used four already-known observations that day.
+    const knownMean = (end: number, asOf: number) => {
+      if (ready[end] <= asOf) return m5[end];
+      let sum = 0, count = 0;
+      for (let j = end; j >= end - 4; j--) if (Number.isFinite(ratio[j]) && available[j] <= asOf) {
+        sum += ratio[j];
+        count++;
+      }
+      return count >= 4 ? sum / count : NaN;
+    };
     const B = EVENT_RULES.shortBase;
-    for (let i = B + 5; i < n; i++) {
-      if (!Number.isFinite(m5[i])) continue;
+    for (let i = B + 6; i < n; i++) {
+      const previous = i - 1;
+      const recent = knownMean(previous, i);
+      if (!Number.isFinite(recent)) continue;
       let sum = 0, sum2 = 0, cnt = 0;
-      for (let j = i - 5 - B; j < i - 5; j++) {
-        const v = m5[j];
+      for (let j = previous - 5 - B; j < previous - 5; j++) {
+        const v = knownMean(j, i);
         if (!Number.isFinite(v)) continue;
         sum += v;
         sum2 += v * v;
@@ -165,8 +189,8 @@ export function eventFeatures(dates: string[], f: Features, bench: ArrayLike<num
       }
       if (cnt < 40) continue;
       const mu = sum / cnt, sd = Math.sqrt(Math.max((sum2 - (sum * sum) / cnt) / (cnt - 1), 0));
-      shortRatio5[i] = m5[i];
-      if (sd > 1e-4) shortZ[i] = (m5[i] - mu) / sd;
+      shortRatio5[i] = recent;
+      if (sd > 1e-4) shortZ[i] = (recent - mu) / sd;
     }
   }
 

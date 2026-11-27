@@ -35,7 +35,7 @@ export interface ArchiveCall {
 export interface CallBundle {
   ticker: string;
   generated: string;
-  docs: Record<string, { url: string; fiscal_label?: string | null }>;
+  docs: Record<string, { url: string; fiscal_label?: string | null; sourcePage?: string }>;
   calls: ArchiveCall[];
 }
 export interface TurnFile {
@@ -96,6 +96,7 @@ export function archivedCalls(bundle: CallBundle, ticker: string): ArchiveEntry[
       fy,
       date: c.date,
       dateBasis: "event",
+      eventSourceUrl: doc.sourcePage,
       textHash: c.sha,
       contentVersion: c.sha,
       speakers: c.speakers,
@@ -120,7 +121,18 @@ export function archivedCalls(bundle: CallBundle, ticker: string): ArchiveEntry[
 }
 
 export function listedCall(r: TranscriptRef): TranscriptRef {
-  const { url, quarter, fq, fy, date, publishedDate, dateBasis, archiveKind, contentVersion } = r;
+  const {
+    url,
+    quarter,
+    fq,
+    fy,
+    date,
+    publishedDate,
+    dateBasis,
+    eventSourceUrl,
+    archiveKind,
+    contentVersion,
+  } = r;
   return {
     url,
     quarter,
@@ -129,6 +141,7 @@ export function listedCall(r: TranscriptRef): TranscriptRef {
     date,
     publishedDate,
     dateBasis,
+    ...(eventSourceUrl ? { eventSourceUrl } : {}),
     ...(archiveKind ? { archiveKind, contentVersion } : {}),
   };
 }

@@ -171,7 +171,7 @@ const round = (x: number, n: number) => Math.round(x * 10 ** n) / 10 ** n;
  * after, so it covers the reaction whether the company reports before the open or after the close).
  */
 export function earningsImpliedMove(term: TermPoint[], reportDate: string, asOf: string): TermPoint | null {
-  if (reportDate < asOf) return null;
+  if (reportDate <= asOf) return null;
   const p = term.find((t) => t.e > reportDate);
   return p && days(reportDate, p.e) <= 45 ? p : null;
 }

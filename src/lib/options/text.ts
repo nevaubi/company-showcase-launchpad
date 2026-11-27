@@ -1,5 +1,5 @@
 // Plain-text options context for the research assistant. Pure.
-import { earningsPricing, impliedMoveBy, ivRank, realizedVol, cboeQuotePage } from "./core";
+import { earningsPricing, impliedMoveBy, ivRank, cboeQuotePage } from "./core";
 import type { OptionsBoardRow, OptionsRow } from "./data";
 import { boardIvRank, volumeRatio } from "./data";
 import { fmtSigned } from "@/lib/format";
@@ -11,18 +11,18 @@ const ratio = (x: number | null | undefined) => (x == null ? "n/a" : x.toFixed(2
 export function optionsCompanyText(
   ticker: string,
   rows: OptionsRow[],
-  ctx: { report?: { date: string; estimated: boolean } | null; pastMoves?: number[]; closes?: number[] } = {},
+  ctx: { report?: { date: string; estimated: boolean } | null; pastMoves?: number[]; realized?: number | null } = {},
 ): string {
   if (!rows.length) return `${ticker}: no options snapshot recorded (no listed options, or not read yet). Snapshots are taken nightly from Cboe delayed quotes.`;
   const [s, ...prior] = rows;
   const out: string[] = [];
   out.push(`${ticker} options, Cboe delayed quotes for ${s.date} (stock ${s.price.toFixed(2)}; check at ${cboeQuotePage(ticker)}):`);
   const rank = s.iv30 != null ? ivRank(prior.map((r) => r.iv30 ?? NaN), s.iv30) : null;
-  const rv = ctx.closes ? realizedVol(ctx.closes, 20) : null;
+  const rv = ctx.realized;
   out.push(
     `- 30-day implied volatility ${pct(s.iv30)}` +
       (rank ? ` (IV rank ${(rank.rank * 100).toFixed(0)} / percentile ${(rank.pct * 100).toFixed(0)} over ${rank.n} recorded days, range ${pct(rank.min)}–${pct(rank.max)})` : ` (only ${prior.length + 1} day(s) recorded so far, too few for an IV rank)`) +
-      (rv != null ? `; 20-day realized volatility ${pct(rv)}, implied ÷ realized ${s.iv30 ? (s.iv30 / rv).toFixed(2) : "n/a"}` : ""),
+      (rv != null ? `; 20-day realized volatility ${pct(rv)}, implied ÷ realized ${s.iv30 && rv > 0 ? (s.iv30 / rv).toFixed(2) : "n/a"}` : ""),
   );
   out.push(`- 25-delta skew at ~30 days ${pts(s.skew25)} (positive = puts priced richer than calls)`);
   out.push(`- put/call open interest ${ratio(s.pc_oi)} (${s.put_oi.toLocaleString("en-US")} puts / ${s.call_oi.toLocaleString("en-US")} calls); put/call volume ${ratio(s.pc_vol)} (${(s.call_vol + s.put_vol).toLocaleString("en-US")} contracts)`);
@@ -32,9 +32,9 @@ export function optionsCompanyText(
     const p = earningsPricing(s.term, ctx.report.date, s.date, ctx.pastMoves ?? []);
     if (p)
       out.push(
-        `- next report ${ctx.report.date}${ctx.report.estimated ? " (projected date)" : ""}: the ${p.point.e} expiry prices ±${pct(p.point.m)} (±$${(p.point.m * s.price).toFixed(2)})` +
+        `- current earnings calendar ${ctx.report.date}${ctx.report.estimated ? " (projected date)" : ""}: the stored ${s.date} quote for the ${p.point.e} expiry priced ±${pct(p.point.m)} (±$${(p.point.m * s.price).toFixed(2)})` +
           (p.lag > 10 ? `; that expiry is ${p.lag} days after the report, so it also prices ordinary movement` : "") +
-          (p.past ? `; the last ${p.past.n} reports moved a median ±${pct(p.past.median)} (mean ±${pct(p.past.mean)}), ${p.past.exceeded} of ${p.past.n} more than today's priced move` : ""),
+          (p.past ? `; the last ${p.past.n} reports moved a median ±${pct(p.past.median)} (mean ±${pct(p.past.mean)}), ${p.past.exceeded} of ${p.past.n} larger than the move priced on ${s.date}` : ""),
       );
   }
   if (prior.length) {
@@ -81,17 +81,17 @@ export function optionsBoardText(
     const p = d ? earningsPricing(r.term, d, r.date, []) : null;
     const m30 = impliedMoveBy(r.term, 28);
     return [
-      `${r.ticker} ${opts.names.get(r.ticker) ?? ""}`.trim(),
+      `${r.ticker} ${opts.names.get(r.ticker) ?? ""} (quote ${r.date})`.trim(),
       `IV30 ${pct(r.iv30)}`,
       rank ? `IV rank ${(rank.rank * 100).toFixed(0)}` : null,
-      r.iv_prev != null && r.iv30 != null ? `1d ${pts(r.iv30 - r.iv_prev)}` : null,
+      r.iv_prev != null && r.iv30 != null ? `vs prior quote ${pts(r.iv30 - r.iv_prev)}` : null,
       m30 ? `±${pct(m30.m)} by ${m30.e}` : null,
       `P/C OI ${ratio(r.pc_oi)}`,
       `P/C vol ${ratio(r.pc_vol)}`,
       vr != null ? `volume ${vr.toFixed(1)}× avg` : null,
       `skew ${pts(r.skew25)}`,
-      p ? `report ${d}: ±${pct(p.point.m)} priced (${p.point.e} expiry)` : null,
+      p ? `current calendar ${d}, stored quote ±${pct(p.point.m)} (${p.point.e} expiry)` : null,
     ].filter(Boolean).join(" · ");
   };
-  return `Options snapshots (Cboe delayed quotes, latest ${date}; ${rows.length} stocks with listed options), sorted by ${by.replace("_", " ")}, highest first. Priced move = at-the-money straddle ÷ price (an expected absolute move to that expiry).\n${ranked.slice(0, limit).map((x) => line(x.r)).join("\n")}`;
+  return `Options snapshots (Cboe delayed quotes, latest ${date}; ${rows.length} stocks with listed options), sorted by ${by.replace("_", " ")}, highest first. The straddle divided by the stock price covers the full period from quote to expiry. Upcoming report dates use the current calendar, including subsequent schedule changes.\n${ranked.slice(0, limit).map((x) => line(x.r)).join("\n")}`;
 }

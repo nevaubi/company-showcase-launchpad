@@ -1,3 +1,4 @@
+import { forecastReading } from "@/lib/estimates/range-quality";
 // Browser-side executors for the research agent's function tools. Data comes from
 // the bundled SEC datasets plus live Yahoo/FRED/EDGAR calls through server functions.
 import { getEstimates } from "@/lib/estimates.functions";
@@ -52,8 +53,8 @@ import { geoCompanyText, geoStateText } from "@/lib/alt/medicare-geo";
 import { triText } from "@/lib/alt/tri";
 import { optionsBoardQuery, optionsHistoryQuery } from "@/lib/options/data";
 import { optionsBoardText, optionsCompanyText, type OptionsSort } from "@/lib/options/text";
-import { earningsIndexQuery } from "@/lib/calendars/data";
-import { earningsReactions } from "@/lib/markets/core";
+import { earningsIndexQuery, todayIso } from "@/lib/calendars/data";
+import { quoteHistory } from "@/lib/options/as-of";
 import { nextEarnings } from "@/lib/company/catalysts";
 import { detailText, type DetailSection } from "@/lib/xbrl/text";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
@@ -341,8 +342,8 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       if (!e) return { output: r.error ?? "No estimates", summary: "no estimates" };
       const s = actionSummary(e.actions, new Date(Date.now() - 90 * 86400_000).toISOString().slice(0, 10));
       const lines = [
-        `${t} consensus (third-party, as of ${e.asOf}): rating ${ratingLabel(e.rating.mean)} (${e.rating.mean?.toFixed(2) ?? "n/a"}), price ${e.price}, target mean ${e.target.mean} median ${e.target.median} range ${e.target.low}-${e.target.high} (${e.target.analysts} analysts)`,
-        ...e.periods.map((p) => `${PERIOD_LABEL[p.code]} (ending ${p.endDate}): EPS ${p.eps.avg} [${p.eps.low}-${p.eps.high}, n=${p.eps.analysts}, yr-ago ${p.eps.yearAgo}], revenue ${p.revenue.avg} [${p.revenue.low}-${p.revenue.high}, yr-ago ${p.revenue.yearAgo}]; EPS trend now ${p.trend.current} / 7d ${p.trend.d7} / 30d ${p.trend.d30} / 90d ${p.trend.d90}; revisions 30d up ${p.revisions.up30} down ${p.revisions.down30}`),
+        `${t} Yahoo Finance consensus (as of ${e.asOf}): rating ${ratingLabel(e.rating.mean)} (${e.rating.mean?.toFixed(2) ?? "n/a"}), price ${e.price}, targets: ${forecastReading({ avg: e.target.mean, low: e.target.low, high: e.target.high }, e.target.analysts)}; median ${e.target.median ?? "unavailable"}`,
+        ...e.periods.map((p) => `${PERIOD_LABEL[p.code]} (ending ${p.endDate}): EPS ${forecastReading(p.eps, p.eps.analysts)} (year ago ${p.eps.yearAgo ?? "unavailable"}); revenue ${forecastReading(p.revenue, p.revenue.analysts)} (year ago ${p.revenue.yearAgo ?? "unavailable"}); EPS trend now ${p.trend.current} / 7d ${p.trend.d7} / 30d ${p.trend.d30} / 90d ${p.trend.d90}; revisions 30d up ${p.revisions.up30} down ${p.revisions.down30}`),
         `Surprises: ${e.surprises.map((x) => `${x.quarter} ${x.actual} vs ${x.estimate} (${x.surprisePct})`).join("; ")}`,
         `Last 90d: ${s.upgrades} upgrades, ${s.downgrades} downgrades, ${s.targetRaises} target raises, ${s.targetCuts} cuts`,
         ...e.actions.slice(0, 15).map((a) => `${a.date} ${a.firm} ${a.action} ${a.fromGrade}->${a.toGrade} PT ${a.priorTarget ?? ""}->${a.target ?? ""}`),
@@ -683,10 +684,9 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         const releases = ds?.earningsReleases ?? [];
         const bars = px?.bars ?? [];
         const calDate = cal?.companies.find((c) => c.ticker === t)?.next_earnings ?? null;
-        const ne = releases.length ? nextEarnings(calDate, releases.map((r) => r.filed), new Date().toISOString().slice(0, 10)) : null;
-        const asc = [...releases].sort((a, b) => a.filed.localeCompare(b.filed));
-        const past = bars.length && asc.length ? earningsReactions(bars, asc).sort((a, b) => a.date.localeCompare(b.date)).slice(-12).map((r) => r.move) : [];
-        const text = optionsCompanyText(t, rows, { report: ne ? { date: ne.date, estimated: ne.estimated } : null, pastMoves: past, closes: bars.map((b) => b[5] || b[4]) });
+        const ne = releases.length ? nextEarnings(calDate, releases.map((r) => r.filed), todayIso()) : null;
+        const history = quoteHistory(bars, releases, rows[0]?.date);
+        const text = optionsCompanyText(t, rows, { report: ne ? { date: ne.date, estimated: ne.estimated } : null, pastMoves: history.reactions.map((r) => r.move), realized: history.realized });
         return { output: clip(text), summary: `${t} options market` };
       }
       const [board, uni, cal] = await Promise.all([qc.fetchQuery(optionsBoardQuery), qc.fetchQuery(universeQuery), qc.fetchQuery(earningsIndexQuery).catch(() => null)]);

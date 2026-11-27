@@ -7,6 +7,8 @@ import { coverageOf } from "@/lib/coverage";
 import { industryMethod } from "@/lib/research/industry-method";
 import { keptFactIds } from "./chart-facts";
 
+type ReportDraft = { title: string; subtitle: string; sections: { id: string; paragraphs: Claim[]; bullets: Claim[] }[] };
+
 export async function generateReportContent(kind: ReportKind, options: ReportOptions, inputs: ReportInputs, firmName: string | null): Promise<ReportContent> {
   const { structured, MODEL } = await import("@/lib/ai.server");
   const built = buildReportData(inputs);
@@ -16,13 +18,17 @@ export async function generateReportContent(kind: ReportKind, options: ReportOpt
   const name = d.profile.name;
   const coverage = coverageOf(d.profile.ticker);
   const method = industryMethod(d.profile.sector, coverage?.group, d.profile.industry);
-  const out = await structured<{ title: string; subtitle: string; sections: { id: string; paragraphs: Claim[]; bullets: Claim[] }[] }>({
+  const request = {
     name: `report_${kind}`,
-    effort: options.length === "deep" ? "high" : "medium",
+    effort: options.length === "deep" ? "high" as const : "medium" as const,
     instructions: reportInstructions(kind, options, name, d.profile.ticker, firmName) + `\nIndustry diligence questions: ${method} Use these only to interpret the supplied facts or identify open diligence. Support every conclusion with the supplied fact IDs.`,
     input: reportInput(defs, built.facts, built.background, inputs.today),
     schema: reportSchema(defs.map((s) => s.id)),
-  });
+  };
+  // The worker can route its allowance request to a fallback model. Keep the served model in the document.
+  const { data: out, model } = process.env.IR_FREE_ONLY === "1"
+    ? await (await import("@/lib/openai.server")).openaiStructured<ReportDraft>({ ...request, model: "gpt-5.4-mini" })
+    : { data: await structured<ReportDraft>(request), model: MODEL };
   const tableIds = new Set(built.tables.map((t) => t.id));
   const chartIds = new Set(built.charts.map((c) => c.id));
   const { sections, qa } = vetSections(out.sections ?? [], defs, built.facts, tableIds, chartIds, { ticker: d.profile.ticker, peers: built.peers ?? [] });
@@ -43,7 +49,7 @@ export async function generateReportContent(kind: ReportKind, options: ReportOpt
     priceAsOf: inputs.price?.asOf ?? null,
     dataVersion: built.dataVersion,
     generatedAt: new Date().toISOString(),
-    model: MODEL,
+    model,
     options,
     // Keep cited, plotted and glance facts (plus the members of composite facts); drop the rest to keep rows small.
     facts: built.facts.filter((f) => used.has(f.id)),

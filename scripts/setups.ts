@@ -111,6 +111,9 @@ log("calendar", dates[0], "to", endDate, D, "bars;", priceFiles.size, "price fil
 const events = new Map<string, TickerEvents>();
 const ev = (t: string) => events.get(t) ?? (events.set(t, { earnings: [], buys: [], short: [] }), events.get(t)!);
 const earn = await selectAll<{ ticker: string; filed: string }>((a, b) => sb.from("earnings_events").select("ticker, filed").order("ticker").order("accn").range(a, b));
+const finraPublications = await selectAll<{trade_date: string; available_on: string}>((a, b) => sb.from('setup_finra_publications')
+  .select('trade_date,available_on').lte('available_on', endDate).order('trade_date').range(a,b));
+const finraAvailable = new Map(finraPublications.map(p => [p.trade_date, p.available_on]));
 for (const e of earn) ev(e.ticker).earnings.push(e.filed);
 const buys = await selectAll<{ ticker: string; filed: string; owner: string; value: number | null; plan_10b5: boolean }>((a, b) =>
   sb.from("insider_buys").select("ticker, filed, owner, value, plan_10b5").order("accn").order("owner").range(a, b));
@@ -132,7 +135,7 @@ await Promise.all(Array.from({ length: 8 }, async () => {
       text = res.ok ? await res.text() : "";
       if (text) await writeFile(local, text);
     }
-    for (const r of parseShortVolume(text, keep)) ev(r.symbol).short.push({ date: r.date, ratio: r.short_vol / r.total_vol });
+    for (const r of parseShortVolume(text, keep)) ev(r.symbol).short.push({ date: r.date, ratio: r.short_vol / r.total_vol, availableOn: finraAvailable.get(r.date) });
     if (++fdone % 500 === 0) log("finra days", fdone);
   }
 }));

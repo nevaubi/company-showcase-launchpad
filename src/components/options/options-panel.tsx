@@ -8,8 +8,8 @@ import { Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSource, type SourceTarget } from "@/components/source/source-context";
 import { usePrices } from "@/lib/data";
-import { earningsReactions } from "@/lib/markets/core";
-import { cboeQuotePage, earningsPricing, ivRank, realizedVol, REPORT_EXPIRY_LAG, type TermPoint } from "@/lib/options/core";
+import { quoteHistory } from "@/lib/options/as-of";
+import { cboeQuotePage, earningsPricing, ivRank, REPORT_EXPIRY_LAG, type TermPoint } from "@/lib/options/core";
 import { optionsHistoryQuery, type OptionsRow } from "@/lib/options/data";
 import type { NextEarnings } from "@/lib/company/catalysts";
 import type { EarningsRelease } from "@/lib/financials/types";
@@ -25,13 +25,10 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
   const rows = q.data ?? [];
   const s = rows[0];
 
-  const reactions = useMemo(() => {
-    const bars = prices.data?.bars;
-    if (!bars?.length || !releases?.length) return [];
-    const asc = [...releases].sort((a, b) => a.filed.localeCompare(b.filed));
-    return earningsReactions(bars, asc.map((r) => ({ filed: r.filed, accn: r.accn, doc: r.doc }))).sort((a, b) => a.date.localeCompare(b.date)).slice(-12);
-  }, [prices.data, releases]);
-  const closes = useMemo(() => (prices.data?.bars ?? []).map((b) => b[5] || b[4]), [prices.data]);
+  const { realized: rv, reactions } = useMemo(
+    () => quoteHistory(prices.data?.bars ?? [], releases ?? [], s?.date),
+    [prices.data, releases, s?.date],
+  );
 
   if (q.isLoading) return <Skeleton className="h-64" />;
   if (q.error) return null;
@@ -51,7 +48,6 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
     external: { url: cboeQuotePage(ticker), date: s.date, quote },
   });
   const rank = s.iv30 != null ? ivRank(rows.slice(1).map((r) => r.iv30 ?? NaN), s.iv30) : null;
-  const rv = realizedVol(closes, 20);
   const pricing = next ? earningsPricing(s.term, next.date, s.date, reactions.map((r) => r.move)) : null;
 
   return (
@@ -84,7 +80,7 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
             <Tile
               label="Realized vol · 20d"
               value={fmtPct(rv, 1)}
-              hint={rv && s.iv30 ? `implied ÷ realized ${(s.iv30 / rv).toFixed(2)}×` : "from daily closes"}
+              hint={rv != null && rv > 0 && s.iv30 ? `implied ÷ realized ${(s.iv30 / rv).toFixed(2)}×` : `Through ${fmtDate(s.date)}`}
             />
             <Tile
               label="Put/call open interest"
@@ -138,7 +134,7 @@ function ReportPricing({
   s: OptionsRow;
   p: NonNullable<ReturnType<typeof earningsPricing>>;
   next: NextEarnings;
-  reactions: ReturnType<typeof earningsReactions>;
+  reactions: ReturnType<typeof quoteHistory>["reactions"];
   open: (t: SourceTarget) => void;
   ext: Ext;
 }) {
@@ -147,13 +143,13 @@ function ReportPricing({
   const x = (v: number) => 50 + (v / span) * 50;
   return (
     <div className="border-b px-3.5 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Next report · {fmtDate(next.date)}{next.estimated ? " (projected)" : ""}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Current earnings calendar · {fmtDate(next.date)}{next.estimated ? " (projected)" : ""}</p>
       <p className="mt-1 text-sm">
-        Options price a{" "}
+        The {fmtDate(s.date, { month: "short", day: "numeric" })} quote priced a{" "}
         <button type="button" className="num font-semibold tabular-nums hover:underline" onClick={() => open(ext(`Move priced through ${fmtDate(p.point.e)}`, m, "pct", `At-the-money straddle for the ${p.point.e} expiry ÷ stock price (${s.price.toFixed(2)})`))}>
           ±{fmtPct(m, 1)}
         </button>{" "}
-        move (±${(m * s.price).toFixed(2)}) through the {fmtDate(p.point.e, { month: "short", day: "numeric" })} expiry, the first after the report
+        move (±${(m * s.price).toFixed(2)}) through {fmtDate(p.point.e, { month: "short", day: "numeric" })}, the first expiry after the currently scheduled report
         {p.lag > REPORT_EXPIRY_LAG ? `, ${p.lag} days later, so it also prices ordinary movement and isn't compared with past reactions.` : "."}
         {p.past && (
           <>
@@ -161,7 +157,7 @@ function ReportPricing({
             <span className="font-medium">
               {p.past.exceeded} of {p.past.n}
             </span>{" "}
-            moved more than today's price.
+            exceeded the quoted move.
           </>
         )}
       </p>

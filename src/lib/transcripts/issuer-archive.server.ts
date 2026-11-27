@@ -45,11 +45,12 @@ export async function archiveIndex(
   ticker: string,
   signal?: AbortSignal,
 ): Promise<{ entries: ArchiveEntry[] }> {
-  const [staged, current] = await Promise.all([
+  const [reviewed, staged, current] = await Promise.all([
+    issuerRecord<StoredIssuerIndex>("issuer-direct-index:v1:" + ticker, signal),
     issuerRecord<StoredIssuerIndex>("issuer-stage:v1:" + ticker, signal),
     issuerRecord<StoredIssuerIndex>(issuerIndexKey(ticker), signal),
   ]);
-  const entries = [staged, current].flatMap((doc) =>
+  const entries = [reviewed, staged, current].flatMap((doc) =>
     doc ? archivedCalls(doc.bundle, ticker) : [],
   );
   if (!entries.length) return { entries: [] };

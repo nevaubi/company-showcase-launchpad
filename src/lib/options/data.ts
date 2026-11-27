@@ -2,6 +2,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TermPoint } from "./core";
+import type { StoredMove } from "./as-of";
 
 export interface OptionsRow {
   ticker: string;
@@ -66,7 +67,7 @@ export const optionsBoardQuery = queryOptions({
   queryFn: async (): Promise<OptionsBoardRow[]> => {
     const out: OptionsBoardRow[] = [];
     for (let from = 0; from < 10000; from += 1000) {
-      const { data, error } = await supabase.rpc("options_board").range(from, from + 999);
+      const { data, error } = await supabase.rpc("options_board").order("ticker").range(from, from + 999);
       if (error) throw new Error(error.message);
       for (const r of data ?? [])
         out.push({
@@ -115,7 +116,7 @@ export function volumeRatio(r: OptionsBoardRow): number | null {
 export interface ReactionsFile {
   generated: string;
   basis: string;
-  companies: Record<string, { n: number; median: number; mean: number; moves: { d: string; m: number; a: string; doc: string }[] }>;
+  companies: Record<string, { generated?: string; n: number; median: number; mean: number; moves: StoredMove[] }>;
 }
 export const reactionsQuery = queryOptions({
   queryKey: ["earnings-reactions"],

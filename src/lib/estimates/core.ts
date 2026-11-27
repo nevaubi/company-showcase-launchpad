@@ -1,3 +1,4 @@
+import { forecastRange } from "./range-quality";
 // Pure normalisation + analytics for consensus estimates and analyst actions.
 // Input is the raw quoteSummary result from the market-data provider; output is plain DTOs.
 
@@ -176,8 +177,7 @@ export function beatStats(s: Surprise[]) {
 
 /** Where a value sits inside [low, high], 0..1, clamped. */
 export function positionIn(v: number | null, low: number | null, high: number | null): number | null {
-  if (v == null || low == null || high == null || high <= low) return null;
-  return Math.min(1, Math.max(0, (v - low) / (high - low)));
+  return forecastRange({ avg: v, low, high }, null).position;
 }
 
 /** Rating mean on the 1 (strong buy) .. 5 (strong sell) scale → plain label. */
@@ -198,4 +198,21 @@ function median(xs: number[]) {
 }
 function mean(xs: number[]) {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+}
+
+/** Earnings that cross zero are best described by the change in profitability. */
+export function consensusChange(current: number | null, previous: number | null, metric: "eps" | "revenue") {
+  if (current == null || previous == null || !Number.isFinite(current) || !Number.isFinite(previous)) return null;
+  if (metric === "eps" && (current <= 0 || previous <= 0)) {
+    if (current === previous) return { text: current === 0 ? "Break-even" : "Loss unchanged", direction: 0 };
+    let text: string;
+    if (current === 0) text = "To break-even";
+    else if (current > 0) text = "To profit";
+    else if (previous >= 0) text = "To loss";
+    else text = current > previous ? "Loss narrows" : "Loss widens";
+    return { text, direction: Math.sign(current - previous) };
+  }
+  if (previous <= 0) return null;
+  const growth = (current - previous) / previous;
+  return { text: new Intl.NumberFormat("en-US", { style: "percent", maximumFractionDigits: 1, minimumFractionDigits: 1, signDisplay: "exceptZero" }).format(growth).replace("-", "−"), direction: Math.sign(growth) };
 }

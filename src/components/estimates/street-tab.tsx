@@ -1,9 +1,11 @@
+import { ForecastRangeCell } from "./forecast-range";
+import { forecastRange, forecastSource } from "@/lib/estimates/range-quality";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { FirmLogo } from "@/components/estimates/firm-logo";
 import { useSource } from "@/components/source/source-context";
-import { revisionPct, type Estimates as LiveEstimates } from "@/lib/estimates/core";
+import { consensusChange, revisionPct, type Estimates as LiveEstimates } from "@/lib/estimates/core";
 import { startOf } from "@/lib/statements/filed";
 import { fmtDate, fmtRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -16,7 +18,7 @@ import {
   basisLabel,
   cleanQuote,
   fiscalEpsHistory,
-  fCnt,
+  supplementalForecast,
   fEps,
   fPct,
   fPctS,
@@ -77,7 +79,7 @@ function useOpeners(ticker: string, d: StreetBundle) {
         `period ending ${fmtDate(p.end)}`,
         field === "n" ? r.n : r[field],
         field === "n" ? "count" : metric === "eps" ? "usdPerShare" : "usd",
-        `${p.label} (fiscal period ending ${p.end}) ${name}: average ${f(r.avg)}, low ${f(r.low)}, high ${f(r.high)}, ${fCnt(r.n)} analysts; year-ago ${f(r.year_ago)}.${p.end_fixed ? ` Period end corrected by FiledUnder: ${p.end_fixed}.` : ""}`,
+        `${p.label} (fiscal period ending ${p.end}) ${name}: ${forecastSource(r, r.n, f)} Year-ago ${f(r.year_ago)}.${p.end_fixed ? ` Period end corrected by FiledUnder: ${p.end_fixed}.` : ""}`,
       );
     };
     const action = (a: Action) =>
@@ -288,9 +290,9 @@ function Headline({
     },
     {
       l: "Qtr EPS consensus",
-      v: fEps(q0?.eps.avg),
+      v: fEps(q0 ? forecastRange(q0.eps, q0.eps.n).mean : null),
       sub: q0
-        ? `${fCnt(q0.eps.n)} analysts · qtr ending ${fmtDate(q0.end, { month: "short", year: "numeric" })}`
+        ? `${forecastRange(q0.eps, q0.eps.n).coverage} · qtr ending ${fmtDate(q0.end, { month: "short", year: "numeric" })}`
         : "",
       on: q0 ? () => o.period(q0, "eps", "avg") : undefined,
     },
@@ -348,46 +350,22 @@ function Headline({
 }
 
 /* ---------- consensus ---------- */
-function RangeCell({
-  r,
-  f,
-  onPick,
-}: {
+function RangeCell({ r, f, onPick, supplemental }: {
   r: ConsensusPeriod["eps"];
   f: (v: number | null) => string;
   onPick: (k: "avg" | "low" | "high" | "n") => void;
+  supplemental: ReturnType<typeof supplementalForecast>;
 }) {
-  const pos =
-    r.avg != null && r.low != null && r.high != null && r.high > r.low
-      ? Math.min(1, Math.max(0, (r.avg - r.low) / (r.high - r.low)))
-      : null;
-  return (
-    <div className="min-w-[10rem]">
-      <div className="flex items-baseline justify-between gap-2">
-        <V onClick={() => onPick("avg")} className="font-medium">
-          {f(r.avg)}
-        </V>
-        <V onClick={() => onPick("n")} className="text-[11px] text-muted-foreground">
-          {fCnt(r.n)} est.
-        </V>
-      </div>
-      <div className="relative mt-1 h-1 rounded-full bg-secondary">
-        {pos != null && (
-          <span
-            className="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground"
-            style={{ left: `${pos * 100}%` }}
-          />
-        )}
-      </div>
-      <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-        <V onClick={() => onPick("low")}>{f(r.low)}</V>
-        <V onClick={() => onPick("high")}>{f(r.high)}</V>
-      </div>
-    </div>
-  );
+  return <>
+    <ForecastRangeCell raw={r} count={r.n} format={f} pick={onPick} />
+    {supplemental && <details className="mt-1 text-xs text-muted-foreground">
+      <summary className="cursor-pointer">Yahoo snapshot · {fmtDate(supplemental.date)}</summary>
+      <div className="mt-1"><ForecastRangeCell raw={supplemental.raw} count={supplemental.raw.analysts} format={f} /></div>
+    </details>}
+  </>;
 }
 
-function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners> }) {
+function Consensus({ d, o, live }: { d: StreetBundle; o: ReturnType<typeof useOpeners>; live?: LiveEstimates | null }) {
   const P = d.consensus?.periods ?? [];
   if (!P.length)
     return (
@@ -397,8 +375,6 @@ function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
         </p>
       </Panel>
     );
-  const growth = (now: number | null, ya: number | null) =>
-    now != null && ya ? (now - ya) / Math.abs(ya) : null;
   return (
     <Panel
       title="Consensus estimates"
@@ -408,20 +384,24 @@ function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
       <div className="overflow-x-auto scrollbar-thin">
         <table className="w-full min-w-[760px] text-[13px]">
           <thead className="text-left">
+            <tr className="border-b bg-secondary/40">
+              <th scope="col" rowSpan={2} className={cn(th, "sticky left-0 z-10 border-r bg-panel")}>Fiscal period</th>
+              <th scope="colgroup" colSpan={3} className={cn(th, "border-r text-center")}>Earnings per share</th>
+              <th scope="colgroup" colSpan={3} className={cn(th, "text-center")}>Revenue</th>
+            </tr>
             <tr className="border-b">
-              <th className={cn(th, "sticky left-0 z-10 bg-panel")}>Period</th>
-              <th className={th}>EPS · low – high</th>
-              <th className={cn(th, "text-right")}>Year ago</th>
-              <th className={cn(th, "text-right")}>Growth</th>
-              <th className={th}>Revenue · low – high</th>
-              <th className={cn(th, "text-right")}>Year ago</th>
-              <th className={cn(th, "text-right")}>Growth</th>
+              <th scope="col" className={th}>Consensus range</th>
+              <th scope="col" className={cn(th, "text-right")}>Year ago</th>
+              <th scope="col" className={cn(th, "border-r text-right")}>YoY change</th>
+              <th scope="col" className={th}>Consensus range</th>
+              <th scope="col" className={cn(th, "text-right")}>Year ago</th>
+              <th scope="col" className={cn(th, "text-right")}>YoY change</th>
             </tr>
           </thead>
           <tbody>
             {P.map((p) => {
-              const ge = growth(p.eps.avg, p.eps.year_ago),
-                gr = growth(p.revenue.avg, p.revenue.year_ago);
+              const ge = consensusChange(forecastRange(p.eps, p.eps.n).mean, p.eps.year_ago, "eps"),
+                gr = consensusChange(forecastRange(p.revenue, p.revenue.n).mean, p.revenue.year_ago, "revenue");
               return (
                 <tr key={p.code} className="border-b align-top last:border-0">
                   <td className="sticky left-0 z-10 bg-panel px-3 py-2.5 whitespace-nowrap shadow-[1px_0_0_var(--border)] sm:shadow-none">
@@ -434,24 +414,24 @@ function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
                     </p>
                   </td>
                   <td className="px-3 py-2.5">
-                    <RangeCell r={p.eps} f={fEps} onPick={(k) => o.period(p, "eps", k)} />
+                    <RangeCell r={p.eps} f={fEps} supplemental={supplementalForecast(d.ticker, p, "eps", live)} onPick={(k) => o.period(p, "eps", k)} />
                   </td>
                   <td className="px-3 py-2.5 text-right">
-                    <V onClick={() => o.period(p, "eps", "year_ago")}>{fEps(p.eps.year_ago)}</V>
+                    <V onClick={p.eps.year_ago != null ? () => o.period(p, "eps", "year_ago") : undefined}>{fEps(p.eps.year_ago)}</V>
                   </td>
-                  <td className={cn("num px-3 py-2.5 text-right tabular-nums", tone(ge))}>
-                    {fPctS(ge)}
+                  <td className={cn("num border-r px-3 py-2.5 text-right whitespace-nowrap tabular-nums", tone(ge?.direction ?? null))}>
+                    {ge?.text ?? "–"}
                   </td>
                   <td className="px-3 py-2.5">
-                    <RangeCell r={p.revenue} f={fUsd} onPick={(k) => o.period(p, "revenue", k)} />
+                    <RangeCell r={p.revenue} f={fUsd} supplemental={supplementalForecast(d.ticker, p, "revenue", live)} onPick={(k) => o.period(p, "revenue", k)} />
                   </td>
                   <td className="px-3 py-2.5 text-right">
-                    <V onClick={() => o.period(p, "revenue", "year_ago")}>
+                    <V onClick={p.revenue.year_ago != null ? () => o.period(p, "revenue", "year_ago") : undefined}>
                       {fUsd(p.revenue.year_ago)}
                     </V>
                   </td>
-                  <td className={cn("num px-3 py-2.5 text-right tabular-nums", tone(gr))}>
-                    {fPctS(gr)}
+                  <td className={cn("num px-3 py-2.5 text-right tabular-nums", tone(gr?.direction ?? null))}>
+                    {gr?.text ?? "–"}
                   </td>
                 </tr>
               );
@@ -460,11 +440,10 @@ function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
         </table>
       </div>
       <Note>
-        Average, low and high analyst forecasts compiled by Yahoo Finance; third-party, not from
-        filings. Growth is against the provider's year-ago figure.
+        Yahoo Finance analyst forecasts. Changes use the same fiscal period a year earlier.
         {P.some((p) => p.end_fixed) &&
           " † Period end corrected: the provider repeated an already reported or earlier period end."}{" "}
-        Click any value for its record.
+        Select a forecast to see its source.
       </Note>
     </Panel>
   );
@@ -649,7 +628,7 @@ function RevisionChart({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpen
                       `snapshot ${fmtDate(p.date)}`,
                       p.v,
                       "usdPerShare",
-                      `Snapshot ${p.date}: ${PERIOD_NAME[s.c]} (period ending ${s.end}) consensus EPS ${fEps(p.v)} from ${fCnt(p.reading.eps_n)} analysts, range ${fEps(p.reading.eps_lo)} – ${fEps(p.reading.eps_hi)}. Stored by FiledUnder from Yahoo Finance.`,
+                      `Snapshot ${p.date}: ${PERIOD_NAME[s.c]} (period ending ${s.end}) EPS. ${forecastSource({ avg: p.v, low: p.reading.eps_lo, high: p.reading.eps_hi }, p.reading.eps_n, fEps)}`,
                     )
                   }
                 >
@@ -1240,7 +1219,7 @@ function TargetStrip({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpener
           role="img"
           aria-label="Price targets by firm against the current price"
         >
-          {s && (
+          {s && forecastRange({ avg: s.mean, low: s.low, high: s.high }, s.n).position != null && (
             <rect
               x={x(s.low)}
               width={Math.max(1, x(s.high) - x(s.low))}
@@ -1815,7 +1794,7 @@ export function StreetTab({
   return (
     <div className="@container grid grid-cols-1 gap-4">
       <Headline ticker={ticker} d={d} o={o} />
-      <Consensus d={d} o={o} />
+      <Consensus d={d} o={o} live={live} />
       <div className="grid grid-cols-1 gap-4 @7xl:grid-cols-2">
         <Revisions ticker={ticker} d={d} o={o} live={live} />
         <Surprises d={d} o={o} />

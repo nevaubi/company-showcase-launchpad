@@ -8,6 +8,7 @@ import { issuerLink } from "@/lib/company/issuer-directory";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import type { Bar, CompanyDataset, Filing, UniverseEntry } from "@/lib/financials/types";
 import { COVERAGE, coverageOf } from "@/lib/coverage";
+import { hasReportDate, reportBars, reportEstimates } from "./input-dates";
 import { lastClose, peerSnapshot, selectPeers, type PeerSnapshot } from "./peers";
 import type { Estimates } from "@/lib/estimates/core";
 import type { TrackedPromise } from "@/lib/earnings/promises";
@@ -72,7 +73,7 @@ export async function universe(): Promise<UniverseEntry[]> {
 
 async function loadBars(ticker: string): Promise<Bar[] | null> {
   const f = await storageJson<{ bars: Bar[] }>(`prices/${ticker}.json`);
-  return f?.bars?.length ? f.bars : null;
+  return reportBars(f?.bars);
 }
 
 /**
@@ -152,7 +153,7 @@ export async function loadReportInputs(ticker: string, coverage: ReportInputs["c
     loadBars("SPY").catch(() => null),
     loadPeers(ticker).catch(() => [] as PeerSnapshot[]),
   ]);
-  const estimates = (estRow.data?.payload as unknown as Estimates) ?? null;
+  const estimates = reportEstimates((estRow.data?.payload as unknown as Estimates) ?? null, ticker);
   const promises = ((promRow.data?.payload as unknown as { promises?: TrackedPromise[] })?.promises ?? null) || null;
   const m = mk?.companies.find((c) => c.ticker === ticker);
   const price = await loadPrice(ticker, estimates, mk);
@@ -162,7 +163,7 @@ export async function loadReportInputs(ticker: string, coverage: ReportInputs["c
     price,
     estimates,
     promises: promises?.length ? promises : null,
-    reactions: m ? { reactions: m.reactions, stats: m.stats } : null,
+    reactions: m ? { reactions: (m.reactions ?? []).filter((r) => hasReportDate(r?.date)), stats: m.stats } : null,
     coverage,
     peers,
     prices: { self: selfBars, spy: spyBars },

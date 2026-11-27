@@ -215,6 +215,43 @@ function labelOf(row: GridRow): { text: string; cell?: GridCell; firstFig: numbe
 
 const hasFigure = (row: GridRow) => labelOf(row).firstFig > 0;
 
+/** Comparison headings apply to the following group, including spacer columns some SEC tables
+ * insert between the heading and its dated subcolumns. A later heading on the same row starts
+ * a new group. An isolated percent sign can also be the unit of an actual level. */
+const COMPARISON_GROUP = /%\s*change\b|\bchanges?\s+(?:from|vs\.?|versus)\b|^(?:changes?|variances?|versus|vs\.?)$|\b(?:o\s*\/\s*\(?u\)?|over\s*\/\s*\(?under\)?)/i;
+
+const comparisonCache = new WeakMap<GridTable, { first: number; cols: Set<number> }>();
+export function comparisonColumns(table: GridTable, first = firstFigureRow(table)): Set<number> {
+  const cached = comparisonCache.get(table);
+  if (cached?.first === first) return cached.cols;
+  const cols = new Set<number>();
+  const width = table.rows.reduce((max, row) => {
+    const last = row.cells.at(-1);
+    return last ? Math.max(max, last.col + last.span) : max;
+  }, 0);
+  for (const row of table.rows.slice(0, first)) {
+    if (row.hidden) continue;
+    const headings = row.cells.filter((c) => c.col > 0 && c.text.trim());
+    for (let i = 0; i < headings.length; i++) {
+      const c = headings[i];
+      if (!COMPARISON_GROUP.test(c.text)) continue;
+      const end = headings[i + 1]?.col ?? width;
+      for (let g = c.col; g < end; g++) cols.add(g);
+    }
+  }
+  comparisonCache.set(table,{first,cols});
+  return cols;
+}
+
+export function isComparisonPosition(grid: GridTable[], locator: { t?: number; r?: number; c?: number } | null): boolean {
+  if (locator?.t == null || locator.r == null || locator.c == null) return false;
+  const table = grid[locator.t];
+  const cell = table?.rows[locator.r]?.cells[locator.c];
+  if (!cell) return false;
+  const cols = comparisonColumns(table);
+  return cols.has(cell.col) || cols.has(cell.col + cell.span - 1);
+}
+
 /** Header key per grid column: text of the header cells over it, label column left out. */
 function headerKeys(table: GridTable, first: number): Map<number, string> {
   const parts = new Map<number, string[]>();
@@ -225,6 +262,7 @@ function headerKeys(table: GridTable, first: number): Map<number, string> {
       for (let g = c.col; g < c.col + c.span; g++) parts.set(g, [...(parts.get(g) ?? []), c.text]);
     }
   }
+  for (const g of comparisonColumns(table, first)) parts.set(g, [...(parts.get(g) ?? []), "comparison change"]);
   return new Map([...parts].map(([g, xs]) => [g, xs.join("|").replace(/\s+/g, " ").toLowerCase()]));
 }
 const keyOver = (keys: Map<number, string>, c: GridCell): string | null => {

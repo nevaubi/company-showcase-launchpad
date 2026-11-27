@@ -219,7 +219,13 @@ export function CallReader({
         id="call-summary"
         name="Call summary"
         title={t.title}
-        caption={`${t.date ? (t.archiveKind || t.dateBasis === "event" ? "Call " : "Published ") + fmtDate(t.date) : ""} · ${t.words.toLocaleString("en-US")} words · about ${minutes} min · ${asked.length} analyst questions`}
+        caption={<>
+          {t.date && (t.eventSourceUrl?.startsWith("https://")
+            ? <a href={t.eventSourceUrl} target="_blank" rel="noreferrer" className="underline decoration-dotted underline-offset-2" title="Issuer source for the call date">Call {fmtDate(t.date)}</a>
+            : <>{t.archiveKind || t.dateBasis === "event" ? "Call " : "Published "}{fmtDate(t.date)}</>)}
+          {t.publishedDate && t.dateBasis === "event" && t.publishedDate !== t.date && <> · Published {fmtDate(t.publishedDate)}</>}
+          {" · "}{t.words.toLocaleString("en-US")} words · about {minutes} min · {asked.length} analyst questions
+        </>}
         actions={
           <Button size="sm" variant="outline" asChild>
             <Link to="/app/research" search={{ q: askQ }}>

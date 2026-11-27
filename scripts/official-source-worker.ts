@@ -51,6 +51,8 @@ try {
   log("official-source-worker", "receipt folder unavailable", safeError(e));
 }
 const children = new Set<ChildProcess>();
+let replayChild: ChildProcess | null = null;
+let waitingForReplay = 0;
 let stopped = false;
 for (const signal of ["SIGTERM", "SIGINT"] as const)
   process.on(signal, () => {
@@ -132,8 +134,23 @@ async function childRun(
   /** work the lane does right after the child, recorded in the same job_runs row; never throws */
   after?: () => Promise<Record<string, unknown>>,
 ): Promise<ChildEnd> {
-  if (stopped || !hasMemoryHeadroom()) {
-    log(lease.job, "waiting for memory headroom before starting new work");
+  const replay = lease.job === 'setup-replay-worker';
+  // Official imports/refreshes get the next slot. Let the lower-priority replay finish its current
+  // ticker transaction, then start the heavier child. A hard stop leaves a recoverable ticker lease.
+  if (!replay && replayChild && replayChild.exitCode == null && replayChild.signalCode == null) {
+    const child = replayChild;
+    waitingForReplay++;
+    try {
+      await new Promise<void>(resolve => {
+        const timeout = setTimeout(() => child.kill('SIGKILL'), 12_000);
+        timeout.unref();
+        child.once('close', () => { clearTimeout(timeout); resolve(); });
+        child.kill('SIGTERM');
+      });
+    } finally { waitingForReplay--; }
+  }
+  if (stopped || !hasMemoryHeadroom() || (replay && (waitingForReplay > 0 || children.size > 0 || cpuContended()))) {
+    log(lease.job, "waiting for worker capacity before starting new work");
     return { code: RESOURCE_WAIT_EXIT, told: null };
   }
   const started = new Date().toISOString();
@@ -143,6 +160,7 @@ async function childRun(
     env: process.env,
   });
   children.add(child);
+  if (replay) replayChild = child;
   let killed = false;
   let renewing = false;
   const stop = () => {
@@ -170,6 +188,7 @@ async function childRun(
   clearTimeout(timer);
   clearInterval(heartbeat);
   children.delete(child);
+  if (replayChild === child) replayChild = null;
   const result = killed ? 124 : code;
   // What the child says it did (datasets checked, filings stored, what failed and why) goes into the
   // row beside how the process ended. Rows of data are still counted only by committed snapshots and loads.
@@ -410,8 +429,42 @@ async function absLoop() {
   }
 }
 
+// Linux PSI tracks time runnable work spent stalled for CPU. Other supervisors share this cgroup.
+function cpuContended(): boolean {
+  try {
+    const pressure = readFileSync('/sys/fs/cgroup/cpu.pressure', 'utf8').match(/^some avg10=([\d.]+)/m);
+    return pressure != null && Number(pressure[1]) >= 20;
+  } catch { return false; }
+}
+
+/** Price/event history replay has its own claims. It uses this worker's memory guard and yields between passes. */
+async function setupReplayLoop() {
+  const job = 'setup-replay-worker';
+  let failures = 0;
+  while (!stopped) {
+    let lease: Lease | null = null;
+    let pause = 8000;
+    try {
+      if (!waitingForReplay && !children.size && hasMemoryHeadroom() && !cpuContended()) lease = await claim(job);
+      if (lease) {
+        const result = await childRun(lease, 'scripts/setup-replay.ts', ['--max-tickers=12'], 135_000);
+        if (result.told?.idle === true) pause = 15 * 60_000;
+        else if (result.told?.items === 12 && result.told?.interrupted !== true) pause = 1000;
+        failures = result.code === 0 || result.code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
+      }
+    } catch (e) {
+      failures++;
+      log(job, safeError(e));
+    } finally {
+      await lease?.release();
+    }
+    if (!stopped) await sleep(failures ? retryDelay(failures) : pause);
+  }
+}
+
 await Promise.all([
   ...(enabled(process.env.OFFICIAL_SOURCES_ENABLED) ? [sourceLoop()] : []),
   ...(enabled(process.env.OFFICIAL_REFRESH_ENABLED) ? [refreshLoop()] : []),
   ...(enabled(process.env.ABS_BULK_ENABLED) ? [absLoop()] : []),
+  ...(enabled(process.env.SETUP_REPLAY_ENABLED) ? [setupReplayLoop()] : []),
 ]);

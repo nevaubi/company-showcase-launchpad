@@ -2,6 +2,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
 import { buildPayload, type IrPayload } from "@/lib/ir/payload";
+import { isComparisonPosition } from "./table-fill";
 import { containsIrPeriod, type IrRequestedPeriod } from "./payload-view";
 import { BUDGET_BYTES, budgetPayload } from "@/lib/ir/payload-budget";
 import { planDocuments, type DocPlan, type PlanDocRow } from "@/lib/ir/doc-plan";
@@ -43,13 +44,17 @@ export async function readFiledPeriod(ticker: string, period: IrRequestedPeriod,
     Number(d.extract_facts) > 0 && kinds.includes(d.kind));
   candidates.sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || a.filed!.localeCompare(b.filed!) || a.id.localeCompare(b.id));
   const span = period.frequency === "y" ? 12 : period.frequency === "m" ? 1 : 3;
+  const readGrid = fillReader(documentReader(), { dry: true, company: coverageOf(ticker)?.shortName });
   for (const doc of candidates.slice(0, 12)) {
     const facts = await pages<IrFact>((a, b) => supabaseAdmin.from("ir_kpi_facts").select(FACT_COLUMNS)
       .eq("ticker", ticker).eq("document_id", doc.id).eq("period_end", period.end).in("months", [0, span])
       .eq("derived", false).order("id").range(a, b) as never);
     const printed = facts.filter((f) => f.locator && "t" in f.locator && "r" in f.locator && "c" in f.locator);
     if (!printed.length || (span === 12 && !printed.some((f) => f.months === 12))) continue;
-    const payload = buildPayload(ticker, fixPrintedSigns(printed).facts);
+    const source = await readGrid(doc.id);
+    const grid = source && source !== "wait" ? source.grid : null;
+    const levels = grid ? printed.filter((f) => !isComparisonPosition(grid, f.locator as { t?: number; r?: number; c?: number })) : printed;
+    const payload = buildPayload(ticker, fixPrintedSigns(levels).facts);
     if (containsIrPeriod(payload, period)) return payload;
   }
   return null;
@@ -381,7 +386,7 @@ export async function reportDates(ticker: string): Promise<string[]> {
 
 export async function rebuildCompany(
   ticker: string,
-  opts: { dry?: boolean; captions?: boolean; fill?: boolean } = {},
+  opts: { dry?: boolean; captions?: boolean; fill?: boolean; expectedBuiltAt?: string } = {},
 ): Promise<IrPayload | null> {
   // Only the planned documents' facts are loaded (doc-plan.ts): one copy per document family, decks for two
   // years, older history from the primary statement documents only; documents without a filing date are placed
@@ -484,7 +489,7 @@ export async function rebuildCompany(
     const body = JSON.stringify(payload);
     const bytes = new Blob([body]).size;
     if (bytes > BUDGET_BYTES) throw new Error(`Serialized payload exceeds the page budget: ${bytes} bytes`);
-    const path = archivePath ? `series/${ticker}/${crypto.randomUUID()}.json` : `series/${ticker}.json`;
+    const path = archivePath || opts.expectedBuiltAt ? `series/${ticker}/${crypto.randomUUID()}.json` : `series/${ticker}.json`;
     if (archivePath) {
       const stream = new Blob([JSON.stringify(fullHistory)]).stream().pipeThrough(new CompressionStream("gzip"));
       const archive = await new Response(stream).blob();
@@ -504,21 +509,19 @@ export async function rebuildCompany(
       ),
     ]);
     if (up.error) throw new Error(up.error.message);
-    const { error } = await retry(() =>
-      supabaseAdmin
-        .from("ir_company_series")
-        .upsert({
-          ticker,
-          payload: null,
-          payload_path: path,
-          payload_bytes: bytes,
-          // The build format rides in stats so the worker's stale-payload lane reads it without the payload.
-          stats: { ...payload.stats, build: payload.build, ...(payload.preview ? { preview: payload.preview } : {}) } as never,
-          built_at: payload.builtAt,
-        })
-        .abortSignal(AbortSignal.timeout(60_000)),
-    );
-    if (error) throw new Error(error.message);
+    const values = {
+      payload: null, payload_path: path, payload_bytes: bytes,
+      stats: { ...payload.stats, build: payload.build, ...(payload.preview ? { preview: payload.preview } : {}) } as never,
+      built_at: payload.builtAt,
+    };
+    if (opts.expectedBuiltAt) {
+      const {data, error} = await supabaseAdmin.from("ir_company_series").update(values).eq("ticker",ticker)
+        .eq("built_at",opts.expectedBuiltAt).select("ticker").maybeSingle();
+      if (error || !data) throw new Error(error?.message ?? "Another build published a newer company history");
+    } else {
+      const {error} = await retry(() => supabaseAdmin.from("ir_company_series").upsert({ticker,...values}).abortSignal(AbortSignal.timeout(60_000)));
+      if (error) throw new Error(error.message);
+    }
   }
   return payload;
 }

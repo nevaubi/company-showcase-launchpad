@@ -9,6 +9,7 @@ import type { IrPayload, IrQuality, PayloadFillConflict } from "@/lib/ir/payload
 import { assembleStatements, lineDiv, rowLabel } from "@/lib/ir/statements";
 import {
   fillDocument,
+  isComparisonPosition,
   FILL_METHOD,
   quarterEnds,
   type DocFill,
@@ -185,6 +186,7 @@ export async function fillCompany(
   const captions = new Map<string, TableCaption[]>();
   const texts = new Map<string, string>();
   const added: IrFact[] = [];
+  const comparisons = new Set<IrFact>();
   let read_ = 0;
   let failed = 0;
   let waiting = 0;
@@ -204,7 +206,11 @@ export async function fillCompany(
     texts.set(id, doc.head);
     const caps = doc.captions;
     captions.set(id, caps);
-    const own = byDoc.get(id) ?? [];
+    const own = (byDoc.get(id) ?? []).filter((f) => {
+      if (!isComparisonPosition(doc.grid, f.locator as {t?:number;r?:number;c?:number})) return true;
+      comparisons.add(f);
+      return false;
+    });
     const row = rows.get(id);
     const tableFacts = own.filter((f) => typeof (f.locator as { t?: unknown }).t === "number");
     const filed = own.find((f) => f.filed)?.filed ?? row?.filed ?? null;
@@ -227,7 +233,8 @@ export async function fillCompany(
   // Stored figures whose printed negative the reader read as positive (the closing parenthesis in the next cell).
   const fixed = new Map<string, IrFact>();
   for (const fill of fills.values()) for (const f of fill.fixes) if (f.id) fixed.set(f.id, f);
-  const base = fixed.size ? stored.map((f) => (f.id && fixed.get(f.id)) || f) : stored;
+  const levels = comparisons.size ? stored.filter((f) => !comparisons.has(f)) : stored;
+  const base = fixed.size ? levels.map((f) => (f.id && fixed.get(f.id)) || f) : levels;
   const fx = [...fixed.values()];
   return {
     facts: [...base, ...added],

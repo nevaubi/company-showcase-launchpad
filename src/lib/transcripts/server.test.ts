@@ -144,6 +144,31 @@ describe("archive-only page requests", () => {
     expect((await loadTranscript(co, "https://other.example/source")).transcript).toBeNull();
     expect(external).not.toHaveBeenCalled();
   });
+  it("reads directly reviewed issuer originals even when the upstream files are absent or refreshed", async () => {
+    const item = index.calls[0];
+    ctx.rows.set("issuer-index:v1:JPM", { bundle: { ...index, calls: [] }, sha256: "mirror" });
+    ctx.rows.set("issuer-direct-index:v1:JPM", { bundle: index, sha256: "reviewed" });
+    const rawKey = `issuer-turns:v1:JPM:${id}:1234`;
+    expect((await listCalls(co)).calls).toEqual([]);
+    ctx.rows.set(rawKey, {
+      ticker: item.ticker,
+      kind: item.kind,
+      sourceHash: item.sha,
+      sourceUrl: original,
+      sha256: "file",
+      file: {
+        call_id: id,
+        turns: [{ i: 0, sp: 0, sec: "prepared", x: "Deposits increased.", w: 2 }],
+      },
+    });
+    expect((await listCalls(co)).calls).toMatchObject([{ url: original, date: item.date }]);
+    expect((await loadTranscript(co, original)).transcript?.speakers[0].name).toBe("Test Officer");
+    expect(
+      (await loadTranscript({ ticker: "C", shortName: "Citigroup" }, original)).transcript,
+    ).toBeNull();
+    expect(ctx.searches).not.toHaveBeenCalled();
+    expect(ctx.scrapes).not.toHaveBeenCalled();
+  });
   it("finishes later download batches without repeating discovery or downloading earlier quarters again", async () => {
     const refs = [1, 2, 3, 4].map((q) => ({
       url: `https://www.fool.com/earnings/call-transcripts/2026/10/13/jpmorgan-chase-jpm-q${q}-2026-earnings-call-transcript`,
@@ -205,9 +230,22 @@ describe("archive-only page requests", () => {
         });
       });
       vi.stubGlobal("fetch", fetcher);
+      const event = "https://ir.example.com/investors/earnings-date";
+      ctx.rows.set("issuer-call-date:v1:JPM:2026-Q3", {
+        ticker: "JPM",
+        date: "2026-10-12",
+        url: event,
+      });
       expect(await refreshWebCalls(co)).toBe(0);
       expect(ctx.rows.get("call-web-ready:v1:JPM")).toMatchObject({
-        calls: [expect.objectContaining({ url })],
+        calls: [
+          expect.objectContaining({
+            url,
+            date: "2026-10-12",
+            publishedDate: "2026-10-13",
+            eventSourceUrl: event,
+          }),
+        ],
       });
       expect(fetcher).toHaveBeenCalledTimes(2);
       expect(ctx.searches).not.toHaveBeenCalled();

@@ -1,3 +1,4 @@
+import { closeInstant, targetSession } from "./trading-days";
 // Nightly short-term setups refresh. After each US close the scheduled `setups` job walks one cycle:
 //   bars → context → scan → cross → evaluate → publish → bots → done
 // Each call does a small slice inside the scheduler's short window; several calls can run at once
@@ -32,35 +33,7 @@ const SERIES_BARS = 300;
 // ---------------------------------------------------------------- session timing
 
 /** Current New York date/time parts. */
-function nyNow(d = new Date()) {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false, weekday: "short" })
-      .formatToParts(d)
-      .map((x) => [x.type, x.value]),
-  );
-  return { date: `${p.year}-${p.month}-${p.day}`, minutes: (Number(p.hour) % 24) * 60 + Number(p.minute), weekday: p.weekday as string };
-}
-const prevWeekday = (d: string) => {
-  const t = new Date(d + "T12:00:00Z");
-  do t.setUTCDate(t.getUTCDate() - 1);
-  while (t.getUTCDay() === 0 || t.getUTCDay() === 6);
-  return t.toISOString().slice(0, 10);
-};
-/** The latest session whose closing bars should be final (40 minutes after the 4pm close). */
-export function targetSession(d = new Date()): string {
-  const ny = nyNow(d);
-  const weekend = ny.weekday === "Sat" || ny.weekday === "Sun";
-  if (!weekend && ny.minutes >= 16 * 60 + 40) return ny.date;
-  return prevWeekday(ny.date);
-}
-/** UTC instant of 4:10pm New York on a date (bars written after it are closing bars). */
-function closeInstant(date: string): string {
-  for (const off of [4, 5]) {
-    const t = new Date(`${date}T${String(16 + off).padStart(2, "0")}:10:00Z`);
-    if (nyNow(t).minutes === 16 * 60 + 10) return t.toISOString();
-  }
-  return `${date}T21:10:00Z`;
-}
+export { targetSession } from "./trading-days";
 
 // ---------------------------------------------------------------- bars
 
@@ -434,7 +407,7 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
   const shortFrom = needsReplay ? ctx.dates[0] : ctx.dates[Math.max(0, D - 160)];
   const failsFrom = needsReplay ? ctx.dates[0] : ctx.dates[Math.max(0, D - 420)];
   const recentFrom = ctx.dates[Math.max(0, D - 45)];
-  const [files, recent, earn, buys, shorts, sigs, fails] = await Promise.all([
+  const [files, recent, earn, buys, shorts, sigs, fails, publications] = await Promise.all([
     Promise.all(tickers.map(priceFile)),
     selectAll((a, b) => db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").in("symbol", tickers).gte("date", recentFrom).lte("date", asOf).order("symbol").order("date").range(a, b)),
     selectAll((a, b) => db().from("earnings_events").select("ticker, filed").in("ticker", tickers).order("ticker").order("accn").range(a, b)),
@@ -442,7 +415,9 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
     selectAll((a, b) => db().from("short_volume").select("symbol, date, short_vol, total_vol").in("symbol", tickers).gte("date", shortFrom).order("symbol").order("date").range(a, b)),
     selectAll((a, b) => db().from("setup_signals").select("ticker, variant, fired_at, first_seen, outcome_net, outcome_version, side, horizon, cost").in("ticker", tickers).gte("fired_at", ctx.dates[Math.max(0, D - 80)]).order("ticker").order("variant").order("fired_at").range(a, b)),
     selectAll((a, b) => db().from("alt_data").select("ticker, date, value").eq("dataset", "settlement").in("ticker", tickers).gte("date", failsFrom).order("ticker").order("date").order("uid").range(a, b)),
+    selectAll((a, b) => db().from("setup_finra_publications").select("trade_date, available_on").gte("trade_date", shortFrom).lte("available_on", asOf).order("trade_date").range(a, b)),
   ]);
+  const availableOn = new Map(publications.map(p => [p.trade_date, p.available_on]));
   const provisional: string[] = [];
   const corrected: string[] = [];
   const samples: Record<string, unknown>[] = [];
@@ -463,7 +438,7 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
     const events = {
       earnings: earn.filter((e) => e.ticker === ticker).map((e) => e.filed),
       buys: buys.filter((b) => b.ticker === ticker).map((b) => ({ filed: b.filed, owner: b.owner, value: Number(b.value ?? 0), plan: b.plan_10b5 })),
-      short: shorts.filter((s) => s.symbol === ticker && Number(s.total_vol) > 0).map((s) => ({ date: s.date, ratio: Number(s.short_vol) / Number(s.total_vol) })),
+      short: shorts.filter((s) => s.symbol === ticker && Number(s.total_vol) > 0).map((s) => ({ date: s.date, ratio: Number(s.short_vol) / Number(s.total_vol), availableOn: availableOn.get(s.date) })),
       fails: fails.filter((x) => x.ticker === ticker && x.date && x.value != null).map((x) => ({ end: x.date as string, value: Number(x.value) })),
     };
     let out: ScanOut | null = null;

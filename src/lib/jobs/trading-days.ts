@@ -78,3 +78,33 @@ export function nonTradingHours(newestMs: number, nowMs: number): number {
   for (let t = start, k = 0; t <= nowMs && k < 10; t += day, k++) if (!isTradingDay(new Date(t).toISOString().slice(0, 10))) n++;
   return n * 24;
 }
+
+// NYSE published equity early closes for 2026–2028. An unlisted date keeps the conservative 4pm close.
+// https://www.nyse.com/trade/hours-calendars
+const EARLY_CLOSES = new Set(["2026-11-27", "2026-12-24", "2027-11-26", "2028-07-03", "2028-11-24"]);
+const nyClock = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+function easternClock(d: Date) {
+  const p = Object.fromEntries(nyClock.formatToParts(d).map((x) => [x.type, x.value]));
+  return { date: `${p.year}-${p.month}-${p.day}`, minute: Number(p.hour) * 60 + Number(p.minute) };
+}
+const closeHour = (d: string) => EARLY_CLOSES.has(d) ? 13 : 16;
+
+/** Most recent actual session whose close has had 40 minutes to settle. */
+export function targetSession(d = new Date()): string {
+  const eastern = easternClock(d);
+  if (isTradingDay(eastern.date) && eastern.minute >= closeHour(eastern.date) * 60 + 40) return eastern.date;
+  const prior = new Date(eastern.date + "T12:00:00Z");
+  do prior.setUTCDate(prior.getUTCDate() - 1);
+  while (!isTradingDay(prior.toISOString().slice(0, 10)));
+  return prior.toISOString().slice(0, 10);
+}
+
+/** UTC instant ten minutes after the exchange's regular-session close, including early closes. */
+export function closeInstant(date: string): string {
+  const hour = closeHour(date);
+  for (const offset of [4, 5]) {
+    const candidate = new Date(`${date}T${hour + offset}:10:00Z`);
+    if (easternClock(candidate).minute === hour * 60 + 10) return candidate.toISOString();
+  }
+  throw new RangeError("Cannot resolve New York market close for " + date);
+}

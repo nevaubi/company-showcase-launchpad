@@ -205,6 +205,22 @@ async function downloadWebTranscript(co: Co, url: string, signal?: AbortSignal):
   const parsed = parseTranscript(page.markdown);
   if (parsed.turns.length < 5) return false;
   const ref = datedTranscriptRef(url, page.markdown);
+  if (ref.fy && ref.fq) {
+    const reviewed = await stored<{ ticker: string; date: string; url: string }>(
+      `issuer-call-date:v1:${co.ticker}:${ref.fy}-Q${ref.fq}`,
+    );
+    if (
+      reviewed?.ticker === co.ticker &&
+      /^\d{4}-\d{2}-\d{2}$/.test(reviewed.date) &&
+      reviewed.url.startsWith("https://") &&
+      ref.publishedDate &&
+      reviewed.date <= ref.publishedDate
+    ) {
+      ref.date = reviewed.date;
+      ref.dateBasis = "event";
+      ref.eventSourceUrl = reviewed.url;
+    }
+  }
   const transcript: EarningsTranscript = {
     ...ref,
     ...parsed,
@@ -268,6 +284,7 @@ export async function refreshWebCalls(co: Co, limit = 3) {
         date: transcript.date,
         publishedDate: transcript.publishedDate,
         dateBasis: transcript.dateBasis,
+        ...(transcript.eventSourceUrl ? { eventSourceUrl: transcript.eventSourceUrl } : {}),
       });
   }
   const now = new Date().toISOString();

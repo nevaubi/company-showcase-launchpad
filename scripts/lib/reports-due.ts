@@ -1,3 +1,6 @@
+import type { ReportKind } from "@/lib/reports/types";
+import { KIND_ORDER } from "@/lib/reports/kinds";
+import { REPORT_FORMAT } from "@/lib/reports/facts";
 import { classify, isFreeAllowanceSpent as allowanceSpent } from "@/lib/jobs/failure";
 /** Scheduled standard reports: what is due, and how a credit outage pauses the job. */
 export const REPORTS_JOB = "reports-due";
@@ -15,7 +18,23 @@ export const nextUtcDay = (nowMs: number) => {
   return Math.ceil(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 5) / 1000);
 };
 
-export interface DueSlot { ticker: string; kind: "recap" | "preview"; reason: string }
+export interface DueSlot { ticker: string; kind: ReportKind; reason: string; retryAt?: number }
+
+/** Recover empty shared slots when the event desk has spare capacity. The scheduled worker's
+ * provider circuit, allowances, daily cap and per-slot receipt still apply. */
+export function recoverySlots(
+  failed: { ticker: string; kind: string; updated_at: string }[],
+  scheduled: DueSlot[],
+  covered: Set<string>,
+): DueSlot[] {
+  const active = new Set(scheduled.map(failReceiptKey));
+  return failed.flatMap((row) => {
+    const kind = KIND_ORDER.find((k) => k === row.kind);
+    if (!kind || !covered.has(row.ticker) || active.has(failReceiptKey({ ticker: row.ticker, kind }))) return [];
+    const retryAt = Date.parse(row.updated_at) + REPORTS_PROBE_MS;
+    return [{ ticker: row.ticker, kind, reason: `Recover shared report ${REPORT_FORMAT}`, retryAt }];
+  }).sort((a, b) => a.retryAt - b.retryAt || a.ticker.localeCompare(b.ticker));
+}
 
 /**
  * Recaps: a covered company with an earnings 8-K (item 2.02) in the last 3 days whose shared recap

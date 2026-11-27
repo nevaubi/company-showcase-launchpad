@@ -7,14 +7,16 @@ import { Segmented } from "@/components/app/segmented";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { Stat } from "@/components/exposures/region-exposures";
 import { median } from "@/components/exposures/open";
+import { MarketVolatility } from "@/components/options/market-volatility";
+import { reactionsAtQuote } from "@/lib/options/as-of";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSource, type SourceTarget } from "@/components/source/source-context";
 import { useUniverse } from "@/lib/data";
-import { earningsIndexQuery } from "@/lib/calendars/data";
+import { earningsIndexQuery, todayIso } from "@/lib/calendars/data";
 import { cboeQuotePage, earningsPricing, impliedMoveBy, REPORT_EXPIRY_LAG } from "@/lib/options/core";
-import { boardIvRank, optionsBoardQuery, reactionsQuery, volumeRatio, type OptionsBoardRow, type ReactionsFile } from "@/lib/options/data";
+import { boardIvRank, optionsBoardQuery, reactionsQuery, volumeRatio, type OptionsBoardRow } from "@/lib/options/data";
 import { useSessionState } from "@/lib/use-session-state";
 import { fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -41,7 +43,7 @@ type Row = OptionsBoardRow & {
   priced: { e: string; m: number; lag: number } | null;
   pastMedian: number | null;
   pastN: number | null;
-  past: ReactionsFile["companies"][string] | null;
+  past: ReturnType<typeof reactionsAtQuote>;
   m30: { e: string; m: number } | null;
   rank: number | null;
   vr: number | null;
@@ -82,7 +84,7 @@ const C: Record<string, Col> = {
       r.priced ? (
         <span className="inline-flex items-baseline gap-1.5" title={r.priced.lag > REPORT_EXPIRY_LAG ? `The first listed expiry after the report is ${r.priced.lag} days later, so this also prices ordinary movement and isn't compared with past reports` : undefined}>
           <span className={cn("text-[11px]", r.priced.lag > REPORT_EXPIRY_LAG ? "text-warning" : "text-muted-foreground")}>{fmtDate(r.priced.e, { month: "short", day: "numeric" })}</span>
-          {btn(() => open(ext(r, `Move priced through ${fmtDate(r.priced!.e)}`, r.priced!.m, "pct", `At-the-money straddle for the ${r.priced!.e} expiry (first after the ${r.report} report) ÷ stock price ${r.price.toFixed(2)}`)), `±${fmtPct(r.priced.m, 1)}`)}
+          {btn(() => open(ext(r, `Move priced through ${fmtDate(r.priced!.e)}`, r.priced!.m, "pct", `At-the-money straddle for the ${r.priced!.e} expiry (first after the current calendar date ${r.report}) ÷ stock price ${r.price.toFixed(2)}`)), `±${fmtPct(r.priced.m, 1)}`)}
         </span>
       ) : (
         dash
@@ -95,7 +97,7 @@ const C: Record<string, Col> = {
     get: (r) => r.pastMedian,
     cell: (r, open) => (r.pastMedian != null && r.past ? btn(() => { const last = r.past!.moves.at(-1)!; open({ ticker: r.ticker, label: `Median move after the last ${r.pastN} reports`, unit: "pct", value: r.pastMedian!, periodLabel: `latest report ${fmtDate(last.d)}`, doc: { accn: last.a, doc: last.doc, form: "8-K", filed: last.d } }); }, `±${fmtPct(r.pastMedian, 1)}`) : dash),
   },
-  beat: { k: "beat", label: "Moved more", title: "Past reports whose move was larger than today's priced move", get: (r) => (r.priced && r.past && r.priced.lag <= REPORT_EXPIRY_LAG ? r.past.moves.filter((x) => Math.abs(x.m) > r.priced!.m).length / r.past.n : null), cell: (r) => (r.priced && r.past && r.priced.lag <= REPORT_EXPIRY_LAG ? <span className="num tabular-nums">{r.past.moves.filter((x) => Math.abs(x.m) > r.priced!.m).length} of {r.past.n}</span> : dash) },
+  beat: { k: "beat", label: "Moved more", title: "Past reports whose move was larger than the move on the row’s quote date", get: (r) => (r.priced && r.past && r.priced.lag <= REPORT_EXPIRY_LAG ? r.past.moves.filter((x) => Math.abs(x.m) > r.priced!.m).length / r.past.n : null), cell: (r) => (r.priced && r.past && r.priced.lag <= REPORT_EXPIRY_LAG ? <span className="num tabular-nums">{r.past.moves.filter((x) => Math.abs(x.m) > r.priced!.m).length} of {r.past.n}</span> : dash) },
   ratio: { k: "ratio", label: "Priced ÷ past", title: "Priced move ÷ past median move: above 1 the market expects a bigger move than usual", get: (r) => (r.priced && r.pastMedian && r.priced.lag <= REPORT_EXPIRY_LAG ? r.priced.m / r.pastMedian : null), cell: (r) => (r.priced && r.pastMedian && r.priced.lag <= REPORT_EXPIRY_LAG ? <span className={cn("num tabular-nums", (r.priced.m / r.pastMedian >= 1.5 || r.priced.m / r.pastMedian <= 0.67) && "font-semibold")}>{(r.priced.m / r.pastMedian).toFixed(2)}×</span> : dash) },
   iv: { k: "iv", label: "IV30", title: "Cboe 30-day implied volatility", get: (r) => r.iv30, cell: (r, open) => (r.iv30 != null ? btn(() => open(ext(r, "30-day implied volatility", r.iv30!, "pct", "Cboe IV30")), fmtPct(r.iv30, 1)) : dash) },
   ivChg: { k: "ivChg", label: "Δ prior quote", title: "Change in IV30 since the previous recorded day, in volatility points", get: (r) => r.ivChg, cell: (r) => (r.ivChg != null ? <span className={cn("num tabular-nums", r.ivChg > 0.02 ? "text-negative" : r.ivChg < -0.02 && "text-positive")}>{pts(r.ivChg)}</span> : dash) },
@@ -112,7 +114,7 @@ const C: Record<string, Col> = {
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}K` : String(n));
 
 const VIEWS: Record<View, { cols: string[]; sort: { c: string; d: 1 | -1 }; blurb: string }> = {
-  reports: { cols: ["report", "priced", "past", "beat", "ratio", "iv"], sort: { c: "report", d: 1 }, blurb: "Reports in the next four weeks: the move options price through the report against the stock's usual reaction." },
+  reports: { cols: ["report", "priced", "past", "beat", "ratio", "iv"], sort: { c: "report", d: 1 }, blurb: "Current earnings calendar matched to stored quotes. The straddle covers the full period to expiry. Past moves cover the earnings filing window." },
   vol: { cols: ["iv", "ivChg", "rank", "m30", "front", "skew"], sort: { c: "iv", d: -1 }, blurb: "Implied volatility, its change and rank in its own recorded history, and the term structure." },
   positioning: { cols: ["pcoi", "pcvol", "vol", "vr", "oi", "iv"], sort: { c: "vol", d: -1 }, blurb: "Put/call open interest and volume, and sessions where option volume runs far above its recent average." },
   skew: { cols: ["skew", "iv", "pcoi", "m30"], sort: { c: "skew", d: -1 }, blurb: "How much more downside protection costs than upside calls, around 30 days out." },
@@ -127,6 +129,7 @@ function OptionsHub() {
   const [view, setView] = useSessionState<View>("fu:options:view", "reports");
   const [sorts, setSorts] = useState<Partial<Record<View, { c: string; d: 1 | -1 }>>>({});
   const [text, setText] = useState("");
+  const [session, setSession] = useState("all");
   const [limit, setLimit] = useState(100);
   const sort = sorts[view] ?? VIEWS[view].sort;
 
@@ -138,15 +141,18 @@ function OptionsHub() {
       const report = c?.next_earnings ?? null;
       const p = report ? earningsPricing(r.term, report, r.date, []) : null;
       const m30 = impliedMoveBy(r.term, 28);
+      const archive = rx.data;
+      const stored = archive?.companies[r.ticker];
+      const past = archive && stored ? reactionsAtQuote(stored.moves, stored.generated ?? archive.generated, r.date) : null;
       return {
         ...r,
         name: names.get(r.ticker) ?? r.ticker,
         report: report && report >= r.date ? report : null,
         reportEstimated: !!c?.earnings?.is_estimate,
         priced: p ? { e: p.point.e, m: p.point.m, lag: p.lag } : null,
-        past: rx.data?.companies[r.ticker] ?? null,
-        pastMedian: rx.data?.companies[r.ticker]?.median ?? null,
-        pastN: rx.data?.companies[r.ticker]?.n ?? null,
+        past,
+        pastMedian: past?.median ?? null,
+        pastN: past?.n ?? null,
         m30: m30 ? { e: m30.e, m: m30.m } : null,
         rank: boardIvRank(r)?.rank ?? null,
         vr: volumeRatio(r),
@@ -155,13 +161,15 @@ function OptionsHub() {
     });
   }, [q.data, cal.data, uni.data, rx.data]);
 
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const today = todayIso();
   const latest = all.reduce((d, r) => (r.date > d ? r.date : d), "");
   const horizon = new Date(Date.parse(today) + 28 * 86400000).toISOString().slice(0, 10);
   const sameSession = all.filter((r) => r.date === latest);
+  const sessions = [...new Set(all.map((r) => r.date))].sort().reverse();
   const rows = useMemo(() => {
     const needle = text.trim().toLowerCase();
     let out = all.filter((r) => !needle || r.ticker.toLowerCase().startsWith(needle) || r.name.toLowerCase().includes(needle));
+    if (session !== "all") out = out.filter((r) => r.date === session);
     if (view === "reports") out = out.filter((r) => r.report && r.report >= today && r.report <= horizon && r.priced);
     const col = C[sort.c];
     return [...out].sort((a, b) => {
@@ -171,7 +179,7 @@ function OptionsHub() {
       if (vb == null) return -1;
       return (typeof va === "string" ? va.localeCompare(String(vb)) : va - (vb as number)) * sort.d;
     });
-  }, [all, text, view, sort, horizon, today]);
+  }, [all, session, text, view, sort, horizon, today]);
 
   const ivMed = median(sameSession.map((r) => r.iv30).filter((x): x is number => x != null));
   const skewMed = median(sameSession.map((r) => r.skew25).filter((x): x is number => x != null));
@@ -198,6 +206,7 @@ function OptionsHub() {
           />
         }
       />
+      <MarketVolatility />
       {q.isLoading ? (
         <Skeleton className="mt-4 h-[520px]" />
       ) : q.error ? (
@@ -206,6 +215,7 @@ function OptionsHub() {
         <Empty title="No options snapshots yet">Snapshots are recorded every weekday evening from Cboe's delayed quotes.</Empty>
       ) : (
         <div className="mt-4 min-w-0" data-section="Options board">
+          <h2 className="mb-2 text-sm font-semibold">Single-stock options <span className="ml-1 text-[11px] font-normal text-muted-foreground">Latest stored quote · {fmtDate(latest)}</span></h2>
           <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
             <Stat label="Stocks with quotes" value={all.length.toLocaleString("en-US")} hint={`${sameSession.length.toLocaleString("en-US")} on latest quote date · ${fmtDate(latest)}`} />
             <Stat label="Median implied vol · 30d" value={fmtPct(ivMed, 1)} hint={fmtDate(latest)} />
@@ -217,6 +227,10 @@ function OptionsHub() {
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Filter by ticker or name" className="h-8 pl-8 text-sm" aria-label="Filter stocks" />
             </div>
+            <select aria-label="Quote session" className="h-8 rounded-md border bg-card px-2 text-xs" value={session} onChange={(e) => { setSession(e.target.value); setLimit(100); }}>
+              <option value="all">All quote dates</option>
+              {sessions.map((date) => <option key={date} value={date}>{fmtDate(date)} only</option>)}
+            </select>
             <p className="text-[11px] text-muted-foreground">{VIEWS[view].blurb}</p>
           </div>
           {!rows.length ? (

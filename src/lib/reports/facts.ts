@@ -332,8 +332,8 @@ export function buildReportData(inp: ReportInputs): ReportData {
       const name = PERIOD_NAME[per.code];
       const e = per.eps, r = per.revenue;
       const ids: (string | null)[] = [];
-      if (e.avg != null) ids.push(estIds.consensus.set(per.code, p.add("estimates", `Consensus diluted EPS for the ${name}${per.endDate ? ` (ending ${per.endDate})` : ""}: ${perShare(e.avg)}${e.low != null && e.high != null ? `, range ${perShare(e.low)} to ${perShare(e.high)}` : ""}${e.analysts ? `, ${e.analysts} analysts` : ""}${e.yearAgo != null ? `; year-ago EPS ${perShare(e.yearAgo)}` : ""}.`, mref(`Consensus EPS, ${name}`))).get(per.code)!);
-      if (r.avg != null) ids.push(p.add("estimates", `Consensus revenue for the ${name}: ${money(r.avg)}${r.low != null && r.high != null ? `, range ${money(r.low)} to ${money(r.high)}` : ""}${r.yearAgo != null ? `; year-ago revenue ${money(r.yearAgo)}` : ""}${r.growth != null ? ` (implied growth ${pct(r.growth, true)})` : ""}.`, mref(`Consensus revenue, ${name}`)));
+      if (e.avg != null) ids.push(estIds.consensus.set(per.code, p.add("estimates", `Consensus diluted EPS for the ${name}${per.endDate ? ` (ending ${per.endDate})` : ""}: ${perShare(e.avg)}${e.low != null && e.high != null ? `, range ${perShare(e.low)} to ${perShare(e.high)}` : ""}${e.analysts ? `, ${e.analysts} analyst${e.analysts === 1 ? "" : "s"}` : ", contributor count unconfirmed"}${e.yearAgo != null ? `; year-ago EPS ${perShare(e.yearAgo)}` : ""}.`, mref(`Consensus EPS, ${name}`))).get(per.code)!);
+      if (r.avg != null) ids.push(p.add("estimates", `Consensus revenue for the ${name}: ${money(r.avg)}${r.low != null && r.high != null ? `, range ${money(r.low)} to ${money(r.high)}` : ""}${r.analysts ? `, ${r.analysts} analyst${r.analysts === 1 ? "" : "s"}` : ", contributor count unconfirmed"}${r.yearAgo != null ? `; year-ago revenue ${money(r.yearAgo)}` : ""}${r.growth != null ? ` (implied growth ${pct(r.growth, true)})` : ""}.`, mref(`Consensus revenue, ${name}`)));
       const tr = per.trend;
       let rev30: number | null = null;
       if (tr.current != null && tr.d90 != null && tr.d90 !== 0) {

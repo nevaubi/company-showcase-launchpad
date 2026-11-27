@@ -3,7 +3,7 @@ import type { RiskLink } from "./core";
 import type { TaggedShare } from "./chain";
 import { dedupeCurrent } from "./identity";
 import { pageSupplyLinks } from "./read";
-import { disclosurePaths, type Disclosure } from "./disclosures";
+import { disclosurePaths, disclosureSharedInputs, type Disclosure } from "./disclosures";
 
 /** Fetch both directions for the selected company, then just the other legs of its documented programs. */
 export const disclosureQuery = (ticker: string) => ({
@@ -24,7 +24,8 @@ export const disclosureQuery = (ticker: string) => ({
     };
     const direct = await read();
     const programs = [...new Set(direct.flatMap((r) => r.pathway ? [r.pathway] : []))];
-    return { direct, paths: programs.length ? disclosurePaths(ticker, await read(programs)) : [] };
+    const related = programs.length ? await read(programs) : [];
+    return { direct, paths: disclosurePaths(ticker, related), sharedInputs: disclosureSharedInputs(ticker, related) };
   },
   staleTime: 30 * 60_000,
 });

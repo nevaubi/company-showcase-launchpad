@@ -69,3 +69,29 @@ describe("failure receipts are cleaned up (review F10)", () => {
     expect(staleReceipts(receipts, due, 1)).toEqual(["reports-due-fail:MSFT:recap"]);
   });
 });
+
+describe("shared report recovery", () => {
+  it("preserves scheduled earnings priority and does not retry the same slot under a second receipt", async () => {
+    const { recoverySlots } = await import("../../scripts/lib/reports-due");
+    const event = { ticker: "B", kind: "recap" as const, reason: "new filing" };
+    const candidates = recoverySlots([
+      { ticker: "A", kind: "primer", updated_at: "2026-11-12T02:15Z" },
+      { ticker: "C", kind: "memo", updated_at: "2026-11-11T00:00Z" },
+      { ticker: "B", kind: "recap", updated_at: "2026-11-10T00:00Z" },
+      { ticker: "UNCOVERED", kind: "primer", updated_at: "2026-11-10T00:00Z" },
+    ], [event], covered);
+    expect(candidates.map((c) => c.ticker)).toEqual(["C", "A"]);
+    expect(candidates[1].retryAt).toBe(Date.parse("2026-11-12T03:15Z"));
+  });
+  it("keeps a receipt through cooldown and stops a failing primer after its third attempt", async () => {
+    const { recoverySlots, failReceipt, staleReceipts, failedSlots, slotKey } = await import("../../scripts/lib/reports-due");
+    const candidates = recoverySlots([{ ticker: "A", kind: "primer", updated_at: "2026-11-27T12:00Z" }], [], covered);
+    const slot = candidates[0];
+    let receipt = failReceipt(slot, null, "bad inputs");
+    receipt = failReceipt(slot, receipt, "bad inputs");
+    receipt = failReceipt(slot, receipt, "bad inputs");
+    expect(failedSlots([receipt]).has(slotKey(slot))).toBe(true);
+    expect(staleReceipts([receipt], candidates)).toEqual([]);
+    expect(staleReceipts([receipt], [])).toEqual([receipt.job]);
+  });
+});

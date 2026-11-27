@@ -174,6 +174,12 @@ function VariantDetail({ v, e, data, book, same }: Row & { data: SetupsFile; boo
           <p className={cn(CAPTION, "mt-0.5")}>
             Research: {s?.source}.{s?.data ? ` Data: ${s.data}${s.dataFrom ? ` (from ${s.dataFrom})` : ""}.` : ""}
           </p>
+          {(v.strategy === "insider" || v.strategy === "earnRunup") && <p className={cn(CAPTION, "mt-1")}>
+            SEC records provide filing dates. The model uses a filing at the first trading-session close after that date.
+          </p>}
+          {v.strategy === "shortFlow" && <p className={cn(CAPTION, "mt-1")}>
+            From Nov 16, 2026, each file enters the model at the first session close after its recorded collection date. Earlier files assume availability at the next session close.
+          </p>}
         </div>
         <p className="text-[13px] leading-5">
           {evidenceLine(e, book.discovery)} <span className="text-muted-foreground">{liveLine(e.live, same?.map(ruleNameOf))}</span>

@@ -173,11 +173,16 @@ export async function scheduledCallArchive() {
     if (!claim.data) return { ok: true, items: 0, detail: { busy: true } };
     claimed = true;
     cursor = claim.data.cursor;
-    const keys = await issuerKeys("issuer-index:v1:", signal);
-    const native = [...keys].map((k) => k.slice("issuer-index:v1:".length));
-    const names = [
-      ...new Set([...priority.filter((t) => keys.has("issuer-index:v1:" + t)), ...native]),
-    ];
+    const prefixes = ["issuer-index:v1:", "issuer-direct-index:v1:"];
+    const catalogs = await Promise.all(prefixes.map((prefix) => issuerKeys(prefix, signal)));
+    const native = new Set(
+      catalogs.flatMap((keys, i) =>
+        [...keys]
+          .filter((key) => key.startsWith(prefixes[i]))
+          .map((key) => key.slice(prefixes[i].length)),
+      ),
+    );
+    const names = [...new Set([...priority.filter((t) => native.has(t)), ...[...native].sort()])];
     if (!names.length) return { ok: true, items: 0, detail: { issuers: 0 } };
     ticker = names[cursor % names.length];
     // Advance on the next tick even after an oversized issuer, so shorter names still get served.

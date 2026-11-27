@@ -1,3 +1,5 @@
+import { ForecastRangeCell } from "@/components/estimates/forecast-range";
+import { coverageLabel, forecastRange } from "@/lib/estimates/range-quality";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -28,8 +30,8 @@ import {
   actionKind,
   actionSummary,
   beatStats,
+  consensusChange,
   latestTargets,
-  positionIn,
   ratingLabel,
   revisionPct,
   type AnalystAction,
@@ -179,7 +181,7 @@ function Summary({ e }: { e: Estimates }) {
   return (
     <Panel
       title="Street view"
-      subtitle={`Consensus of ${e.target.analysts ?? "–"} analysts · updated ${fmtRelative(e.asOf)}`}
+      subtitle={`Price target · ${coverageLabel(e.target.analysts, e.target.mean)} · updated ${fmtRelative(e.asOf)}`}
       actions={<SourceNote asOf={e.asOf} />}
     >
       <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-3 lg:grid-cols-6">
@@ -200,7 +202,7 @@ function Summary({ e }: { e: Estimates }) {
         />
         <Stat
           label={`${q0 ? "Qtr" : "Next"} EPS est.`}
-          value={eps(q0?.eps.avg ?? null)}
+          value={eps(q0 ? forecastRange(q0.eps, q0.eps.analysts).mean : null)}
           sub={q0?.endDate ? `Quarter ending ${fmtDate(q0.endDate)}` : undefined}
         />
         <Stat
@@ -273,41 +275,12 @@ function Summary({ e }: { e: Estimates }) {
 }
 
 function RangeBar({ r, fmt }: { r: Range; fmt: (v: number | null) => string }) {
-  const p = positionIn(r.avg, r.low, r.high);
-  return (
-    <div className="min-w-[9rem]">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono tabular-nums">{fmt(r.avg)}</span>
-        <span className="text-[11px] text-muted-foreground">{r.analysts ?? "–"} ests</span>
-      </div>
-      <div className="relative mt-1 h-1.5 rounded-full bg-muted">
-        {p != null && (
-          <span
-            className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary"
-            style={{ left: `${p * 100}%` }}
-          />
-        )}
-      </div>
-      <div className="mt-0.5 flex justify-between font-mono text-[10px] text-muted-foreground">
-        <span>{fmt(r.low)}</span>
-        <span>{fmt(r.high)}</span>
-      </div>
-    </div>
-  );
+  return <ForecastRangeCell raw={r} count={r.analysts} format={fmt} />;
 }
 
-function Growth({ v }: { v: number | null }) {
-  if (v == null) return <span className="text-muted-foreground">–</span>;
-  return (
-    <span
-      className={cn(
-        "font-mono tabular-nums",
-        v > 0 ? "text-primary" : v < 0 ? "text-destructive" : "",
-      )}
-    >
-      {fmtPct(v, 1, true)}
-    </span>
-  );
+function Growth({ range, metric }: { range: Range; metric: "eps" | "revenue" }) {
+  const change = consensusChange(forecastRange(range, range.analysts).mean, range.yearAgo, metric);
+  return <span className={cn("num whitespace-nowrap tabular-nums", change && (change.direction > 0 ? "text-positive" : change.direction < 0 && "text-negative"))}>{change?.text ?? "–"}</span>;
 }
 
 function EstimateTable({ e }: { e: Estimates }) {
@@ -344,7 +317,7 @@ function EstimateTable({ e }: { e: Estimates }) {
                 </td>
                 <td className="px-3 py-3 font-mono tabular-nums">{eps(p.eps.yearAgo)}</td>
                 <td className="px-3 py-3">
-                  <Growth v={p.eps.growth} />
+                  <Growth range={p.eps} metric="eps" />
                 </td>
                 <td className="px-3 py-3">
                   <RangeBar r={p.revenue} fmt={(v) => fmtCompactUsd(v)} />
@@ -353,7 +326,7 @@ function EstimateTable({ e }: { e: Estimates }) {
                   {fmtCompactUsd(p.revenue.yearAgo)}
                 </td>
                 <td className="px-4 py-3">
-                  <Growth v={p.revenue.growth} />
+                  <Growth range={p.revenue} metric="revenue" />
                 </td>
               </tr>
             ))}
@@ -597,16 +570,12 @@ function RatingsPanel({ e }: { e: Estimates }) {
 
 function TargetsPanel({ e }: { e: Estimates }) {
   const firms = latestTargets(e.actions, daysAgo(365));
-  const lo = Math.min(
-    e.target.low ?? Infinity,
-    e.price ?? Infinity,
-    ...firms.map((f) => f.target!),
-  );
-  const hi = Math.max(
-    e.target.high ?? -Infinity,
-    e.price ?? -Infinity,
-    ...firms.map((f) => f.target!),
-  );
+  const targetRange = forecastRange({ avg: e.target.mean, low: e.target.low, high: e.target.high }, e.target.analysts);
+  const levels = [e.price, targetRange.mean, ...firms.map((f) => f.target)];
+  if (targetRange.position != null) levels.push(e.target.low, e.target.high);
+  const domain = levels.filter((v): v is number => v != null && Number.isFinite(v));
+  const lo = Math.min(...domain);
+  const hi = Math.max(...domain);
   const pos = (v: number | null) =>
     v == null || !Number.isFinite(lo) || hi <= lo ? null : ((v - lo) / (hi - lo)) * 100;
   return (
@@ -618,7 +587,7 @@ function TargetsPanel({ e }: { e: Estimates }) {
     >
       <div className="p-4">
         <div className="relative mx-2 mb-8 mt-6 h-2 rounded-full bg-muted">
-          {pos(e.target.low) != null && pos(e.target.high) != null && (
+          {targetRange.position != null && pos(e.target.low) != null && pos(e.target.high) != null && (
             <span
               className="absolute h-2 rounded-full bg-primary/25"
               style={{
@@ -661,6 +630,7 @@ function TargetsPanel({ e }: { e: Estimates }) {
           <span>Median {fmtPrice(e.target.median)}</span>
           <span>High {fmtPrice(e.target.high)}</span>
         </div>
+        {targetRange.issue && <p className="mt-1 text-xs text-muted-foreground">{targetRange.issue} · Yahoo Finance</p>}
         <div className="mt-3 divide-y divide-border/60">
           {firms.map((f) => {
             const up = e.price ? f.target! / e.price - 1 : null;

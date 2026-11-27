@@ -125,7 +125,7 @@ interface LoopState {
   lastMirror: string | null;
   lastDetail?: string | null;
   lastSod?: string | null;
-  lastReactions?: string | null;
+  lastDatedReactions?: string | null;
   lastProse?: string | null;
   lastIrSite?: string | null;
   lastCanon?: string | null;
@@ -235,7 +235,7 @@ function run(step: string, script: string, argv: string[], logFile: string, env:
   });
 }
 
-type LastKey = "lastRegistrantDrift" | "lastForm4Repair" | "lastMirror" | "lastDetail" | "lastSod" | "lastReactions" | "lastProse" | "lastIrSite" | "lastCanon" | "lastAltSlow" | "lastVerify" | "lastCatchup" | "lastHealConfig";
+type LastKey = "lastRegistrantDrift" | "lastForm4Repair" | "lastMirror" | "lastDetail" | "lastSod" | "lastDatedReactions" | "lastProse" | "lastIrSite" | "lastCanon" | "lastAltSlow" | "lastVerify" | "lastCatchup" | "lastHealConfig";
 /** A periodic step finished: its timer moves only after a zero exit; a failure retries after a backoff. */
 function settle(step: string, key: LastKey, intervalMs: number, code: number) {
   const r = nextDue(Date.now(), code === 0, intervalMs, state.failStreak?.[step] ?? 0);
@@ -405,6 +405,27 @@ const staleInput = (laneStarted: boolean): LaneInput => ({
   lastFailed: lastStale?.failed ?? false,
   nowMs: Date.now(),
 });
+let nextHistoryRequestCheck = 0;
+let requestedHistoryTicker: string | null = null;
+async function startRequestedHistoryFill(): Promise<boolean> {
+  if (Date.now() < nextHistoryRequestCheck || rebuildingStale || canoning || deepRunning() ||
+    lanesBusy() >= (BATCH_ARG ?? LANES) || memUsedGB() >= MEM_GB * 0.5) return false;
+  nextHistoryRequestCheck = Date.now() + 60_000;
+  const now = new Date().toISOString();
+  const {data,error} = await sb.from("job_state").select("job,paused_reason").like("job","ir-history-fill:%")
+    .or("paused_reason.eq.requested,paused_reason.like.owner:%").or("lease_until.is.null,lease_until.lte."+now)
+    .order("updated_at").limit(10);
+  if(error) {log("Checking requested IR history: "+error.message);return false;}
+  const ticker=(data??[]).map((r)=>r.job.slice("ir-history-fill:".length)).find((t)=>
+    /^[A-Z][A-Z0-9.-]{0,9}$/.test(t) && COVERAGE.some((c)=>c.ticker===t) && !busy.has(t) && !freshBusy.has(t));
+  if (!ticker) return false;
+  rebuildingStale=true;
+  requestedHistoryTicker=ticker;
+  busy.add(ticker);
+  void run("ir-rebuild","scripts/ir-history-fill.ts",["--ticker="+ticker],OUT+"/ir-requested-history.log",rebuildEnv)
+    .finally(()=>{busy.delete(ticker);requestedHistoryTicker=null;rebuildingStale=false;});
+  return true;
+}
 async function maybeRebuildStale(laneStarted: boolean) {
   const due = staleLane(staleInput(laneStarted)).start;
   // A deep build started by hand rebuilds its company itself and holds memory: not beside it.
@@ -563,11 +584,11 @@ async function maybeSod() {
 let reacting = false;
 async function maybeReactions() {
   if (reacting || !sideReady() || sideBusy()) return;
-  if (state.lastReactions && Date.now() - Date.parse(state.lastReactions) < 86_400_000) return;
+  if (state.lastDatedReactions && Date.now() - Date.parse(state.lastDatedReactions) < 86_400_000) return;
   reacting = true;
   void run("reactions", "scripts/earnings-reactions.ts", [], `${OUT}/reactions.log`).then((code) => {
     reacting = false;
-    settle("reactions", "lastReactions", 86_400_000, code);
+    settle("reactions", "lastDatedReactions", 86_400_000, code);
   });
 }
 
@@ -965,7 +986,7 @@ let freshPasses = 0;
 let companiesSinceFresh = 0;
 /** companies of the running pass: no company run starts on them meanwhile */
 const freshBusy = new Set<string>();
-const lanesBusy = () => busy.size + (freshRunning ? 1 : 0) + (BESIDE && rebuildingStale ? 1 : 0);
+const lanesBusy = () => busy.size + (freshRunning ? 1 : 0) + (BESIDE && rebuildingStale && !requestedHistoryTicker ? 1 : 0);
 const withFresh = (b: Set<string>) => (freshBusy.size ? new Set([...b, ...freshBusy]) : b);
 if (FRESH.days > 0) {
   state.fresh ??= { tries: {} };
@@ -1136,6 +1157,7 @@ for (;;) {
     state.healed.push(t);
     log(`${t}: marked done with no figures — queued again`);
   }
+  await startRequestedHistoryFill();
   const lanes = BATCH_ARG ?? LANES;
   // One decision for every lane: none while the route is open, one probe lane when it is due, and
   // after a heal one more lane every 5 minutes. The memory guard stays in force on top of it.

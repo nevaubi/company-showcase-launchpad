@@ -1,0 +1,154 @@
+[
+  {
+    "ticker": "BAC",
+    "date": "2026-04-15",
+    "label": "Q1 FY26",
+    "quarterWord": "First",
+    "file": "BAC-Q1.pdf",
+    "url": "https://d1io3yog0oux5.cloudfront.net/_2ac1b322515504df936311b427e4df55/bankofamerica/db/775/10537/webcast_transcript/2026-04-15+BAC+1Q+Earnings+Call_ADA.pdf",
+    "sourcePage": "https://investor.bankofamerica.com/quarterly-earnings",
+    "sha256": "2f5564bd45336e276f31e9055af6a5c04c7c9e752582f6afc0181247fdd6d659",
+    "mime": "application/pdf",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "BAC",
+    "date": "2026-07-14",
+    "label": "Q2 FY26",
+    "quarterWord": "Second",
+    "file": "BAC-Q2.pdf",
+    "url": "https://d1io3yog0oux5.cloudfront.net/_2ac1b322515504df936311b427e4df55/bankofamerica/db/775/10578/webcast_transcript/2026-07-14+BAC+2Q+Earnings+Call_ADA.pdf",
+    "sourcePage": "https://investor.bankofamerica.com/quarterly-earnings",
+    "sha256": "44b2da2aa4e8031b80a2c0fb96d1371232db3c9fa2964c55890ebd0620d7bd53",
+    "mime": "application/pdf",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "BAC",
+    "date": "2026-10-14",
+    "label": "Q3 FY26",
+    "quarterWord": "Third",
+    "file": "BAC-Q3.pdf",
+    "url": "https://d1io3yog0oux5.cloudfront.net/_2ac1b322515504df936311b427e4df55/bankofamerica/db/775/10610/webcast_transcript/2026-10-14+BAC+3Q+Earnings+Call_ADA.pdf",
+    "sourcePage": "https://investor.bankofamerica.com/quarterly-earnings",
+    "sha256": "cac0bb2797f57998970d0b2b8214872664b4f5ba6819d42aea505cf8ccc54d19",
+    "mime": "application/pdf",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "GOOGL",
+    "date": "2026-07-22",
+    "label": "Q2 FY26",
+    "quarterWord": "Second",
+    "file": "GOOGL-Q2.pdf",
+    "url": "https://s206.q4cdn.com/479360582/files/doc_events/2026/Jul/22/2026_Q2_Earnings_Transcript.pdf",
+    "sourcePage": "https://abc.xyz/investor/events/event-details/2026/2026-Q2-Earnings-Call-2026-GgTAq7Is0z/",
+    "sha256": "de938411f77818b147ff51d8ca2f70081f9a44401d396f1779ab5b5adfbd9123",
+    "mime": "application/pdf",
+    "checkedOn": "2026-11-27",
+    "existingOriginal": {
+      "bucket": "ir-documents",
+      "path": "GOOGL/site/de938411f778.pdf"
+    }
+  },
+  {
+    "ticker": "GOOGL",
+    "date": "2026-10-28",
+    "label": "Q3 FY26",
+    "quarterWord": "Third",
+    "file": "GOOGL-Q3.pdf",
+    "url": "https://s206.q4cdn.com/479360582/files/doc_events/2026/Oct/28/2026_Q3_Earnings_Transcript.pdf",
+    "sourcePage": "https://abc.xyz/investor/events/event-details/2026/2026-Q3-Earnings-Call-2026-Ujou16CTw9/default.aspx",
+    "sha256": "7e92f1db003536fb7cdc80546c3d5cc2c7f9528368efd4b7421cb550ac75db64",
+    "mime": "application/pdf",
+    "checkedOn": "2026-11-27",
+    "existingOriginal": {
+      "bucket": "ir-documents",
+      "path": "GOOGL/site/7e92f1db0035.pdf"
+    }
+  },
+  {
+    "ticker": "MSFT",
+    "date": "2025-10-29",
+    "label": "Q1 FY26",
+    "quarterWord": "First",
+    "file": "MSFT-Q1.html",
+    "url": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q1",
+    "sourcePage": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q1",
+    "sha256": "57a3dca4409561e5e135dad944de5b7471952439772bc7f68dc9d4ccbaa778c2",
+    "mime": "text/html",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "MSFT",
+    "date": "2026-01-28",
+    "label": "Q2 FY26",
+    "quarterWord": "Second",
+    "file": "MSFT-Q2.html",
+    "url": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q2",
+    "sourcePage": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q2",
+    "sha256": "e1b39df8bdb80fca6d894344821fd65eca44d78ba8cdc193ff945d3686258fcd",
+    "mime": "text/html",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "MSFT",
+    "date": "2026-04-29",
+    "label": "Q3 FY26",
+    "quarterWord": "Third",
+    "file": "MSFT-Q3.html",
+    "url": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q3",
+    "sourcePage": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q3",
+    "sha256": "84b3fc03976109a503ada8fc5b8a5ace053981f7fad27751eaa4a76415585d57",
+    "mime": "text/html",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "MSFT",
+    "date": "2026-07-29",
+    "label": "Q4 FY26",
+    "quarterWord": "Fourth",
+    "file": "MSFT-Q4.html",
+    "url": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q4",
+    "sourcePage": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q4",
+    "sha256": "b542fd98fc0eb401f09a64c1883cccfbde1e395e777ce5b6c146020a4c5043a7",
+    "mime": "text/html",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "GOOGL",
+    "date": "2026-04-29",
+    "label": "Q1 FY26",
+    "quarterWord": "First",
+    "file": "GOOGL-2026Q1.pdf",
+    "url": "https://s206.q4cdn.com/479360582/files/doc_events/2026/Apr/29/Alphabet-2026_Q1_Earnings_Transcript.pdf",
+    "sourcePage": "https://abc.xyz/investor/events/event-details/2026/2026-Q1-Earnings-Call-2026-nW8kCrBAKS/default.aspx",
+    "sha256": "a484838849e73a4d13dd34a4f4d0e3b030b4543839ad8808f34b64af706242e2",
+    "mime": "application/pdf",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "GOOGL",
+    "date": "2026-02-04",
+    "label": "Q4 FY25",
+    "quarterWord": "Fourth",
+    "file": "GOOGL-2025Q4.pdf",
+    "url": "https://s206.q4cdn.com/479360582/files/doc_events/2026/Feb/04/2025_Q4_Earnings_Transcript.pdf",
+    "sourcePage": "https://abc.xyz/investor/events/event-details/2026/2025-Q4-Earnings-Call-2026-Dr_C033hS6/default.aspx",
+    "sha256": "8e3678d5138e30a0ee9065cdf54ae790937b9e27194ffae223a0c438c4928cd5",
+    "mime": "application/pdf",
+    "checkedOn": "2026-11-27"
+  },
+  {
+    "ticker": "GOOGL",
+    "date": "2025-10-29",
+    "label": "Q3 FY25",
+    "quarterWord": "Third",
+    "file": "GOOGL-2025Q3.pdf",
+    "url": "https://s206.q4cdn.com/479360582/files/doc_events/2025/Oct/29/2025_Q3_Earnings_Transcript.pdf",
+    "sourcePage": "https://abc.xyz/investor/events/event-details/2025/2025-Q3-Earnings-Call-2025-4OI4Bac_Q9/",
+    "sha256": "2f7b5b7f2eacf19e31f86689780f095e8116be0cb8683cb65a6303243e432b37",
+    "mime": "application/pdf",
+    "checkedOn": "2026-11-27"
+  }
+]

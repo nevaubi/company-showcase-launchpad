@@ -71,6 +71,7 @@ describe("implied moves", () => {
   });
   it("gives nothing for a report already past or beyond the listed expiries", () => {
     expect(earningsImpliedMove(term, "2026-11-10", "2026-11-16")).toBeNull();
+    expect(earningsImpliedMove(term, "2026-11-16", "2026-11-16")).toBeNull();
     expect(earningsImpliedMove(term, "2027-03-01", "2026-11-16")).toBeNull();
   });
   it("reads the move by a horizon off the next expiry at or after it", () => {

@@ -41,6 +41,8 @@ export interface TranscriptRef {
   /** Date in the publisher URL, which can be days after the call. */
   publishedDate?: string;
   dateBasis?: "event" | "published";
+  /** Investor-relations source confirming the call date independently of publication. */
+  eventSourceUrl?: string;
   contentVersion?: string;
   archiveKind?: "transcript" | "remarks";
   url: string;
@@ -48,7 +50,7 @@ export interface TranscriptRef {
   quarter: string | null;
   fq: number | null;
   fy: number | null;
-  /** Call date (YYYY-MM-DD) from the page URL. */
+  /** Confirmed event date, or the publisher date when an event date is unavailable. */
   date: string | null;
 }
 

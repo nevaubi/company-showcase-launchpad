@@ -2,6 +2,8 @@
 // data service as estimates/{T}.json: Yahoo Finance consensus by fiscal period with our own daily snapshots,
 // Benzinga analyst actions, ratings and price targets ("Powered by Benzinga Data"), provider EPS surprises
 // with SEC GAAP EPS alongside, and company guidance quoted from earnings releases.
+import type { Estimates } from "./core";
+import { forecastRange } from "./range-quality";
 import { queryOptions } from "@tanstack/react-query";
 import { partnerFile } from "@/lib/data";
 
@@ -24,6 +26,16 @@ export interface ConsensusPeriod {
   revenue: ConsensusRange;
   growth?: number | null;
 }
+/** Some bundled feeds omit all forecast fields when a contributor count is missing. Expose a
+ * separately dated observation only for the same issuer, period type and exact fiscal endpoint. */
+export function supplementalForecast(ticker: string, p: ConsensusPeriod, metric: "eps" | "revenue", native?: Estimates | null) {
+  const r = p[metric];
+  if (!native || native.ticker !== ticker || !p.end || !native.asOf || r.avg != null || r.low != null || r.high != null) return null;
+  const row = native.periods.find((s) => s.code === p.code && s.endDate === p.end)?.[metric];
+  if (!row || (row.analysts != null && row.analysts !== 0) || row.avg == null || row.avg === 0 || !Number.isFinite(row.avg)) return null;
+  return { raw: row, date: native.asOf };
+}
+
 export interface Snapshot {
   as_of: string;
   at?: string;
@@ -46,7 +58,8 @@ export interface Snapshot {
 export function fiscalEpsHistory(snapshots: Snapshot[], code: PeriodCode, end: string) {
   return snapshots.flatMap((snap) => {
     const matches = Object.entries(snap.p).filter(([key, row]) =>
-      key.endsWith(code.slice(-1)) && row?.end === end && row.eps != null && Number.isFinite(row.eps),
+      key.endsWith(code.slice(-1)) && row?.end === end &&
+      forecastRange({ avg: row.eps, low: row.eps_lo, high: row.eps_hi }, row.eps_n).mean != null,
     );
     if (matches.length !== 1) return [];
     const reading = matches[0][1]!;

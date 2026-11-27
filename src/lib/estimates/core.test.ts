@@ -55,3 +55,15 @@ describe("period labels", () => {
     expect(q0.eps.growth).toBeCloseTo(0.0211, 3);
   });
 });
+
+
+it("distinguishes profit transitions from growth on a positive base", async () => {
+  const { consensusChange } = await import("./core");
+  expect(consensusChange(1, -2, "eps")?.text).toBe("To profit");
+  expect(consensusChange(-2, 1, "eps")?.text).toBe("To loss");
+  expect(consensusChange(-0.5, -1, "eps")).toEqual({ text: "Loss narrows", direction: 1 });
+  expect(consensusChange(-3, -1, "eps")?.text).toBe("Loss widens");
+  expect(consensusChange(120, 100, "revenue")?.text).toBe("+20.0%");
+  expect(consensusChange(120, 0, "revenue")).toBeNull();
+  expect(consensusChange(null, 2, "eps")).toBeNull();
+});

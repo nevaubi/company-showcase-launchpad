@@ -35,6 +35,8 @@ const ret = (bars: Bar[], from: number, to: number) =>
 
 export interface Reaction {
   date: string;
+  /** Observed session whose close completes this reaction. */
+  endDate?: string;
   accn: string;
   doc: string;
   /** Close before the release → close on the day after (covers pre-market and after-hours releases). */
@@ -104,6 +106,7 @@ export function earningsReactions(bars: Bar[], releases: { filed: string; accn: 
     const dvol = sd(daily);
     out.push({
       date: d,
+      endDate: bars[end][0],
       accn: r.accn,
       doc: r.doc,
       move,
