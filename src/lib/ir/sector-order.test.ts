@@ -67,3 +67,22 @@ describe("sections of real documents", () => {
     expect(missingStatements(secs, "technology")).toEqual([]);
   });
 });
+
+describe("bank headline measures under the names banks print them", () => {
+  it("reads Bank of America's curly apostrophes and net interest yield, and JPMorgan's net yield", () => {
+    // Labels as stored for BAC's and JPM's 3Q26 supplements.
+    const labels = [
+      "Return on average common shareholders’ equity",
+      "Return on average tangible common shareholders’ equity",
+      "Net interest yield",
+      "NET YIELD ON INTEREST-EARNING ASSETS",
+    ];
+    const p = { series: labels.map((label, i) => ({ k: `k${i}`, label })) } as unknown as IrPayload;
+    const missing = missingHeadlines(p, [{ keys: labels.map((_, i) => `k${i}`), group: "main" }], "bank");
+    expect(missing).not.toContain("Return on equity");
+    expect(missing).not.toContain("Return on tangible common equity");
+    expect(missing).not.toContain("Net interest margin");
+    const jpm = missingHeadlines(p, [{ keys: ["k3"], group: "main" }], "bank");
+    expect(jpm).not.toContain("Net interest margin");
+  });
+});

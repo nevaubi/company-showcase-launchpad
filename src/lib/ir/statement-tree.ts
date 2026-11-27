@@ -126,6 +126,13 @@ export function shapeRows(
     const j = order.find((x) => !reaches(x, i));
     if (j != null) up.set(i, j);
   }
+  // A stored parent printed above its parts heads them only when their figures add up to it: a figure row
+  // followed by its adjustment is not their total (Walmart's "As reported" over "Currency exchange rate
+  // fluctuations", both parts of the constant-currency line below them).
+  const fromAbove = new Map<number, number[]>();
+  for (const [i, j] of up) if (j < i) fromAbove.set(j, [...(fromAbove.get(j) ?? []), i]);
+  for (const [j, kids] of fromAbove)
+    if (!addsUp(line(j), kids.map(line), cells, byKey.get(line(j).ks[0])?.unit)) for (const i of kids) up.delete(i);
   // Parts a total lost in the build, from its own block.
   for (const t of lines) {
     const tr = line(t);

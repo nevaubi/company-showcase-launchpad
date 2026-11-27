@@ -19,7 +19,7 @@ import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 import { holdSuspects } from "@/lib/ir/suspect";
 import { splitTrailing, trailingLine } from "@/lib/ir/ttm";
 
-export const TIDY_VERSION = 12;
+export const TIDY_VERSION = 13;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -1582,11 +1582,40 @@ function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[])
   return { groups: [...made, ...left], checks: [...kept, ...newChecks] };
 }
 
+/**
+ * Figures an earlier tidy held as suspect go back to their cells before the pass (where the cell is still
+ * empty), so `holdSuspects` decides them again under the current rules: a stored payload keeps no hold a
+ * rule no longer makes (verb-11, lead-01). Other holds stay.
+ */
+function releaseSuspects(p: IrPayload): IrPayload {
+  if (!p.series.some((s) => s.held && Object.values(s.held).some((m) => Object.values(m ?? {}).some((c) => c.w === "suspect")))) return p;
+  const series = p.series.map((s) => {
+    if (!s.held) return s;
+    const next: PayloadSeries = { ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) };
+    const held: NonNullable<PayloadSeries["held"]> = {};
+    for (const [k, m] of Object.entries(s.held) as [keyof NonNullable<PayloadSeries["held"]>, Record<string, PayloadCell>][]) {
+      const into = k === "q" ? next.q : k === "y" ? next.y : (next.mo ??= {});
+      const keep: Record<string, PayloadCell> = {};
+      for (const [e, c] of Object.entries(m ?? {})) {
+        if (c.w === "suspect" && !into[e]) {
+          const { w: _w, why: _why, ...cell } = c;
+          into[e] = cell;
+        } else keep[e] = c;
+      }
+      if (Object.keys(keep).length) held[k] = keep;
+    }
+    if (Object.keys(held).length) next.held = held;
+    else delete next.held;
+    return next;
+  });
+  return { ...p, series };
+}
+
 export function tidyPayload(p0: IrPayload, opts: { log?: string[] } = {}): IrPayload {
   if (p0.tidy === TIDY_VERSION && !opts.log) return p0;
   // A quarter printed under two dates a week apart (52/53-week years) becomes one column first.
   // Trailing-twelve-month figures leave the quarter and year columns first (ttm.ts, review p3-ir H1).
-  const p = splitTrailing(mergeTwinEnds(p0));
+  const p = splitTrailing(mergeTwinEnds(releaseSuspects(p0)));
   const series = p.series.map((s) => ({ ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) }));
   const out: IrPayload = { ...p, series, groups: p.groups.map((g) => ({ ...g, t: undefined, rows: [...g.rows] })), checks: p.checks.map((x) => ({ ...x })) };
   const c: Ctx = { p: out, byKey: new Map(series.map((s) => [s.k, s])), alias: new Map(Object.entries(p.alias ?? {})), removed: new Set(), kids: new Map(), renamed: new Map(), touched: new Set(), home: new Map(), log: opts.log };

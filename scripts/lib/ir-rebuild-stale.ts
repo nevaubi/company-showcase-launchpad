@@ -58,14 +58,31 @@ export function rebuildSettings(env: Record<string, string | undefined>): Rebuil
 export interface SeriesRow {
   ticker: string;
   build: unknown;
+  /** `stats->quality->fill` (waiting, pass, at), when the lane selects it */
+  fill?: unknown;
 }
 
-/** Tickers whose stored stats lack the current build format (missing, older, or not a number). */
-export function staleTickers(rows: readonly SeriesRow[], format: number): string[] {
+/** Extra rebuilds of a company whose table fill left history documents waiting: at most this many in a row, */
+export const FILL_PASSES = 8;
+/** and at most one an hour. */
+export const FILL_PASS_GAP_MS = 3_600_000;
+
+/**
+ * Tickers whose stored stats lack the current build format (missing, older, or not a number), and, with `nowMs`,
+ * those whose table fill left documents waiting (history not yet read within one rebuild's downloads), at most
+ * once an hour and `FILL_PASSES` times in a row (the count is the payload's own `fill.pass`, so it cannot loop).
+ */
+export function staleTickers(rows: readonly SeriesRow[], format: number, nowMs?: number): string[] {
   const out = new Set<string>();
   for (const r of rows) {
     const b = typeof r.build === "number" ? r.build : typeof r.build === "string" ? Number(r.build) : NaN;
     if (!(Number.isFinite(b) && b >= format)) out.add(r.ticker);
+    else if (nowMs != null && r.fill && typeof r.fill === "object") {
+      const f = r.fill as { waiting?: unknown; pass?: unknown; at?: unknown };
+      const at = typeof f.at === "string" ? Date.parse(f.at) : NaN;
+      if (Number(f.waiting ?? 0) > 0 && Number(f.pass ?? 0) < FILL_PASSES && Number.isFinite(at) && nowMs - at >= FILL_PASS_GAP_MS)
+        out.add(r.ticker);
+    }
   }
   return [...out];
 }

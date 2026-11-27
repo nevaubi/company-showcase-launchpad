@@ -1,5 +1,6 @@
 // Compact, precomputed IR series payload stored per company (ir_company_series) and sent to the
 // IR data page. Pure: built by the pipeline scripts and by the server after new extractions.
+import type { PayloadBudget } from "@/lib/ir/payload-budget";
 import { tidyPayload } from "@/lib/ir/tidy";
 import {
   buildIrSeries,
@@ -133,7 +134,7 @@ export type PayloadAt = [number, number, number] | [number, number, number, Prin
  * fill conflicts and `stats.quality`. A stored payload with a lower `build` (or none) still lays out, with the
  * rows and figures of its own build: the worker should rebuild it.
  */
-export const BUILD_FORMAT = 4;
+export const BUILD_FORMAT = 5;
 
 /** Whether a stored payload predates the current build format (the worker rebuilds such companies first). */
 export const needsRebuild = (p: Pick<IrPayload, "build">) => (p.build ?? 1) < BUILD_FORMAT;
@@ -211,6 +212,10 @@ export interface PayloadFillConflict {
  */
 export interface IrQuality {
   v: 2;
+  /** the rebuild's document plan (doc-plan.ts): documents stored, loaded, left out by reason */
+  plan?: { stored: number; loaded: number; left: Partial<Record<string, number>> };
+  /** the payload budget (payload-budget.ts) */
+  budget?: PayloadBudget;
   sections: number;
   mainSections: number;
   mainDoc: { filed: string | null; kind: string | null } | null;
@@ -243,6 +248,12 @@ export interface IrQuality {
     moved: number;
     /** stored money figures given their table's printed scale */
     scaled?: number;
+    /** documents chosen but left for a later rebuild (history not yet read) */
+    waiting?: number;
+    /** rebuilds in a row that left documents waiting (the stale lane stops after 8) */
+    pass?: number;
+    /** when this rebuild ran (ISO time) */
+    at?: string;
   };
   dupLabels: number;
   mixedScale: number;

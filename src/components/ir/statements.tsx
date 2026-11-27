@@ -27,6 +27,7 @@ import {
   type ShownRow,
 } from "@/components/ir/statement-section";
 import { IR } from "@/components/ir/typography";
+import { filterOptions, missingNote, sectionFilter } from "@/components/ir/statement-nav";
 import { basisTag, isBlank, isRatioLine, notePrinted, stripes, totalKinds } from "@/components/ir/table-style";
 import type { VizLine } from "@/components/ir/viz-slots";
 import { useSource } from "@/components/source/source-context";
@@ -53,7 +54,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { coverageOf } from "@/lib/coverage";
 import { useCompany } from "@/lib/data";
 import { downloadBlob, fetchLogo, slug } from "@/lib/export/xlsx-theme";
-import { DIMENSIONS, inDimension, periodLong } from "@/lib/ir/display";
+import { inDimension, periodLong } from "@/lib/ir/display";
+import { jumpGroups, missingHeadlines, missingStatements, sectorOf } from "@/lib/ir/sector-order";
 import type {
   IrPayload,
   PayloadCell,
@@ -157,6 +159,7 @@ function cellTitle(
     `${lineLabel(s)}, ${periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m)}`,
     held ? `Held back: ${c.why ?? "its unit is contradicted by the documents"}` : null,
     c.f ? `Calculated: ${c.f.formula}` : c.x ? `Printed as “${c.x}”` : null,
+    !c.f && c.how === "printed" ? "Read from the document's own table" : null,
     doc ? `In the ${kind}${doc.filed ? ` filed ${doc.filed}` : ""}` : null,
     c.alt
       ? `${c.alt.kind === "restated" ? "An earlier" : "Another"} document prints ${c.alt.v.toLocaleString("en-US")} (full units)`
@@ -191,8 +194,11 @@ function sectionView(
     fy: ReturnType<typeof fiscalCalendar>;
   },
 ): SectionView | null {
+  // A chip selects whole printed tables by their kind; a section without one (the text figures) by its lines.
+  const secFilter = sectionFilter(sec);
+  if (o.dim !== "all" && secFilter && secFilter !== o.dim) return null;
   const dimOk = (s: PayloadSeries) =>
-    inDimension({ cat: s.cat, met: s.met } as PayloadGroup, o.dim);
+    !!secFilter || inDimension({ cat: s.cat, met: s.met } as PayloadGroup, o.dim);
   const match = o.q ? (s: PayloadSeries) => s.label.toLowerCase().includes(o.q) : undefined;
   const { rows, hidden } = visibleRows(sec, byKey, {
     cut: o.cut,
@@ -233,9 +239,11 @@ function sectionView(
             kind: "line" as const,
             depth: r.depth,
             total: r.total,
-            // printed marks, once the section rows carry them (finding irstyle-01)
-            bold: (r as { bold?: boolean }).bold,
-            rule: (r as { rule?: "single" | "double" }).rule,
+            // printed marks of the anchor table (build format 3)
+            bold: r.bold,
+            rule: r.rule,
+            up: r.up != null && rows.includes(sec.rows[r.up]) ? rows.indexOf(sec.rows[r.up]) : undefined,
+            old: r.old,
           }
         : { kind: r.kind },
     ),
@@ -292,6 +300,7 @@ function sectionView(
       mark: suffix,
       // a money line printed in dollars inside a table in millions is a per-share line
       ratio: isRatioLine(s.unit, s.unit === "usd" && div === 1 && sec.div > 1),
+      old: r.old,
       tag:
         (r as { basis?: string }).basis === "restated"
           ? "Restated"
@@ -424,11 +433,29 @@ export function IrStatements({
     for (const c of payload.checks) m.set(`${c.k}|${c.kind === "fy" ? "y" : "q"}|${c.e}`, c);
     return m;
   }, [payload]);
+  const cov = coverageOf(ticker);
+  const prof = company.data?.profile;
+  const sectorText = cov?.sector ?? prof?.sector ?? "";
+  const industryText = [cov?.industry ?? prof?.industry, prof?.sicDescription].filter(Boolean).join(" ");
+  const sector = useMemo(() => sectorOf(sectorText, industryText), [sectorText, industryText]);
   const sections = useMemo(() => {
-    const secs = assembleStatements(payload);
+    const secs = assembleStatements(payload, { sector: sectorText, industry: industryText });
     const text = textSection(payload, secs);
     return text ? [...secs, text] : secs;
-  }, [payload]);
+  }, [payload, sectorText, industryText]);
+  const chips = useMemo(() => filterOptions(sections), [sections]);
+  // A chip the company's tables no longer fill (another company, a rebuilt payload) falls back to all.
+  useEffect(() => {
+    if (dim !== "all" && !chips.some((c) => c.v === dim)) setDim("all");
+  }, [chips, dim]);
+  const absent = useMemo(
+    () =>
+      missingNote(
+        missingStatements(sections, sector),
+        missingHeadlines(payload, sections, sector),
+      ),
+    [sections, sector, payload],
+  );
   const grids = useMemo(() => periodGrids(payload), [payload]);
   const fy = useMemo(() => fiscalCalendar(payload), [payload]);
   const cut = useMemo(() => (show === "cur" ? currentCut(payload) : undefined), [payload, show]);
@@ -747,26 +774,38 @@ export function IrStatements({
         className="sticky top-[var(--sticky-top,3.5rem)] z-30 flex flex-wrap items-center gap-2 border-b bg-card px-4 py-2"
       >
         {/* One line on a phone too (it scrolls sideways), so the sticky bar stays two rows at most. */}
-        <div className="no-scrollbar min-w-0 max-w-full overflow-x-auto">
+        <div className="no-scrollbar min-w-0 max-w-full overflow-x-auto max-sm:py-1">
           <Segmented
             label="Line type"
             size="xs"
-            className="max-w-none flex-nowrap"
+            className="irt-hits max-w-none flex-nowrap"
             value={dim}
             onChange={setDim}
-            options={DIMENSIONS.map((d) => ({ v: d.v, l: d.l }))}
+            options={chips.map((d) => ({
+              v: d.v,
+              l: d.l,
+              title: d.v === "all" ? undefined : `${d.n} table${d.n === 1 ? "" : "s"}`,
+            }))}
           />
         </div>
         <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
           <Select value="" onValueChange={jump}>
-            <SelectTrigger className="h-8 w-full text-xs sm:w-56" aria-label="Go to a section">
+            <SelectTrigger className="h-10 w-full text-xs sm:h-8 sm:w-56" aria-label="Go to a section">
               <SelectValue placeholder="Go to a section" />
             </SelectTrigger>
             <SelectContent className="max-h-80">
-              {front.map((v) => (
-                <SelectItem key={v.sec.id} value={v.sec.id} className="text-xs">
-                  {v.sec.title}
-                </SelectItem>
+              {jumpGroups(
+                front.map((v) => v.sec),
+                sector,
+              ).map((g) => (
+                <SelectGroup key={g.kind}>
+                  <SelectLabel className="text-[11px]">{g.label}</SelectLabel>
+                  {g.sections.map((sec) => (
+                    <SelectItem key={sec.id} value={sec.id} className="text-xs">
+                      {sec.title}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
               {more.length > 0 && (
                 <SelectGroup>
@@ -786,7 +825,7 @@ export function IrStatements({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Find a line, e.g. card income"
-              className="h-8 pl-7 text-xs"
+              className="h-10 pl-7 text-xs sm:h-8"
               aria-label="Find a line"
             />
           </div>
@@ -845,6 +884,10 @@ export function IrStatements({
               negatives.
             </p>
             <p>
+              Rows, their names, indents and bold totals are read from the document's own tables,
+              figure by figure, so every printed figure opens the cell it came from.
+            </p>
+            <p>
               A small tick marks a total whose printed parts add up to it. An amber dot marks a
               figure that fails a check, a hollow ring one held back or printed differently
               elsewhere; the checks panel lists them with the numbers.
@@ -859,6 +902,11 @@ export function IrStatements({
           </TooltipContent>
         </Tooltip>
       </div>
+      {absent && (
+        <p data-statements-absent className={cn("border-b px-4 py-1.5", IR.caption)}>
+          {absent}
+        </p>
+      )}
       {!views.out.length ? (
         <p className="p-4 text-[13px] text-muted-foreground">
           {q ? `No lines match “${query}”.` : "Nothing in this view for the selected periods."}
@@ -888,7 +936,7 @@ export function IrStatements({
                 aria-expanded={moreShown}
                 onClick={() => setMoreOpen((o) => !o)}
                 disabled={!!q}
-                className="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                className="inline-flex h-10 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors sm:h-7 duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
               >
                 <ChevronDown
                   aria-hidden

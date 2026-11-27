@@ -23,6 +23,14 @@ import aaplEps from "@/lib/ir/fixtures/statements/aapl-eps.json";
 import dellRev from "@/lib/ir/fixtures/statements/dell-rev.json";
 import dellNi from "@/lib/ir/fixtures/statements/dell-ni.json";
 import wfc from "@/lib/ir/fixtures/statements/wfc-seg.json";
+import crmMain from "@/lib/ir/fixtures/statements/crm-main.json";
+import koTwo from "@/lib/ir/fixtures/statements/ko-two.json";
+import jpmPref from "@/lib/ir/fixtures/statements/jpm-pref.json";
+import wmtCc from "@/lib/ir/fixtures/statements/wmt-cc.json";
+import msftSeg from "@/lib/ir/fixtures/statements/msft-seg.json";
+import intcSeg7 from "@/lib/ir/fixtures/statements/intc-seg7.json";
+import nowRes from "@/lib/ir/fixtures/statements/now-res.json";
+import { tableCaptions } from "@/lib/ir/table-captions";
 import { buildPayload, type IrPayload, type PayloadSeries } from "@/lib/ir/payload";
 import type { IrFact } from "@/lib/ir/kpis";
 import type { TableCaption } from "@/lib/ir/table-captions";
@@ -381,5 +389,134 @@ describe("vera-09 WFC: segment pages printing the same rows under their own titl
     const nii = series.filter((s) => s.label === "Net interest income").map((s) => s.cells["2026-09-30"]?.v);
     expect(nii).toContain(2134e6);
     expect(nii.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("verb-16 CRM: a slide image filed weeks later never becomes the main document", () => {
+  it("the release's statement of operations leads the page", async () => {
+    const p = await payloadOf(crmMain);
+    const secs = assembleStatements(p);
+    expect(p.docs[secs[0].doc].kind).toBe("press-release");
+    expect(secs[0].group).toBe("main");
+    expect(secs.filter((s) => s.group === "main").every((s) => !s.id.includes(":p"))).toBe(true);
+  });
+});
+
+describe("verb-14 KO: a matrix row's revenue never takes another column group's measure", () => {
+  it("one row holds one measure: Latin America operating income never joins income before income taxes", async () => {
+    const p = await payloadOf(koTwo);
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    let rows = 0;
+    for (const s of assembleStatements(p))
+      for (const r of s.rows) {
+        if (r.kind !== "line") continue;
+        const mets = new Set(r.ks.map((k) => by.get(k)!.met));
+        expect([rowLabel(r, by), [...mets]]).toEqual([rowLabel(r, by), [by.get(r.ks[0])!.met]]);
+        rows++;
+      }
+    expect(rows).toBeGreaterThan(40);
+  });
+  it("EMEA revenue for Q3 2024 is the revenue column, not income before taxes", async () => {
+    const p = await payloadOf(koTwo);
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    for (const s of assembleStatements(p))
+      for (const r of s.rows)
+        if (r.kind === "line" && /^(EMEA|Europe, Middle East & Africa)(: revenue)?$/.test(rowLabel(r, by))) {
+          const v = rowCells(r.ks, by, "q", r.at).cells["2024-09-27"]?.v;
+          if (v != null && by.get(r.ks[0])!.met === "revenue") expect(v).toBe(2019e6);
+        }
+  });
+});
+
+describe("lead-01 JPM: a cell filled from the print is never held as another series' figure", () => {
+  it("Preferred stock keeps 21,040 at 30 Jun 2026 beside the average balance's 21,040 at 30 Sep", async () => {
+    const p = await payloadOf(jpmPref);
+    const s = p.series.find((x) => x.k === "statement|other|preferred stock|usd|")!;
+    expect(s.q["2026-06-30"]?.v).toBe(21040e6);
+    expect(s.q["2026-06-30"]?.how).toBe("printed");
+    expect(Object.keys(s.held?.q ?? {})).toEqual([]);
+  });
+});
+
+describe("verb-15 WMT: a row printing two unnamed column groups shows no figure rather than a mix", () => {
+  it("constant-currency rows of International and Consolidated show neither group's figure, and no row is a total over its adjustment", async () => {
+    const p = await payloadOf(wmtCc);
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    const s = assembleStatements(p).find((x) => x.group === "main")!;
+    const lines = s.rows.filter((r): r is Line => r.kind === "line");
+    const shown = (label: RegExp) => {
+      const r = lines.find((x) => label.test(rowLabel(x, by)))!;
+      return Object.values(rowCells(r.ks, by, "q", r.at).cells).map((c) => c.v);
+    };
+    expect(shown(/^Net sales \(cc\)$/)).toEqual([]);
+    expect(shown(/^Total revenues: as reported$/)).toEqual([]);
+    expect(shown(/^Operating income \(cc\)$/)).toEqual([]);
+    // One figure printed for both groups stays: (1,234) under both columns.
+    expect(shown(/^Total revenues: currency exchange rate fluctuations$/)).toEqual([-1234e6]);
+    expect(lines.every((r) => r.depth === 0 && !r.total)).toBe(true);
+  });
+});
+
+describe("audd-03 MSFT: a segment heading over a blank row heads its block", () => {
+  it("draws Agents and Infra, Devices and Consumer and Total, each over its own Revenue row", async () => {
+    const cap = { ...tableCaptions(msftSeg.html, "Microsoft")[0], t: 8 };
+    const p = await payloadOf({ ...msftSeg, captions: { [msftSeg.facts[0].document_id]: [cap] } });
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    const s = assembleStatements(p)[0];
+    const seq = s.rows.filter((r) => r.kind !== "gap").map((r) => (r.kind === "head" ? `# ${r.text}` : r.kind === "line" ? rowLabel(r, by) : ""));
+    for (const h of ["Agents and Infra", "Devices and Consumer", "Total"]) expect(seq[seq.indexOf(`# ${h}`) + 1]).toBe("Revenue");
+    expect(seq.filter((x) => x === "Revenue").length).toBe(3);
+  });
+});
+
+describe("audb-08 INTC: segment matrix rows in printed column order, older releases' rows joined", () => {
+  it("CCPG, DCAI, then Total Intel Products; DCAI revenue carries the quarters printed as \"DCAI\"", () => {
+    const p = intcSeg7 as unknown as IrPayload;
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    const s = assembleStatements(p).find((x) => x.id === "0:7")!;
+    const names = s.rows.filter((r): r is Line => r.kind === "line").map((r) => rowLabel(r, by));
+    expect(names.slice(0, 3)).toEqual(["CCPG: Revenue", "DCAI: Revenue", "Total Intel Products: Revenue"]);
+    const dcai = s.rows.find((r): r is Line => r.kind === "line" && rowLabel(r, by) === "DCAI: Revenue")!;
+    const c = rowCells(dcai.ks, by, "q", dcai.at).cells;
+    expect(c["2026-09-26"]?.v).toBe(7318e6);
+    expect(c["2026-06-27"]?.v).toBe(6262e6);
+    expect(Object.keys(c).length).toBeGreaterThanOrEqual(10);
+  });
+});
+
+describe("audd-09 NOW: printed names without the column heads above them; filled rows head no basis block", () => {
+  it("names cRPO as printed and draws no breakdown name over the cash-flow rows", () => {
+    const p = nowRes as unknown as IrPayload;
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    const s = assembleStatements(p).find((x) => x.id === "12:4")!;
+    const names = s.rows.filter((r): r is Line => r.kind === "line").map((r) => rowLabel(r, by));
+    expect(names).toContain("cRPO");
+    expect(names.some((n) => /Amount \(\$/.test(n))).toBe(false);
+    const heads = s.rows.filter((r) => r.kind === "head").map((r) => (r.kind === "head" ? r.text : ""));
+    expect(heads.some((h) => /gross profit by service/i.test(h))).toBe(false);
+    expect(names.indexOf("Free cash flow")).toBeGreaterThan(names.indexOf("cRPO"));
+  });
+});
+
+describe("verb-11: a stored payload's suspect holds are decided again on load", () => {
+  it("a June 2026 preferred stock balance held by the old rule is shown after the re-tidy", async () => {
+    const { tidyPayload, TIDY_VERSION } = await import("@/lib/ir/tidy");
+    const p = await payloadOf(jpmPref);
+    const k = "statement|other|preferred stock|usd|";
+    // The payload as a build before the fix stored it: the cell held as a column read under the wrong period.
+    const stored: IrPayload = {
+      ...p,
+      tidy: 12,
+      series: p.series.map((x) => {
+        if (x.k !== k) return x;
+        const { "2026-06-30": cell, ...q } = x.q;
+        return { ...x, q, held: { q: { "2026-06-30": { ...cell, w: "suspect" as const, why: "The same document prints this figure for the period ending 2026-09-30" } } } };
+      }),
+    };
+    expect(TIDY_VERSION).toBeGreaterThan(12);
+    const out = tidyPayload(stored);
+    const s = out.series.find((x) => x.k === k)!;
+    expect(s.q["2026-06-30"]?.v).toBe(21040e6);
+    expect(s.held?.q?.["2026-06-30"]).toBeUndefined();
   });
 });

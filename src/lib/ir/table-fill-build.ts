@@ -14,7 +14,8 @@ import {
   type DocFill,
   type MissReason,
 } from "@/lib/ir/table-fill";
-import { tableCaptions, type TableCaption } from "@/lib/ir/table-captions";
+import type { TableCaption } from "@/lib/ir/table-captions";
+import { reduceDocument, type FillDoc } from "@/lib/ir/table-fill-cache";
 
 /** A stored document's row: filing date, stored kind, title. */
 export interface DocMeta {
@@ -64,8 +65,12 @@ export function withDocMeta(p: IrPayload, meta: Map<string, DocMeta>, run?: Fill
   return changed ? { ...p, docs } : p;
 }
 
-/** Newest documents per company whose tables are filled (the anchor tables and their recent history). */
+/** Documents downloaded and parsed per rebuild when no reduced copy of them is stored yet. */
 export const FILL_DOCS = 12;
+/** Documents per company whose tables are filled: twelve quarters of releases, supplements and exhibits. */
+export const FILL_HISTORY_DOCS = 60;
+/** How far back from the newest document the fill reads (months): at least the last 12 quarters. */
+export const FILL_MONTHS = 37;
 
 export interface FillRun {
   /** stored facts plus the filled ones, for the build */
@@ -88,6 +93,14 @@ export interface FillRun {
   chosen: number;
   read: number;
   failed: number;
+  /** documents chosen but left for a later rebuild (no reduced copy yet and this rebuild's downloads spent) */
+  waiting: number;
+}
+
+/** The date `n` months before a date ("YYYY-MM-DD"). */
+export function monthsBefore(date: string, n: number): string {
+  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1 - n, Math.min(d, 28))).toISOString().slice(0, 10);
 }
 
 /** A stored table document by its document row: id, filing date, kind, title. */
@@ -100,7 +113,11 @@ export interface TableDoc extends DocMeta {
  * and the company's table documents by their rows (`rows`: releases, supplements and other HTML exhibits), read
  * even when no stored fact points into them.
  */
-export function fillDocs(facts: IrFact[], max = FILL_DOCS, rows: TableDoc[] = []): string[] {
+export function fillDocs(
+  facts: IrFact[],
+  max = FILL_HISTORY_DOCS,
+  rows: TableDoc[] = [],
+): string[] {
   const by = new Map<string, { filed: string; n: number }>();
   for (const f of facts) {
     if (!f.document_id || typeof (f.locator as { t?: unknown }).t !== "number") continue;
@@ -113,10 +130,27 @@ export function fillDocs(facts: IrFact[], max = FILL_DOCS, rows: TableDoc[] = []
     if (d) d.filed = d.filed || r.filed || "";
     else by.set(r.id, { filed: r.filed ?? "", n: -1 });
   }
-  return [...by.entries()]
-    .filter(([, d]) => d.n >= 2 || d.n === -1)
+  const kinds = new Map(rows.map((r) => [r.id, r.kind]));
+  for (const f of facts)
+    if (f.document_id && !kinds.has(f.document_id))
+      kinds.set(f.document_id, f.document_kind ?? null);
+  const live = [...by.entries()].filter(([, d]) => d.n >= 2 || d.n === -1);
+  const newest = live.reduce((m, [, d]) => (d.filed > m ? d.filed : m), "");
+  const back = newest ? monthsBefore(newest, FILL_MONTHS) : "";
+  // Newest quarter first; within a quarter releases and supplements before other exhibits, then newest filing.
+  const quarter = (d: string) =>
+    d.slice(0, 4) + String(Math.floor((Number(d.slice(5, 7)) - 1) / 3));
+  const tier = (id: string) =>
+    ["press-release", "supplement"].includes(kinds.get(id) ?? "") ? 0 : 1;
+  return live
+    .filter(([, d]) => !d.filed || d.filed >= back)
     .sort(
-      (a, b) => b[1].filed.localeCompare(a[1].filed) || b[1].n - a[1].n || a[0].localeCompare(b[0]),
+      (a, b) =>
+        quarter(b[1].filed).localeCompare(quarter(a[1].filed)) ||
+        tier(a[0]) - tier(b[0]) ||
+        b[1].filed.localeCompare(a[1].filed) ||
+        b[1].n - a[1].n ||
+        a[0].localeCompare(b[0]),
     )
     .slice(0, max)
     .map(([id]) => id);
@@ -128,7 +162,7 @@ export function fillDocs(facts: IrFact[], max = FILL_DOCS, rows: TableDoc[] = []
  */
 export async function fillCompany(
   facts: IrFact[],
-  read: (id: string) => Promise<string | null>,
+  read: (id: string) => Promise<string | FillDoc | "wait" | null>,
   opts: {
     maxDocs?: number;
     company?: string;
@@ -141,7 +175,7 @@ export async function fillCompany(
   // Facts a previous fill wrote are never inputs (the build is from stored facts only).
   const stored = facts.filter((f) => f.method !== FILL_METHOD);
   const rows = new Map((opts.docs ?? []).map((d) => [d.id, d]));
-  const ids = fillDocs(stored, opts.maxDocs ?? FILL_DOCS, opts.docs);
+  const ids = fillDocs(stored, opts.maxDocs ?? FILL_HISTORY_DOCS, opts.docs);
   const calendar = fiscalCalendar(stored, opts.reports);
   const docMeta = new Map<string, { filed: string | null; kind: string | null }>();
   const byDoc = new Map<string, IrFact[]>();
@@ -153,15 +187,22 @@ export async function fillCompany(
   const added: IrFact[] = [];
   let read_ = 0;
   let failed = 0;
+  let waiting = 0;
+  // One document at a time: its reduced grid is dropped once its fill is taken.
   for (const id of ids) {
-    const html = await read(id).catch(() => null);
-    if (!html) {
+    const got = await read(id).catch(() => null);
+    if (got === "wait") {
+      waiting++;
+      continue;
+    }
+    if (!got) {
       failed++;
       continue;
     }
+    const doc = typeof got === "string" ? reduceDocument(got, opts.company) : got;
     read_++;
-    texts.set(id, html.slice(0, 60_000));
-    const caps = tableCaptions(html, opts.company);
+    texts.set(id, doc.head);
+    const caps = doc.captions;
     captions.set(id, caps);
     const own = byDoc.get(id) ?? [];
     const row = rows.get(id);
@@ -170,7 +211,9 @@ export async function fillCompany(
     docMeta.set(id, { filed, kind: own[0]?.document_kind ?? row?.kind ?? null });
     const fill = fillDocument({
       doc: id,
-      html,
+      html: "",
+      grid: doc.grid,
+      zeroDash: doc.zeroDash,
       facts: own,
       captions: new Map(caps.map((c) => [c.t, { title: c.title, unit: c.unit }])),
       filed,
@@ -198,13 +241,14 @@ export async function fillCompany(
     chosen: ids.length,
     read: read_,
     failed,
+    waiting,
   };
 }
 
 /** Kinds of document whose tables the fill reads without a stored fact. */
 export const TABLE_DOC_KINDS = ["press-release", "supplement", "other"];
-/** How far back a document no fact points into is still read (months). */
-export const TABLE_DOC_MONTHS = 15;
+/** How far back a document no fact points into is still read (months): the fill's history depth. */
+export const TABLE_DOC_MONTHS = FILL_MONTHS;
 
 /** A document row as the store keeps it, for `tableDocRows`. */
 export interface StoredDocRow {
@@ -219,7 +263,7 @@ export interface StoredDocRow {
 
 /**
  * The company's table documents by their rows: releases, supplements and other exhibits stored as HTML, filed
- * within the last 15 months of `today`, within the reader's size bound, not marked "no tables" by the table
+ * within the last 37 months of `today` (`FILL_MONTHS`), within the reader's size bound, not marked "no tables" by the table
  * reader, and not refused; newest first.
  */
 export function tableDocRows(
@@ -350,6 +394,9 @@ export function qualityDoc(run: FillRun): string | null {
  *   written, shownCells (filled cells the payload shows in quarter, year or month columns), conflicts (stored fact
  *   text unlike the document at its own position), signs (stored positives printed as two-cell negatives, given
  *   the printed sign), moved (stored figures put under another column's period, moved to their column's period),
+ *   waiting (documents chosen but left for a later rebuild: no reduced copy stored yet and this rebuild's
+ *   downloads spent; the stale lane comes back while some wait, see scripts/lib/ir-rebuild-stale.ts),
+ *   pass and at (written by rebuild.server.ts: rebuilds in a row that left documents waiting, and when),
  *   scaled (stored money figures read as whole dollars in a table printing "in thousands" and the like, scaled).
  * - dupLabels: sections showing one row name twice; mixedScale: sections whose money lines are at two printed
  *   scales; orphanHeads: headings with no line under them before the next spacer or the end.
@@ -483,6 +530,7 @@ export function qualityOf(p: IrPayload, run?: FillRun): IrQuality {
       signs: run?.signs ?? 0,
       moved: run?.moved ?? 0,
       scaled: run?.scaled ?? 0,
+      waiting: run?.waiting ?? 0,
     },
     dupLabels,
     mixedScale,

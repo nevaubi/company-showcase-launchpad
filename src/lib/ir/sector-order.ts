@@ -196,10 +196,12 @@ export function jumpGroups<S extends Pick<Statement, "title" | "cat" | "group">>
 
 /** Measures a bank headlines in its supplement; each with the line names that print it. */
 const BANK_HEADLINES: [string, RegExp][] = [
-  ["Return on equity", /\breturn on (average )?(common )?(stockholders'?|shareholders'?)? ?equity\b|\broe\b/i],
-  ["Return on tangible common equity", /\breturn on (average )?tangible common equity\b|\brotce\b/i],
+  // Apostrophes as printed: straight or curly ("shareholders’ equity", Bank of America).
+  ["Return on equity", /\breturn on (average )?(common )?((stockholders|shareholders)['’]?)? ?equity\b|\broe\b/i],
+  ["Return on tangible common equity", /\breturn on (average )?tangible common ((stockholders|shareholders)['’]? )?equity\b|\brotce\b/i],
   ["CET1 ratio", /\b(cet1|common equity tier 1)\b.*\bratio\b|\bcet1\b/i],
-  ["Net interest margin", /\bnet interest margin\b|\bnim\b/i],
+  // Bank of America prints its margin as "Net interest yield", JPMorgan as "Net yield on (average) interest-earning assets".
+  ["Net interest margin", /\bnet interest (margin|yield)\b|\bnet yield on (average )?interest-earning assets\b|\bnim\b/i],
   ["Efficiency or overhead ratio", /\b(efficiency|overhead) ratio\b/i],
   ["Book value per share", /(?<!tangible )\bbook value per (common )?share\b/i],
   ["Tangible book value per share", /\btangible book value per (common )?share\b/i],

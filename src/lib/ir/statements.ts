@@ -235,9 +235,21 @@ function drafts(p: IrPayload): Draft[] {
   tables.sort((a, b) => (rank.get(a.d) ?? 0) - (rank.get(b.d) ?? 0) || tNum(a.t) - tNum(b.t));
   const out: Draft[] = [];
   const index = new Map<string, Draft[]>();
+  // Lines by printed name and measure too: the reader keys one printed row differently from one release to
+  // the next (Coca-Cola's segment revenue under "Revenue by operating segment" and "Net operating revenue"),
+  // so an older copy of a table is found by its names as well as by its keys.
+  const byKey0 = new Map(p.series.map((x) => [x.k, x]));
+  const nameKey = (k: string) => {
+    const x = byKey0.get(k);
+    return x ? `${x.unit}|${x.met}|${nameCore(lineLabel(x))}` : k;
+  };
+  const byName = new Map<string, Draft[]>();
   for (const t of tables) {
     // Printed order; lines printed on one row (a row of several column groups) in column order.
-    const colOf = (k: string, r: number) => t.col.get(`${k}|${r}`) ?? 0;
+    // A line whose figure here was stored under another identity takes its column from the same row of another
+    // table of the document (Intel's "Total Intel Products" revenue, stored from the prior-year matrix).
+    const colOf = (k: string, r: number) =>
+      t.col.get(`${k}|${r}`) ?? tables.find((o) => o !== t && o.d === t.d && o.col.has(`${k}|${r}`))?.col.get(`${k}|${r}`) ?? 0;
     const rows = [...t.rows.entries()].sort((a, b) => a[1] - b[1] || colOf(a[0], a[1]) - colOf(b[0], b[1])).map(([k]) => k);
     // The section sharing most lines with this table, among those with no copy from this document yet.
     const shared = new Map<Draft, number>();
@@ -256,10 +268,14 @@ function drafts(p: IrPayload): Draft[] {
       }
       return known >= 2;
     };
-    for (const k of rows)
-      for (const s of index.get(k) ?? [])
-        if (!s.docs.has(t.d) || (s.anchor.d === t.d && otherPeriods(s)))
-          shared.set(s, (shared.get(s) ?? 0) + 1);
+    for (const k of rows) {
+      const met = new Set<Draft>();
+      for (const s of [...(index.get(k) ?? []), ...(byName.get(nameKey(k)) ?? [])]) {
+        if (met.has(s)) continue;
+        met.add(s);
+        if (!s.docs.has(t.d) || (s.anchor.d === t.d && otherPeriods(s))) shared.set(s, (shared.get(s) ?? 0) + 1);
+      }
+    }
     let best: Draft | null = null;
     let n = 0;
     for (const [s, c] of shared)
@@ -303,6 +319,7 @@ function drafts(p: IrPayload): Draft[] {
         best.extraSet.add(k);
       }
       index.set(k, [...(index.get(k) ?? []), best]);
+      if (isAnchor) byName.set(nameKey(k), [...(byName.get(nameKey(k)) ?? []), best]);
     }
     // The anchor's second printings of a line, at their own place in its row order.
     if (isAnchor)
@@ -465,7 +482,16 @@ export function sameName(a: PayloadSeries, b: PayloadSeries, byKey: Map<string, 
   const nb = nameCore(lineLabel(b));
   if (na === nb) return true;
   const [long, short] = na.length > nb.length ? [na, nb] : [nb, na];
-  if (!short || !long.endsWith(` ${short}`)) return false;
+  if (!short) return false;
+  // One is the other followed by the measure its table is named after: Intel's matrix stores "CCPG — Revenue"
+  // in one release and "CCPG" in "Revenue by segment" in the next (same metric and unit, checked by callers).
+  if (long.startsWith(`${short} `)) {
+    const tail = long.slice(short.length + 1).trim();
+    const shortLine = na.length > nb.length ? b : a;
+    const bd = shortLine.bd ? nameCore(shortLine.bd) : "";
+    if (tail && a.met === b.met && (bd === tail || bd.startsWith(`${tail} `))) return true;
+  }
+  if (!long.endsWith(` ${short}`)) return false;
   const head = long.slice(0, long.length - short.length - 1).trim();
   const blocks = [a, b].flatMap((s) => {
     const par = s.parent ? byKey.get(s.parent) : undefined;
@@ -507,7 +533,13 @@ export function sameRows(
           g.ks.every((o) => {
             const b = byKey.get(o)!;
             // One printed row is one measure: never a cost line and a revenue line that share a slide's height.
-            return agree(b, s) && b.unit === s.unit && (b.met === s.met || sameName(b, s, byKey));
+            // A matrix row prints several measures under one name: a position join needs the same measure
+            // (a filled printed row, category "statement", carries none of its own).
+            return (
+              agree(b, s) &&
+              b.unit === s.unit &&
+              (b.met === s.met || ((b.cat === "statement" || s.cat === "statement") && sameName(b, s, byKey)))
+            );
           }),
       ) ??
       // By name only across documents: two rows of one document are two printed rows.
@@ -525,6 +557,7 @@ export function sameRows(
           sameName(o, s, byKey) &&
           o.unit === s.unit &&
           !!o.total === !!s.total &&
+          (o.met === s.met || o.cat === "statement" || s.cat === "statement") &&
           ![...docsIn(g.at)].some((d) => mine.has(d)) &&
           [...at].some((x) => [...g.at].some((y) => rowOfPlace(x) === rowOfPlace(y))) &&
           g.ks.every((k) => agree(byKey.get(k)!, s))
@@ -604,6 +637,17 @@ export function rowLabel(
   return `${r.wrap} ${/^[A-Z][a-z]/.test(name) && !/^[A-Z][a-z]+\s+[A-Z]/.test(name) ? name[0].toLowerCase() + name.slice(1) : name}`;
 }
 
+/** A row of column heads only ("Amount ($ billions) Year/Year Growth (%)"): its words are measure and change heads. */
+const COLUMN_HEAD = {
+  test: (x: string) => {
+    const words = x
+      .replace(/\([^)]*\)/g, " ")
+      .toLowerCase()
+      .split(/[\s/]+/)
+      .filter(Boolean);
+    return words.length > 0 && words.every((w) => /^(amount|margin|growth|change|year|quarter|y|q|yoy|qoq|%|percent|basis|points|bps|reported|actual|gaap|non-gaap)$/.test(w));
+  },
+};
 const MONTH_YEAR = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+(19|20)\d{2}\b/i;
 
 /** The printed layout irtables' build format 3 adds to a section table (`PayloadTable.rows`): [row, indent
@@ -801,7 +845,8 @@ function assembleSections(p: IrPayload): Statement[] {
     const onTable = !dr.anchor.t.startsWith("p");
     // A table printing one set of lines under two bases (reported and comparable): each block is headed by its
     // basis where the document's own heading was not kept.
-    const basisOfKey = (k: string) => basisOf(byKey.get(k)?.bd);
+    // A row filled from the print (category "statement") carries the table's name, not a basis of its own.
+    const basisOfKey = (k: string) => (byKey.get(k)?.cat === "statement" ? null : basisOf(byKey.get(k)?.bd));
     const bases = new Set(keys.map(basisOfKey).filter(Boolean));
     let lastBasis: string | null = null;
     const rows: StatementRow[] = [];
@@ -819,8 +864,12 @@ function assembleSections(p: IrPayload): Statement[] {
           if (h) between.push({ kind: "head", text: headText(h, keep), depth: 0, r: i });
           else if (blank.has(i) || !cap) {
             // A spacer band closes the headings above it: their rows are not in this section (the reader
-            // did not keep them), so they would head the wrong lines.
-            between.length = 0;
+            // did not keep them), so they would head the wrong lines. A spacer between a heading and the line it
+            // heads, with nothing else printed up to that line, keeps it (Microsoft's "Devices and Consumer", a
+            // blank row, then "Revenue").
+            const onlySpace = (x: number) => blank.has(x) || heads.has(x) || wraps.has(x);
+            const headsLine = !!cap && between.length > 0 && [...Array(r - i - 1).keys()].every((x) => onlySpace(i + 1 + x));
+            if (!headsLine) between.length = 0;
             gap = true;
           } else if (!wraps.has(i)) {
             // A printed row the reader did not keep: the headings above it head that row, not this line
@@ -878,7 +927,12 @@ function assembleSections(p: IrPayload): Statement[] {
         // with dates down the side names its rows "As of July 31, 2026", not "Current" and "Noncurrent").
         const same = rows.filter((x): x is LineRow => x.kind === "line" && !!x.at && x.at[2] === r.at![2]);
         const one = new Set(same.map((x) => nameCore(lineLabel(byKey.get(x.k)!)))).size === 1;
-        if (pr.n?.trim() && one && !(MONTH_YEAR.test(pr.n))) r.name = pr.n.trim();
+        // A name joined to the row above it that prints no figures and heads columns ("Amount ($ billions)
+        // Year/Year Growth (%) ... cRPO", ServiceNow) keeps only its own words.
+        let n = pr.n?.trim() ?? "";
+        const above = printedRows.get(r.at![2] - 1)?.n?.trim();
+        if (above && n.startsWith(`${above} `) && COLUMN_HEAD.test(above)) n = n.slice(above.length).trim();
+        if (n && one && !MONTH_YEAR.test(n)) r.name = n;
         if (pr.f & 1) r.bold = true;
         if (pr.f & 2) r.rule = "single";
       } else if (r.kind === "head" && pr.f & 1) r.bold = true;
@@ -1021,7 +1075,14 @@ export function arrange(p: IrPayload, sections: Statement[], retired: Statement[
     return r;
   };
   const docs = [...lines.keys()];
-  const newest = docs.reduce((m, d) => ((p.docs[d]?.filed ?? "") > m ? (p.docs[d]?.filed ?? "") : m), "");
+  // The release is dated by the documents that print statement tables: a slide image or a presentation
+  // filed weeks later (Salesforce's investor day) never moves the release's tables to the older group.
+  const slidesOnly = (d: number) => sections.every((s) => s.doc !== d || s.id.includes(":p"));
+  const statementDocs = docs.filter(
+    (d) => !slidesOnly(d) && p.docs[d]?.kind !== "image" && p.docs[d]?.kind !== "presentation",
+  );
+  const dated = statementDocs.length ? statementDocs : docs;
+  const newest = dated.reduce((m, d) => ((p.docs[d]?.filed ?? "") > m ? (p.docs[d]?.filed ?? "") : m), "");
   const lastDay = Date.parse(`${newest || "1970-01-01"}T00:00:00Z`);
   // A copy stored without a filing date (an investor-site PDF or workbook of the supplement) belongs to the
   // release when it prints the newest period any section carries.
@@ -1036,9 +1097,9 @@ export function arrange(p: IrPayload, sections: Statement[], retired: Statement[
   const recent = (d: number) => {
     const f = p.docs[d]?.filed;
     if (!f) return !newest || (!!newestPeriod && lastOf.get(d) === newestPeriod);
-    return !newest || lastDay - Date.parse(`${f}T00:00:00Z`) <= RELEASE_DAYS * DAY_MS;
+    return !newest || Math.abs(lastDay - Date.parse(`${f}T00:00:00Z`)) <= RELEASE_DAYS * DAY_MS;
   };
-  const main = docs
+  const main = dated
     .filter(recent)
     .sort(
       (a, b) =>
@@ -1127,6 +1188,17 @@ function ownScale(ks: string[], byKey: Map<string, PayloadSeries>, at?: [number,
   return { ownDivs, ownOf };
 }
 
+/** Whether the table at `at` prints two different figures of line s for one period on that one row. */
+function twoGroups(s: PayloadSeries | undefined, freq: IrPeriodKind, at: [number, number, number]) {
+  if (!s) return false;
+  return Object.values(cellsFor(s, freq)).some((c) => {
+    const a = c.alt;
+    if (!a || a.kind !== "conflict" || c.d !== at[0] || a.d !== at[0] || a.v === c.v) return false;
+    if (!Array.isArray(c.l) || !Array.isArray(a.l)) return false;
+    return c.l[0] === at[1] && c.l[1] === at[2] && a.l[0] === at[1] && a.l[1] === at[2] && a.l[2] !== c.l[2] && a.e === c.e && a.m === c.m;
+  });
+}
+
 /**
  * One row's figures for a period kind: the first line of the row that prints a period wins (newest copy first).
  * A row printed in a table (`at`) shows that table's own printing where the build stored a differing figure
@@ -1146,6 +1218,10 @@ export function rowCells(
   const cells: Record<string, PayloadCell> = {};
   const held: Record<string, PayloadCell> = {};
   const from: Record<string, string> = {};
+  // A row whose own table prints two figures for one period on it (column groups the reader did not name,
+  // Walmart's "Walmart International" and "Consolidated" constant-currency columns) cannot say which group
+  // its figures, or its history from other documents, belong to: it shows none rather than a mix.
+  if (at && ks.some((k) => twoGroups(byKey.get(k), freq, at))) return { cells, held, from };
   const lead = byKey.get(ks[0]);
   // The row's printed scale: its own table's printing where it has one (Netflix prints regional revenue in
   // thousands in one table and in millions in another; one series holds both), else the lead line's.

@@ -18,6 +18,7 @@ import {
   nearQuarterEnd,
   printedHead,
   printedScaleLine,
+  printedTableName,
   quarterEnds,
   statementTitle,
   tableHeads,
@@ -191,6 +192,53 @@ describe("printed heads of periods no fact uses", () => {
   });
 });
 
+describe("names of filled lines come from the print (verb-02)", () => {
+  it("names a statement by its kind and any other table by its printed title", () => {
+    expect(printedTableName("Condensed Consolidated Statements of Operations")).toBe(
+      "Income statement",
+    );
+    expect(printedTableName("CONSOLIDATED STATEMENTS OF INCOME (Unaudited)")).toBe(
+      "Income statement",
+    );
+    expect(
+      printedTableName(
+        "Condensed Consolidated Statements of Income and Related Financial Highlights",
+      ),
+    ).toBe("Income statement");
+    expect(
+      printedTableName("Consolidated Statements of Current Earnings and Accumulated Deficit"),
+    ).toBe("Income statement");
+    expect(printedTableName("Condensed Consolidated Balance Sheets")).toBe("Balance sheet");
+    expect(printedTableName("CONDENSED AVERAGE BALANCE SHEETS AND ANNUALIZED YIELDS")).toBe(
+      "Average balance sheet",
+    );
+    expect(printedTableName("Consolidated Statements of Comprehensive Income")).toBe(
+      "Comprehensive income",
+    );
+    expect(printedTableName("Condensed Consolidated Statement of Cash Flow")).toBe(
+      "Cash flow statement",
+    );
+    expect(printedTableName("Segment Information (Unaudited)")).toBe("Segment information");
+    expect(printedTableName("")).toBeNull();
+  });
+  it("keys a filled row by the printed table, whatever the reader named the table", () => {
+    const named = (bd: string) =>
+      fillDocument({
+        doc: LOW_DOC,
+        html: LOW.html,
+        facts: LOW.facts.map((f) => ({ ...f, breakdown: bd })),
+        captions: caps(LOW.html),
+        filed: "2026-11-18",
+        calendar: fiscalCalendar(LOW.facts, ["2026-10-30"]),
+      }).facts.filter((f) => (f.locator as { t: number }).t === 2);
+    const a = named("Balance sheet items");
+    const b = named("Condensed balance sheet by type");
+    expect(a.length).toBeGreaterThan(0);
+    expect(a.map((f) => f.breakdown)).toEqual(b.map((f) => f.breakdown));
+    expect(new Set(a.map((f) => f.breakdown))).toEqual(new Set(["Balance sheet"]));
+  });
+});
+
 describe("Lowe's Q3 FY26 release: statements the reader left untouched", () => {
   const out = fillDocument({
     doc: LOW_DOC,
@@ -254,7 +302,7 @@ describe("AppLovin 3Q26 release: no stored fact", () => {
     // Printed rows of a statement that became no section count as missing.
     expect(q.main.printed).toBe(fill.statements.reduce((n, s) => n + s.rows, 0));
     expect(q.main.after).toBeLessThan(q.main.printed);
-    expect(BUILD_FORMAT).toBe(4);
+    expect(BUILD_FORMAT).toBe(5);
   });
   it("chooses the company's table documents by their rows", () => {
     const row = (
@@ -276,6 +324,7 @@ describe("AppLovin 3Q26 release: no stored fact", () => {
       [
         row("a", "2026-11-04"),
         row("b", "2025-07-01"),
+        row("z", "2023-09-01"),
         row("c", "2026-10-01", "presentation"),
         row("d", "2026-10-02", "other", "pdf"),
         row("e", "2026-10-03", "other", "htm", "no tables"),
@@ -285,7 +334,8 @@ describe("AppLovin 3Q26 release: no stored fact", () => {
       "2026-11-26",
       { refused: new Set(["g"]) },
     );
-    expect(got.map((d) => d.id)).toEqual(["a", "f"]);
+    // 37 months of history (FILL_MONTHS): b is in, z is older.
+    expect(got.map((d) => d.id)).toEqual(["a", "f", "b"]);
   });
 });
 

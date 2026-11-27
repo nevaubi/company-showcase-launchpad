@@ -263,7 +263,8 @@ export function StatementCurrency({ data, ticker, filed, className }: { data: Co
         : null;
   const behind = c.status === "behind";
   const Icon = behind ? CircleDot : CircleCheck;
-  const through = c.text.split(". ")[0] + ".";
+  // The first sentence, with its own full stop once (a one-sentence text already ends with it).
+  const through = c.text.split(". ")[0].replace(/\.$/, "") + ".";
   const rest = c.text.slice(through.length).trim();
   return (
     <p data-section="Statement currency" className={cn("grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-1.5 text-[13px] text-muted-foreground", className)}>

@@ -2,10 +2,19 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
 import { buildPayload, type IrPayload } from "@/lib/ir/payload";
+import { budgetPayload } from "@/lib/ir/payload-budget";
+import { planDocuments, type DocPlan, type PlanDocRow } from "@/lib/ir/doc-plan";
 import { fixPrintedSigns } from "@/lib/ir/sign-fix";
 import { guardedDocIds, hasGuardedSources, withoutGuardedFacts } from "@/lib/ir/source-guard";
 import { withCaptions } from "@/lib/ir/statements";
 import { tableCaptions, type TableCaption } from "@/lib/ir/table-captions";
+import {
+  fillCachePath,
+  packFillDoc,
+  reduceDocument,
+  unpackFillDoc,
+  type FillDoc,
+} from "@/lib/ir/table-fill-cache";
 import { coverageOf } from "@/lib/coverage";
 import {
   FILL_DOCS,
@@ -56,6 +65,52 @@ async function pages<T>(
 }
 
 /** All facts for a company, paged by id (keyset) so large companies don't hit the statement timeout. */
+/** The company's document rows for the rebuild's document plan (doc-plan.ts), read in pages of 1,000. */
+export async function documentRows(ticker: string): Promise<PlanDocRow[]> {
+  return pages<PlanDocRow>(
+    (a, b) =>
+      supabaseAdmin
+        .from("ir_documents")
+        .select("id, kind, ext, filed, title, period, source_url, rendition_path")
+        .eq("ticker", ticker)
+        .order("id")
+        .range(a, b) as never,
+  );
+}
+
+/**
+ * Facts of the planned documents only (filtered by document id, 50 ids a query, paged by fact id), so a rebuild
+ * never loads every fact of a company with thousands of stored files.
+ */
+export async function loadFactsOf(ticker: string, ids: string[]): Promise<IrFact[]> {
+  const out: IrFact[] = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    let last: string | null = null;
+    for (;;) {
+      const after = last;
+      const { data, error } = await retry(() => {
+        let q = supabaseAdmin
+          .from("ir_kpi_facts")
+          .select(FACT_COLUMNS)
+          .eq("ticker", ticker)
+          .in("document_id", chunk)
+          .order("id")
+          .limit(1000)
+          .abortSignal(AbortSignal.timeout(90_000));
+        if (after) q = q.gt("id", after);
+        return q;
+      });
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as unknown as IrFact[];
+      out.push(...rows);
+      if (rows.length < 1000) break;
+      last = String((rows.at(-1) as { id: string | number }).id);
+    }
+  }
+  return out;
+}
+
 export async function loadFacts(ticker: string): Promise<IrFact[]> {
   const out: IrFact[] = [];
   let last: string | null = null;
@@ -168,6 +223,60 @@ export function documentReader(limits = READ_LIMITS) {
 }
 
 /**
+ * Reader of one company's documents for the table fill: the reduced copy stored at `fill/<id>.v<n>.json` when there
+ * is one, else the stored text (through `documentReader`, at most `limits.docs` downloads a rebuild), reduced and
+ * stored for later rebuilds (not when `dry`). Past the downloads it answers "wait": the document is read by a later
+ * rebuild. One document is in memory at a time; the caller drops each reduced copy after its fill.
+ */
+export function fillReader(
+  read: (id: string) => Promise<string | null>,
+  opts: { dry?: boolean; company?: string; limits?: typeof READ_LIMITS } = {},
+) {
+  const limits = opts.limits ?? READ_LIMITS;
+  const started = Date.now();
+  let downloads = 0;
+  return async (id: string): Promise<FillDoc | "wait" | null> => {
+    if (!UUID.test(id)) return null;
+    if (Date.now() - started > limits.totalMs) return "wait";
+    const path = fillCachePath(id);
+    const cached = await supabaseAdmin.storage
+      .from("ir-documents")
+      .download(path)
+      .catch(() => ({ data: null }));
+    if (cached.data) {
+      const doc = unpackFillDoc(await cached.data.text());
+      if (doc) return doc;
+    }
+    if (downloads >= limits.docs) return "wait";
+    downloads++;
+    const html = await read(id);
+    if (html == null) return null;
+    const doc = reduceDocument(html, opts.company);
+    if (!opts.dry)
+      await supabaseAdmin.storage
+        .from("ir-documents")
+        .upload(path, new Blob([packFillDoc(doc)], { type: "application/json" }), {
+          upsert: true,
+          contentType: "application/json",
+        })
+        .catch(() => null);
+    return doc;
+  };
+}
+
+/** The fill's stats of the stored payload (for the count of rebuilds in a row that left documents waiting). */
+async function storedFillStats(
+  ticker: string,
+): Promise<{ waiting?: number; pass?: number } | null> {
+  const { data } = await supabaseAdmin
+    .from("ir_company_series")
+    .select("fill:stats->quality->fill")
+    .eq("ticker", ticker)
+    .maybeSingle();
+  return ((data as { fill?: unknown } | null)?.fill as { waiting?: number; pass?: number }) ?? null;
+}
+
+/**
  * Printed captions (title, scale line, headings, spacer rows) of one stored document. Null when the file
  * can't be read in time; the section then keeps its stored name.
  */
@@ -249,11 +358,15 @@ export async function rebuildCompany(
   ticker: string,
   opts: { dry?: boolean; captions?: boolean; fill?: boolean } = {},
 ): Promise<IrPayload | null> {
-  const [stored, map, refused] = await Promise.all([
-    loadFacts(ticker),
+  // Only the planned documents' facts are loaded (doc-plan.ts): one copy per document family, decks for two
+  // years, older history from the primary statement documents only.
+  const [docRows, map, refused] = await Promise.all([
+    documentRows(ticker),
     loadLabelMap(ticker),
     refusedDocs(ticker),
   ]);
+  const plan: DocPlan = planDocuments(docRows.filter((r) => !refused.has(r.id)));
+  const stored = await loadFactsOf(ticker, plan.load);
   // Figures read from files of another company (reviewed list, source-guard.ts) never enter the series.
   let facts = withoutGuardedFacts(stored, refused);
   const wantFill = opts.fill !== false && opts.captions !== false;
@@ -280,14 +393,15 @@ export async function rebuildCompany(
   // Table fill: printed rows the readers left out, read from the stored documents (no model call).
   let run: FillRun | undefined;
   if (wantFill)
-    run = await fillCompany(facts, read, {
+    run = await fillCompany(facts, fillReader(read, { dry: opts.dry, company }), {
       company,
-      maxDocs: READ_LIMITS.docs,
       docs: tableDocs,
       reports,
     });
   if (!(run?.facts ?? facts).length) return null;
   let payload = buildPayload(ticker, run?.facts ?? facts, map);
+  // Sections only from the newest 37 months' documents, before any caption is read for them (payload-budget.ts).
+  payload = budgetPayload(payload, { cap: Infinity }).payload;
   // Printed titles of the tables the statement view is laid out from (documents already read come from the cache).
   if (opts.captions !== false) {
     payload = await withCaptions(payload, async (d) => {
@@ -298,6 +412,12 @@ export async function rebuildCompany(
   if (run) payload = withFill(payload, run);
   payload = withDocMeta(payload, meta, run);
   const quality = qualityOf(payload, run);
+  // Rebuilds in a row that left history documents waiting: the stale lane comes back at most 8 times.
+  const prev = run?.waiting ? await storedFillStats(ticker).catch(() => null) : null;
+  const pass = run?.waiting ? (prev?.waiting ? (prev.pass ?? 1) : 0) + 1 : 0;
+  // The page's budget: at most BUDGET_BYTES serialized, steps recorded; over it the payload is not stored.
+  const bounded = budgetPayload(payload);
+  payload = bounded.payload;
   // Signs corrected before the fill count with the ones the fill corrected from the document.
   payload = {
     ...payload,
@@ -305,10 +425,21 @@ export async function rebuildCompany(
       ...payload.stats,
       quality: {
         ...quality,
-        fill: { ...quality.fill, signs: quality.fill.signs + signed.fixed.length },
+        plan: plan.counts,
+        budget: bounded.budget,
+        fill: {
+          ...quality.fill,
+          signs: quality.fill.signs + signed.fixed.length,
+          pass,
+          at: new Date().toISOString(),
+        },
       },
     },
   };
+  if (!bounded.budget.ok)
+    throw new Error(
+      `payload over budget: ${bounded.budget.before} bytes built, ${bounded.budget.after} after every step (cap ${bounded.budget.cap})`,
+    );
   if (!opts.dry) {
     // Payloads for banks run to several MB: keep them in storage, with stats in the table.
     const body = JSON.stringify(payload);

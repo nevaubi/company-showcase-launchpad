@@ -96,7 +96,12 @@ export interface DocFill {
 export interface FillInput {
   /** stored document id (facts' document_id) */
   doc: string;
+  /** the stored text; "" when `grid` is given */
   html: string;
+  /** the document's parsed grid when read from its reduced copy (table-fill-cache.ts), else parsed from `html` */
+  grid?: GridTable[];
+  /** the document's dash convention with `grid` */
+  zeroDash?: boolean;
   /** the stored facts of this document */
   facts: IrFact[];
   /** printed title and scale line per table index ("(in millions, except per share data)"), from table-captions */
@@ -509,6 +514,36 @@ export function tableHeads(
 const STATEMENT_TITLE =
   /\bstatements?\s+of\s+(?:[a-z]+\s+){0,3}?(?:income|operations|earnings|cash\s+flows?|financial\s+(?:position|condition))\b|\b(?:income\s+statements?|balance\s+sheets?|cash\s+flows?\s+statements?)\b/i;
 const NOT_STATEMENT = /\breconcil|\bnon-?gaap\b|\bsegments?\b|\badjusted\b/i;
+/**
+ * The name filled lines of a table carry, from its printed title alone: a statement by its kind ("Income statement",
+ * "Balance sheet", "Cash flow statement", "Comprehensive income", "Changes in equity"), so the same statement
+ * printed as "Condensed consolidated statements of operations" in one release and "Consolidated statements of
+ * income" in the next is one table; any other title in sentence case without "condensed", "consolidated",
+ * "(unaudited)" and footnote marks. Null when nothing is printed.
+ */
+export function printedTableName(title: string): string | null {
+  const t = title.replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  if (statementTitle(t)) {
+    if (/comprehensive/i.test(t)) return "Comprehensive income";
+    if (/balance sheets?|financial (position|condition)/i.test(t))
+      return /average/i.test(t) ? "Average balance sheet" : "Balance sheet";
+    if (/cash flows?/i.test(t)) return "Cash flow statement";
+    if (/equity|deficit|retained/i.test(t) && !/income|operations|earnings/i.test(t))
+      return "Changes in equity";
+    return "Income statement";
+  }
+  const core = t
+    .replace(
+      /\((?:unaudited|continued|cont\.?)\)|\b(condensed|consolidated|unaudited|continued)\b/gi,
+      " ",
+    )
+    .replace(/(\s*(\(\w{1,2}\)|[*†‡§¹²³⁴⁵⁶⁷⁸⁹⁰]+|\s\d{1,2}))+\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return core ? sentenceCase(core) : null;
+}
+
 /** A scale word without "in" ("(Millions)", "(Millions of dollars)", "(Dollars in millions)"). */
 const BARE_SCALE = /\b(thousands|millions|billions)\b/i;
 /**
@@ -591,8 +626,8 @@ export function dashMeansZero(html: string): boolean {
 
 /** Fill one stored document's tables from its own markup. */
 export function fillDocument(input: FillInput): DocFill {
-  const grid = parseGrid(input.html);
-  const zeroDash = dashMeansZero(input.html);
+  const grid = input.grid ?? parseGrid(input.html);
+  const zeroDash = input.zeroDash ?? dashMeansZero(input.html);
   const located: Located[] = [];
   for (const f of input.facts) {
     const l = f.locator as { t?: number; r?: number; c?: number };
@@ -954,9 +989,12 @@ export function fillDocument(input: FillInput): DocFill {
     }
     const intOnly = xs.filter((x) => x.f.unit === "usd").every((x) => !/\.\d/.test(x.cell.text));
     // Table name of the filled lines: the readers' own name for the table, else its printed title.
+    // Table name of the filled lines, from what the document prints (never the reader's own name for the table,
+    // which drifts between releases): the statement kind, else the printed title, else the reader's name.
     const bd =
+      printedTableName(cap?.title || statements.find((x) => x.t === t)?.title || "") ??
       mode(xs.map((x) => x.f.breakdown).filter((b): b is string => !!b)) ??
-      (cap?.title || statements.find((x) => x.t === t)?.title || null);
+      null;
     const rowFacts = new Map<number, IrFact[]>();
     for (const x of xs) rowFacts.set(x.r, [...(rowFacts.get(x.r) ?? []), x.f]);
     const factRows = [...rowFacts.keys()].sort((a, b) => a - b);

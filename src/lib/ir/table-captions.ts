@@ -151,7 +151,7 @@ function captionOf(t: ParsedTable, before: string[], company?: string): TableCap
   for (let i = Math.max(0, first - 2); i <= last; i++) {
     const r = t.rows[i];
     const f = filled(r);
-    if (i > first && !f.length) blank.push(i);
+    if (!f.length) blank.push(i);
     else if (
       f.length === 1 &&
       !hasFigure(r) &&

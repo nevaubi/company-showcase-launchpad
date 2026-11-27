@@ -188,7 +188,36 @@
   background-color: color-mix(in oklab, var(--foreground) 6%, transparent);
 }
 
+/* Lines only older printings of the table carry (after "Printed only in earlier periods"): quieter type. */
+.irt-body > tr.irt-old > th,
+.irt-body > tr.irt-old > td {
+  color: color-mix(in oklab, var(--foreground) 68%, var(--card));
+}
+
 /* Ratio, percentage and per-share lines: figures a shade quieter than money lines. */
 .irt-body > tr.irt-ratio:not(.irt-sub):not(.irt-grand) > td {
   color: color-mix(in oklab, var(--foreground) 86%, var(--card));
+}
+
+/*
+ * Phone tap targets: a control of a section head or the statements bar keeps its compact look and gets a
+ * hit area at least 40 px tall (an invisible layer centred on it). `irt-hit` on the control itself,
+ * `irt-hits` on a group whose buttons all get it (segmented controls).
+ */
+@media (max-width: 639.98px) {
+  .irt-hit,
+  .irt-hits button {
+    position: relative;
+  }
+  .irt-hit::after,
+  .irt-hits button::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: max(100%, 40px);
+    min-width: 40px;
+    transform: translateY(-50%);
+  }
 }

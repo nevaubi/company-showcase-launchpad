@@ -66,9 +66,9 @@ if (import.meta.main) {
   if (!(await takeLease())) process.exit(0);
   let code = 0;
   try {
-    // Only the ticker and stats->build: ~700 small rows, no payload is read.
-    const rows = await pageAll<SeriesRow>((a, b) => sb.from("ir_company_series").select("ticker, build:stats->build").order("ticker").range(a, b));
-    const stale = staleTickers(rows, BUILD_FORMAT);
+    // Only the ticker, stats->build and the fill's waiting count: ~700 small rows, no payload is read.
+    const rows = await pageAll<SeriesRow>((a, b) => sb.from("ir_company_series").select("ticker, build:stats->build, fill:stats->quality->fill").order("ticker").range(a, b));
+    const stale = staleTickers(rows, BUILD_FORMAT, Date.now());
     const order = rebuildOrder(stale, COVERAGE, await loadRank());
     const state = await loadState();
     log(`${stale.length} of ${rows.length} payloads below build ${BUILD_FORMAT}; this pass takes up to ${settings.maxCompanies} companies in ${settings.maxMs / 60_000} min, first ${order.slice(0, 6).join(", ") || "none"}`);

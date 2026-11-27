@@ -46,6 +46,8 @@ export type ShownRow =
       ratio: boolean;
       /** a small label for a restated or older-basis line */
       tag: string | null;
+      /** a line only older printings of the table carry, set quieter */
+      old?: boolean;
       /** per column: the section's own table prints the period but nothing in this row */
       blank: boolean[];
       label: string;
@@ -88,6 +90,22 @@ const CELL_LAYOUT = "flex items-center justify-end pl-2 pr-1";
 const GUTTER = "ml-1 inline-flex w-3 shrink-0 items-center justify-center";
 /** Column width for a section whose longest figure has `chars` characters (figure, gutter and padding). */
 export const colWidth = (chars: number) => `max(${COL}, calc(${Math.max(chars, 1)}ch + 1.75rem))`;
+
+/** Narrowest the label column gets when it gives up room so one more whole figure column fits, px. */
+export const LABEL_MIN = 128;
+
+/**
+ * Label column width when the figure columns overflow a frame `w` px wide: the frame shows whole figure
+ * columns only, the label column takes what is left: at least its set width `fc`, or on a phone (fewer than
+ * three whole columns) at least `LABEL_MIN` when that buys one more column.
+ */
+export function fitLabelWidth(w: number, fc: number, cw: number, n: number): number {
+  let k = Math.max(1, Math.floor((w - fc) / cw));
+  // On a phone (fewer than three whole columns) one more column is worth narrower labels.
+  if (k < 3 && k + 1 <= n && w - (k + 1) * cw >= LABEL_MIN) k++;
+  k = Math.min(k, n);
+  return Math.max(Math.min(fc, LABEL_MIN), w - k * cw);
+}
 
 /** A total whose parts add up: a small drawn tick (no icon element, so long tables stay light). */
 function TieMark() {
@@ -136,9 +154,36 @@ export const StatementSection = memo(function StatementSection({
   }, []);
   useEffect(() => {
     const b = body.current;
+    const r = root.current;
     if (!b) return;
+    // When the columns do not all fit (a phone, a long history), the label column takes the slack so the
+    // figure columns in view are whole: no figure is cut under the sticky labels.
+    const fit = () => {
+      if (!r) return;
+      r.style.removeProperty("--fc");
+      const fc = b.querySelector("tbody tr.irt-line > th")?.getBoundingClientRect().width ?? 0;
+      const cw = b.querySelector("tr.irt-line td")?.getBoundingClientRect().width ?? 0;
+      const w = b.clientWidth;
+      if (!fc || !cw || fc + cols.length * cw <= w + 1) return;
+      r.style.setProperty("--fc", `${fitLabelWidth(w, fc, cw, cols.length)}px`);
+    };
+    fit();
     b.scrollLeft = b.scrollWidth;
     sync();
+    if (typeof ResizeObserver === "undefined") return;
+    let last = b.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (Math.abs(b.clientWidth - last) < 1) return;
+      last = b.clientWidth;
+      fit();
+      b.scrollLeft = b.scrollWidth;
+      sync();
+    });
+    ro.observe(b);
+    return () => {
+      ro.disconnect();
+      r?.style.removeProperty("--fc");
+    };
   }, [cols.length, mode, sync]);
   // Columns fit the section's longest figure, with the mark gutter beside it, so nothing overlaps at any width.
   const widest = useMemo(
@@ -202,7 +247,7 @@ export const StatementSection = memo(function StatementSection({
               type="button"
               onClick={() => onChecks(sec.id)}
               className={cn(
-                "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "irt-hit inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 view.tieOk === view.tieN ? "text-muted-foreground" : "text-foreground",
               )}
               title="Periods in view whose parts add up to the printed total. Open the checks for this section."
@@ -222,7 +267,7 @@ export const StatementSection = memo(function StatementSection({
             <button
               type="button"
               onClick={() => onChecks(sec.id)}
-              className="inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="irt-hit inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <CheckDot /> {issues} to review
             </button>
@@ -231,6 +276,7 @@ export const StatementSection = memo(function StatementSection({
             <Segmented
               label="View"
               size="xs"
+              className="irt-hits"
               value={mode}
               onChange={setMode}
               options={[
@@ -246,6 +292,7 @@ export const StatementSection = memo(function StatementSection({
                   <Button
                     size="icon-sm"
                     variant="ghost"
+                    className="irt-hit"
                     aria-label={`Download ${sec.title}`}
                     aria-busy={exporting}
                   >
@@ -384,19 +431,23 @@ export const StatementSection = memo(function StatementSection({
                         r.tk !== "none" && `irt-${r.tk}`,
                         r.ratio && "irt-ratio",
                         r.match && "irt-match",
+                        r.old && "irt-old",
                       )}
                     >
                       <th
                         scope="row"
-                        className="irt-fc sticky left-0 z-[1] truncate py-0.5 pr-3 text-left font-normal"
+                        className="irt-fc sticky left-0 z-[1] py-0.5 pr-3 text-left font-normal sm:truncate"
                         style={labelStyle(r.depth)}
                         title={r.note ? `${r.label} (${r.note})` : r.label}
                       >
-                        {r.label}
-                        {r.note && (
-                          <span className={cn("ml-1 font-normal", IR.caption)}>{r.note}</span>
-                        )}
-                        {r.tag && <span className="irt-tag">{r.tag}</span>}
+                        {/* A phone wraps a long name onto a second line instead of cutting it short. */}
+                        <span className="max-sm:line-clamp-2 max-sm:break-words max-sm:leading-[1.2] sm:contents">
+                          {r.label}
+                          {r.note && (
+                            <span className={cn("ml-1 font-normal", IR.caption)}>{r.note}</span>
+                          )}
+                          {r.tag && <span className="irt-tag">{r.tag}</span>}
+                        </span>
                       </th>
                       {r.cells.map((x, i) => {
                         const e = cols[i];

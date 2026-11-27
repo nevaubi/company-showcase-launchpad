@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MISSING } from "./missing";
 import { ChartColumnBig } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { isRatioLine, levelClass, splitMark, stripes, INDENT } from "@/components/ir/table-style";
 import "@/components/ir/table.css";
+import { classConcept, statementKeyOf, statementStructure, type StructureKind } from "./statement-structure";
 
 export type StatementView = "values" | "yoy" | "common";
 
@@ -41,26 +42,17 @@ export function rowTrend(row: Row, periods: Period[], freq: "annual" | "quarterl
 }
 
 /**
- * Lines that close a statement, set as grand totals (double rule) as statements print them: net income,
- * total assets, total liabilities and equity. From the builder's row keys; a `total` flag on the row, when
- * the builder sets one (finding finstyle-01), wins.
- */
-const GRAND_KEYS = new Set(["netIncome", "totalAssets", "liabilitiesAndEquity"]);
-
-/**
- * How a standardized statement row is set, from its data (never its label):
+ * How a standardized statement row is set, from its data (never its label), by the statement's structure
+ * (`statement-structure.ts`: the builder's keys in its order, its bold and calc flags, and its own `total`
+ * flag first when it sets one):
  * grand  a statement's closing line: bold, firm rule above, double rule under the figures
- * sub    a bold reported line (a subtotal): semibold, hairline rule above the figures
+ * sub    a printed total (a subtotal): semibold, hairline rule above the figures
  * emph   a bold per-share, ratio or calculated line (diluted EPS, free cash flow): semibold, no rule
  * line   any other line
  */
-export type StatementRowKind = "line" | "sub" | "grand" | "emph";
+export type StatementRowKind = StructureKind;
 export function statementRowKind(row: Row): StatementRowKind {
-  const flag = (row as Row & { total?: "sub" | "grand" }).total;
-  if (flag === "grand" || (flag == null && GRAND_KEYS.has(row.key))) return "grand";
-  if (flag === "sub") return "sub";
-  if (!row.bold) return "line";
-  return row.kind === "kpi" || isUnitLine(row.unit) ? "emph" : "sub";
+  return statementStructure(statementKeyOf([row]), [row])[0].kind;
 }
 
 /** Per-share, percentage, ratio and day-count lines: set in the muted unit style. */
@@ -124,6 +116,8 @@ export function StatementTable({
   const [fits, setFits] = useState(true);
   // 0: every column; 1: no trend sparkline; 2: no trend and no CAGR/YoY column.
   const [drop, setDrop] = useState(0);
+  // Label column width that leaves only whole figure columns in view once the table scrolls (null: as styled).
+  const [labelW, setLabelW] = useState<number | null>(null);
   const showTrend = drop === 0;
   const showGrowth = drop < 2;
   useLayoutEffect(() => {
@@ -134,12 +128,20 @@ export function StatementTable({
       if (over > 1 && drop < 2) return setDrop(drop + 1);
       if (drop > 0 && over <= 1 && el.clientWidth - el.scrollWidth >= (drop === 2 ? GROWTH_W : TREND_W)) return setDrop(drop - 1);
       setFits(over <= 1);
+      // Scrolled to the newest period, the columns in view are whole: the label column takes the slack.
+      const cells = [...(el.querySelectorAll<HTMLTableCellElement>("thead tr > th") ?? [])];
+      const n = periods.length;
+      if (over <= 1 && labelW == null) return;
+      const widths = cells.slice(1, 1 + n).map((c) => c.getBoundingClientRect().width);
+      const extra = cells.slice(1 + n).reduce((a, c) => a + c.getBoundingClientRect().width, 0);
+      const next = over <= 1 && labelW != null ? null : wholeColumnsLabel(el.clientWidth - extra, cells[0]?.getBoundingClientRect().width ?? 0, widths);
+      if (next == null ? labelW != null : labelW == null || Math.abs(next - labelW) > 1) setLabelW(next);
     };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [rows, periods.length, drop]);
+  }, [rows, periods.length, drop, labelW]);
   useEffect(() => {
     const el = scroller.current;
     const th = lastHead.current;
@@ -186,7 +188,15 @@ export function StatementTable({
   };
 
   const activeKey = target ? `${target.label}|${target.periodLabel}` : "";
-  const banded = useMemo(() => stripes(rows.map(() => ({ kind: "line" as const }))), [rows]);
+  // Section heads, totals and calculated rows from the statement's structure; stripes restart at each head.
+  const structure = useMemo(() => statementStructure(statementKeyOf(rows), rows), [rows]);
+  const anyCalc = rows.some((r) => r.calc);
+  const banded = useMemo(() => {
+    const flat = structure.flatMap((x) => (x.head ? [{ kind: "head" as const }, { kind: "line" as const }] : [{ kind: "line" as const }]));
+    const b = stripes(flat);
+    return b.filter((_, i) => flat[i].kind === "line");
+  }, [structure]);
+  const colCount = 1 + periods.length + (showGrowth ? 1 : 0) + (showTrend ? 1 : 0);
   const latest = periods.length - 1;
 
   const onCell = (row: Row, i: number, cell: Cell) => {
@@ -196,7 +206,9 @@ export function StatementTable({
       periodLabel: periods[i].label,
       unit: row.unit,
       value: cell.v,
-      src: cell.src,
+      // A class-of-stock fact (BRK-B, V) opens the filing at that class's printed figure: the merged name is
+      // replaced by the filing's own concept, whose class-axis fact the viewer finds by its printed value.
+      src: cell.src ? { ...cell.src, concept: classConcept(cell.src.concept).concept } : cell.src,
       alts: cell.alts,
       derived: cell.derived,
       approx: cell.approx,
@@ -213,7 +225,10 @@ export function StatementTable({
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
           <thead className="irt-colhead">
             <tr>
-              <th className={cn("irt-fc sticky left-0 z-30 w-44 min-w-44 px-3 py-2 text-left align-bottom sm:w-auto sm:min-w-60 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}>
+              <th
+                className={cn("irt-fc sticky left-0 z-30 w-44 min-w-44 px-3 py-2 text-left align-bottom sm:w-auto sm:min-w-60 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}
+                style={labelW != null ? { width: labelW, minWidth: labelW } : undefined}
+              >
                 <span className="eyebrow">Line item</span>
                 {tableUnit && <span className="num ml-2 text-[11px] font-normal text-muted-foreground">{unitLabel(tableUnit, scale)}</span>}
               </th>
@@ -263,13 +278,21 @@ export function StatementTable({
               const vals = row.cells.slice(-12).map((c) => c?.v ?? NaN);
               const trend = rowTrend(row, periods, freq);
               const isCharted = charted?.includes(row.key);
-              const kind = statementRowKind(row);
+              const { kind, head, calc } = structure[ri];
               const unitLine = isUnitLine(row.unit);
-              const calculated = row.kind === "kpi";
+              // Calculated rows from the builder's own flag; datasets built before it carry none (then: KPI rows).
+              const calculated = anyCalc ? !!calc : row.kind === "kpi";
               const weight = kind === "emph" ? "font-semibold" : kind === "line" ? "font-normal" : undefined;
               return (
+                <Fragment key={row.key}>
+                {head && (
+                  <tr className="irt-group">
+                    <th scope="colgroup" colSpan={colCount} className="px-3 py-1 text-left leading-5 sm:px-4">
+                      <span className="sticky left-3 sm:left-4">{head}</span>
+                    </th>
+                  </tr>
+                )}
                 <tr
-                  key={row.key}
                   data-kind={kind}
                   className={cn(
                     "group irt-line",
@@ -280,7 +303,11 @@ export function StatementTable({
                     isCharted && "irt-match",
                   )}
                 >
-                  <th scope="row" className={cn("irt-fc sticky left-0 z-10 max-w-44 px-2 py-1 text-left sm:max-w-none", weight)}>
+                  <th
+                    scope="row"
+                    className={cn("irt-fc sticky left-0 z-10 max-w-44 px-2 py-1 text-left sm:max-w-none", weight)}
+                    style={labelW != null ? { maxWidth: labelW } : undefined}
+                  >
                     <span className="flex items-center gap-1.5">
                       {onToggleChart ? (
                         <button
@@ -301,9 +328,10 @@ export function StatementTable({
                       <span
                         className={cn("min-w-0 leading-4 [overflow-wrap:anywhere] sm:whitespace-nowrap", calculated && row.unit === "usd" && "italic")}
                         style={row.indent ? { paddingLeft: row.indent * INDENT } : undefined}
+                        title={calc ? `Calculated: ${calc}` : undefined}
                       >
                         {rowLabel(row.label)}
-                        {calculated && <span className="sr-only"> (calculated)</span>}
+                        {calculated && <span className="sr-only"> (calculated{calc ? `: ${calc}` : ""})</span>}
                       </span>
                       {row.unit !== tableUnit && <span className="num ml-auto whitespace-nowrap pl-2 text-[11px] font-normal text-muted-foreground">{unitLabel(row.unit, scale)}</span>}
                     </span>
@@ -361,7 +389,7 @@ export function StatementTable({
                             {cell.src ? (
                               <>
                                 <p className="font-medium">{filing ? `${filing.form} · filed ${fmtDate(filing.filed)}` : cell.src.accn}</p>
-                                <p className="num opacity-75">{cell.src.concept}</p>
+                                <p className="num opacity-75">{classConcept(cell.src.concept).label}</p>
                               </>
                             ) : (
                               <>
@@ -396,6 +424,7 @@ export function StatementTable({
                     </td>
                   )}
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>
@@ -414,6 +443,29 @@ function Figure({ text, mark }: { text: string; mark: string }) {
       {unit && <span className="irt-mark">{unit}</span>}
     </>
   );
+}
+
+/** Narrowest label column the whole-column fit leaves, px. */
+const LABEL_MIN = 128;
+
+/**
+ * Label column width for a table scrolled to its newest period in a frame `avail` px wide (after the growth
+ * and trend columns): the last figure columns that fit whole beside a label column of at least its styled
+ * width `fc` (or `LABEL_MIN` when that buys a second column on a phone), the label column taking the rest.
+ * Null when nothing would change.
+ */
+export function wholeColumnsLabel(avail: number, fc: number, widths: number[]): number | null {
+  if (!fc || !widths.length || avail <= 0) return null;
+  let used = 0;
+  let k = 0;
+  for (let i = widths.length - 1; i >= 0; i--) {
+    const min = k < 2 ? Math.min(fc, LABEL_MIN) : fc;
+    if (avail - used - widths[i] < min) break;
+    used += widths[i];
+    k++;
+  }
+  if (!k) return null;
+  return Math.round(avail - used);
 }
 
 /** Width of the trend column (80 px sparkline and 24 px padding). */

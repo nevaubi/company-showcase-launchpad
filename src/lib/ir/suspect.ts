@@ -195,7 +195,10 @@ export function findSuspects(p: IrPayload): SuspectMap {
     const name = labelKey(s.label);
     for (const k of ["q", "y"] as Kind[])
       for (const [e, c] of Object.entries(cellsOf(s, k))) {
-        if (c.d == null || c.f) continue;
+        // A cell filled from the print (`how: "printed"`) was read under its own column head: a balance
+        // repeated from one quarter to the next (JPM's preferred stock, 21,040 at June and September) is never
+        // another series' figure read under the wrong period (lead-01).
+        if (c.d == null || c.f || c.how === "printed") continue;
         const id = `${c.d}|${s.unit}|${k}|${name}`;
         (printed.get(id) ?? printed.set(id, []).get(id)!).push({ s, k, e, v: c.v });
       }

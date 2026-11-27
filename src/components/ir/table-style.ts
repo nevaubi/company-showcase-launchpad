@@ -11,6 +11,7 @@
  *   grand  a grand total: the top-level total that closes the table, or a printed double rule
  *                                                        → + tr.irt-grand
  *   ratio  a ratio, percentage, basis-point or per-share line (by unit) → + tr.irt-ratio
+ *   old    a line only older printings of the table carry (row data `old`) → + tr.irt-old, quieter type
  *
  * Classes (put `irt-root` on the element that holds the table; it defines the colours):
  *   irt-root          colour variables (light and dark), the soft edge of the first column when the root
@@ -61,28 +62,39 @@ export interface RowLike {
   /** printed marks of the row, when the section data carries them: bold, a rule above, a double rule */
   bold?: boolean;
   rule?: "single" | "double";
+  /** index of the row it is printed as a part of, when the section data says so */
+  up?: number;
+  /** a line only older printings of the table carry, listed after the table's own rows: never a total */
+  old?: boolean;
 }
 
 /**
  * Subtotal or grand total for each row, from the row data. With printed marks: a double rule is a grand
  * total, a rule above or bold type a subtotal, unless it is the top-level line that closes the table (grand).
  * Without them: a total is grand when it is the top-level line that closes the table, else a subtotal.
- * A section of one line has nothing to total.
+ * A top-level total whose printed parts are themselves totals (a total of totals, as a bank's total net
+ * revenue over net interest income and total noninterest revenue) is grand too. Lines only older printings
+ * carry (`old`) are never totals and never close the table. A section of one line has nothing to total.
  */
 export function totalKinds(rows: RowLike[]): TotalKind[] {
-  const lines = rows.filter((r) => r.kind === "line");
+  const lines = rows.filter((r) => r.kind === "line" && !r.old);
   if (lines.length < 2) return rows.map(() => "none");
   const top = Math.min(...lines.map((r) => r.depth ?? 0));
   let last = -1;
   rows.forEach((r, i) => {
-    if (r.kind === "line") last = i;
+    if (r.kind === "line" && !r.old) last = i;
+  });
+  const totalParts = new Set<number>();
+  rows.forEach((r) => {
+    if (r.kind === "line" && !r.old && r.up != null && (r.total || r.bold)) totalParts.add(r.up);
   });
   return rows.map((r, i) => {
-    if (r.kind !== "line") return "none";
+    if (r.kind !== "line" || r.old) return "none";
     if (r.rule === "double") return "grand";
     const marked = r.total || r.bold || r.rule === "single";
     if (!marked) return "none";
-    return (r.depth ?? 0) === top && i === last && r.total !== false ? "grand" : "sub";
+    const atTop = (r.depth ?? 0) === top && r.total !== false;
+    return atTop && (i === last || (r.total && totalParts.has(i))) ? "grand" : "sub";
   });
 }
 
