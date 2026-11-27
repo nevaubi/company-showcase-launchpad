@@ -1,4 +1,4 @@
-import { requireAppAccess } from "@/lib/app-access-middleware";
+import { requireAppAccess, requireFeature } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { IrPayload } from "@/lib/ir/payload";
@@ -60,6 +60,9 @@ export const getIrData = createServerFn({ method: "GET" })
       // A stored payload beyond what a page can load (a bank with thousands of read files before its
       // bounded rebuild) is not fetched: the page says so and lists the documents.
       const oversizeBytes = oversizeOf(series?.payload_bytes);
+      // A separately materialized filing view can coexist with an older full storage object.
+      if (series?.payload_path && payload?.preview?.archivePath === series.payload_path && payload.ticker === data.ticker)
+        return { series, payload, oversizeBytes: 0 };
       if (oversizeBytes) return { series, payload: null, oversizeBytes };
       if (series?.payload_path) {
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -76,16 +79,16 @@ export const getIrData = createServerFn({ method: "GET" })
     };
     // Two IR sources: the partner corpus and this site's own deep builds. The page shows whichever
     // covers more series (a company built here in depth beats a thin partner payload, and vice versa).
-    const loadExternal = async () => {
+    const loadExternal = async (minimumSeries: number) => {
       try {
         const { loadExternalPayload } = await import("@/lib/ir/external.server");
-        return await loadExternalPayload(data.ticker);
+        return await loadExternalPayload(data.ticker, minimumSeries);
       } catch (e) {
         console.warn(`[ir] partner corpus failed for ${data.ticker}: ${(e as Error).message}`);
         return null;
       }
     };
-    const [allDocs, loaded, images, external] = await Promise.all([loadDocs(), loadSeries(), countImages(), loadExternal()]);
+    const [allDocs, loaded, images] = await Promise.all([loadDocs(), loadSeries(), countImages()]);
     let { series, payload } = loaded;
     const { oversizeBytes } = loaded;
     // Files the reviewed list shows to be another company's are not listed, and figures read from
@@ -93,6 +96,7 @@ export const getIrData = createServerFn({ method: "GET" })
     const refused = guardedDocIds(data.ticker, allDocs as { id: string; source_url: string | null }[]);
     const docs = refused.size ? allDocs.filter((d) => !refused.has(String(d.id))) : allDocs;
     if (payload && refused.size) payload = withoutGuardedCells(payload, refused);
+    const external = payload?.preview ? null : await loadExternal(payload?.series.length ?? 0);
     if (external && external.series.length && external.series.length >= (payload?.series.length ?? 0)) {
       const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) }));
       const bytes = new TextEncoder().encode(JSON.stringify({ payload: external, builtAt: external.builtAt, documents, images, pending: 0, source: "partner" }));
@@ -119,8 +123,28 @@ export const getIrData = createServerFn({ method: "GET" })
     // when sent as objects, so ship one JSON string and parse it on the client.
     // Bank payloads outgrow the RPC serializer's 32 MB cap even as one string, so stream gzipped
     // bytes (raw streams bypass that cap) and decompress in the browser.
-    const bytes = new TextEncoder().encode(JSON.stringify({ payload, builtAt: series?.built_at ?? null, documents, images, pending, oversizeBytes }));
+    const bytes = new TextEncoder().encode(JSON.stringify({ payload, builtAt: payload?.builtAt ?? series?.built_at ?? null, documents, images, pending, oversizeBytes }));
     return { gz: await gzipStream(bytes) };
+  });
+
+/** Download the separately stored history without loading it into the interactive grid. */
+export const getIrHistoryDownload = createServerFn({ method: "POST" })
+  .middleware([requireFeature("exports")])
+  .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: row, error } = await context.supabase.from("ir_company_series")
+      .select("archive:stats->preview->>archivePath").eq("ticker", data.ticker).maybeSingle();
+    const path = row?.archive;
+    const legacy = `series/${data.ticker}.json`;
+    const prefix = `series/${data.ticker}/`;
+    if (error || typeof path !== "string" || !(path === legacy || (path.startsWith(prefix) && /^[a-f0-9-]+\.json\.gz$/.test(path.slice(prefix.length)))))
+      throw new Error("No historical archive is available");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const suffix = path.endsWith(".gz") ? ".json.gz" : ".json";
+    const { data: signed, error: signError } = await supabaseAdmin.storage.from("ir-documents")
+      .createSignedUrl(path, 300, { download: `${data.ticker}-financial-history${suffix}` });
+    if (signError || !signed) throw new Error("Could not open the historical archive");
+    return signed.signedUrl;
   });
 
 /** A company's stored slide/chart images for the library (paged; they can number in the thousands). */

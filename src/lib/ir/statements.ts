@@ -1506,7 +1506,7 @@ export function visibleRows(
   opts: {
     cut?: string;
     has?: (s: PayloadSeries) => boolean;
-    match?: (s: PayloadSeries) => boolean;
+    match?: (s: PayloadSeries, row: LineRow) => boolean;
   },
 ): { rows: StatementRow[]; hidden: number } {
   const lineRows = sec.rows.filter(
@@ -1520,7 +1520,7 @@ export function visibleRows(
     const ss = r.ks.map((k) => byKey.get(k)).filter((x): x is PayloadSeries => !!x);
     const current = !opts.cut || ss.some((s) => lastEnd(s) >= opts.cut!);
     if (!current) hidden++;
-    if (current && (!opts.has || ss.some(opts.has)) && (!opts.match || ss.some(opts.match)))
+    if (current && (!opts.has || ss.some(opts.has)) && (!opts.match || ss.some((s) => opts.match!(s, r))))
       keepK.add(r.k);
   }
   // A total stays when one of its parts is shown.
@@ -1578,6 +1578,8 @@ export function printedSuffix(s: PayloadSeries): string {
   }
   const s0 = mode(xs) ?? "";
   if (!s0 && s.unit === "pct") return "%";
+  if (!s0 && s.unit === "bps") return " bps";
+  if (!s0 && s.unit === "ratio") return "×";
   return s0;
 }
 
@@ -1600,7 +1602,9 @@ export function scaleNote(lineDivisor: number, s: PayloadSeries, sectionDiv: num
   if (s.unit === "usd")
     return lineDivisor !== sectionDiv ? SCALE_WORD[lineDivisor] || "in dollars" : "";
   if (s.unit === "count") return lineDivisor > 1 ? SCALE_WORD[lineDivisor] : "";
-  return "";
+  if (s.unit === "usdPerUnit") return "$ per unit";
+  if (s.unit === "pp") return "percentage points";
+  return ["usdPerShare", "pct", "bps", "ratio", "other"].includes(s.unit) ? "" : s.unit;
 }
 
 /**

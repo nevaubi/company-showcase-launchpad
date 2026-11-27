@@ -251,3 +251,48 @@ describe("gate checklist", () => {
     expect(checks.filter((c) => !c.ok).length).toBe(v.failed.length);
   });
 });
+
+describe("observed trading sessions", () => {
+  it("requires real signal, entry and exit bars and a quoted entry open", async () => {
+    const { tradeOutcome } = await import("./scan");
+    const dates = weekdays("2026-08-03", 8);
+    const bars = walk(dates, 13);
+    const bench = align(dates, walk(dates, 5));
+    const outcome = (b: Bar[]) => tradeOutcome(align(dates, b), bench, bench, 1, 1, 3, 0.0004);
+    expect(outcome(bars)?.net).toBeCloseTo(bars[4][4] / bars[2][1] - bench.c[4] / bench.o[2] - 0.0004);
+    for (const missing of [1, 2, 4]) expect(outcome(bars.filter((_, i) => i !== missing))).toBeNull();
+    expect(outcome(bars.slice(0, 4))).toBeNull();
+    expect(outcome(bars.map((b,i) => i === 2 ? [b[0], 0, ...b.slice(2)] as Bar : b))).toBeNull();
+  });
+
+  it("exits a converged pair at the following open and charges borrow on the short leg", async () => {
+    const { tradePairs } = await import("./pairs");
+    const leg = (ticker: string, o: number[], c: number[]) => ({ ticker, o: Float64Array.from(o), c: Float64Array.from(c), start: 0,
+      dv20: new Float64Array(c.length).fill(1e9), volume: new Float64Array(c.length).fill(1e6) });
+    const legs = [leg("A", [100,101,120,115,100], [100,130,99,115,100]), leg("B", [100,100,100,100,100], [100,100,100,100,100])];
+    const p = { a: 0, b: 1, alpha: 0, beta: 1, sd: 0.1, rho: 1, adf: -4, hl: 6 };
+    const out = new Samples();
+    tradePairs(legs, [p], 0, 5, out);
+    expect(out.gross).toHaveLength(1);
+    expect(out.gross[0]).toBeCloseTo((1 - 115/120)/2);
+    expect(out.net[0]).toBeCloseTo(out.gross[0] - (tradeCost(.0004, -1, 1) + .0004)/2);
+    const truncated = new Samples();
+    tradePairs(legs, [p], 0, 3, truncated);
+    expect(truncated.net).toEqual([]);
+    legs[0].volume[3] = 0;
+    const missing = new Samples();
+    tradePairs(legs, [p], 0, 5, missing);
+    expect(missing.net).toEqual([]);
+  });
+});
+
+it("quarantines older evidence from the list, the scoreboard and autopilot candidates", async () => {
+  const { currentEvidence, EXECUTION_VERSION } = await import("./setups");
+  const snapshot = (await import("../../../public/data/setups.json")).default;
+  const file = snapshot as unknown as import("./setups").SetupsFile;
+  const pending = currentEvidence({ ...file, executionVersion: undefined, pairsProven: true });
+  expect(pending).toMatchObject({ variants: [], setups: [], pairsProven: false });
+  expect(pending.market).toEqual(file.market);
+  const replayed = { ...file, executionVersion: EXECUTION_VERSION };
+  expect(currentEvidence(replayed)).toBe(replayed);
+});

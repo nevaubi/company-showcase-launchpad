@@ -319,7 +319,7 @@ function renderableDoc(doc: string) {
 }
 
 function locatorOf(src: SourceRef, unit: string, elementId?: string): FactLocator {
-  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId, cell: src.cell, box: src.box, search: src.search, quote: src.quote, page: src.page, sheet: src.sheet };
+  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId: elementId ?? src.elementId, cell: src.cell, box: src.box, search: src.search, quote: src.quote, page: src.page, sheet: src.sheet, sheetCell: src.sheetCell };
 }
 
 /** Where to go in a whole document: a passage to find, a quoted line, its page or worksheet. Nothing when none is given. */

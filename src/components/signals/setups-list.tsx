@@ -9,7 +9,7 @@ import { Sparkline } from "@/components/charts/sparkline";
 import { TickerMark } from "@/components/app/ticker";
 import { Button } from "@/components/ui/button";
 import { impliedMoveBy } from "@/lib/options/core";
-import { optionsLatestQuery } from "@/lib/options/data";
+import { setupQuoteQuery } from "@/lib/options/data";
 import { LISTED, type EvidenceBook } from "@/lib/signals/evidence";
 import { evidenceLine, liveLine } from "@/lib/signals/explain";
 import { dayLong, dayShort, holdLabel, num, pct, price, tidyDetail, usdCompact, ruleNameOf } from "@/lib/signals/format";
@@ -181,8 +181,8 @@ const priceGapText = (r: RankedSetup, bar: number, gap: number) =>
 
 /** The signal itself, what options price in, and the actions; the risk plan in full only for a listed rule. */
 function SetupDetail({ r, listed, bar, gap, peers, onTrack, tracking }: { r: RankedSetup; listed: boolean; bar: number | null; gap: number | null; peers: number; onTrack: (r: RankedSetup) => void; tracking: boolean }) {
-  const opts = useQuery(optionsLatestQuery([r.ticker]));
-  const o = opts.data?.get(r.ticker);
+  const opts = useQuery(setupQuoteQuery(r.ticker, r.firedAt));
+  const o = opts.data;
   const priced = o ? impliedMoveBy(o.term, Math.ceil((r.horizon * 7) / 5)) : null;
   // Signed distances from the price: a short's stop sits above it and its target below.
   const toStop = r.stop / r.price - 1;
@@ -219,11 +219,12 @@ function SetupDetail({ r, listed, bar, gap, peers, onTrack, tracking }: { r: Ran
         <Fact label="Traded a day">{usdCompact(r.dollarVolume)}</Fact>
         <Fact label="Cost, round trip">{r.cost == null ? "–" : `${num(r.cost * 1e4, 0)} bp`}</Fact>
         <Fact label="Strength in this rule">{peers > 1 ? `top ${Math.max(1, Math.round((1 - r.strengthPct) * 100))}%` : "only signal"}</Fact>
-        <Fact label="Options price in">{priced ? `±${pct(priced.m, 1, false)} by ${dayShort(priced.e)}` : "–"}</Fact>
+        <Fact label="Straddle at signal close">{priced ? `±${pct(priced.m, 1, false)} by ${dayShort(priced.e)}` : "–"}</Fact>
       </div>
       <p className={CAPTION}>
         {listed ? planNote : ""}
-        {listed && priced && r.barsOk ? `The target is ${num(Math.abs(toTarget) / priced.m, 1)} times the move options price in by ${dayShort(priced.e)}. ` : ""}
+        {o ? `Cboe snapshot ${dayShort(o.date)} at ${price(o.price)}. ${o.skew != null ? `25Δ put–call skew ${num(100 * o.skew, 1)} vol pts. ` : ""}${o.putCall != null ? `Put/call open interest ${num(o.putCall, 2)}×. ` : ""}` : opts.isError ? "Options lookup unavailable. " : !opts.isPending ? `No stored Cboe quote for ${dayShort(r.firedAt)}. ` : ""}
+        {listed && priced && priced.m > 0 && o && r.priceOn === o.date && Math.abs(o.price / r.price - 1) <= 0.02 && r.barsOk ? `The target is ${num(Math.abs(toTarget) / priced.m, 1)} times the move options price in by ${dayShort(priced.e)}. ` : ""}
         Strength orders signals inside a rule only: on the live record so far it shows no link to the outcome.
       </p>
       {listed ? (

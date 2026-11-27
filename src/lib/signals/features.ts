@@ -20,7 +20,7 @@ export function align(dates: string[], bars: Bar[]): Aligned {
     const i = pos.get(b[0].slice(0, 10));
     if (i == null || !(b[4] > 0) || !(b[5] > 0)) continue;
     const k = b[5] / b[4];
-    o[i] = (b[1] > 0 ? b[1] : b[4]) * k;
+    o[i] = b[1] > 0 ? b[1] * k : NaN;
     h[i] = (b[2] > 0 ? b[2] : b[4]) * k;
     l[i] = (b[3] > 0 ? b[3] : b[4]) * k;
     c[i] = b[5];

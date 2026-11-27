@@ -4,6 +4,7 @@
 import type { Bar } from "@/lib/financials/types";
 import { earningsReactions, reactionStats, type Reaction, type ReactionStats } from "@/lib/markets/core";
 import TA from "./ta";
+import { seasonalContext } from "./seasonality";
 import { indicators, type Bars } from "./conditions";
 import { evidence, EVIDENCE, type Evidence, type PooledSignals } from "./evidence";
 import { measures, type BenchSeries, type Measures } from "./measures";
@@ -51,6 +52,7 @@ export interface Technicals {
   read: ReadSentence[];
   reactions: { rows: Reaction[]; stats: ReactionStats; drift: DriftTest } | null;
   events: EventLogRow[];
+  seasonality: ReturnType<typeof seasonalContext>;
   /** Milliseconds the computation took */
   ms: number;
 }
@@ -153,6 +155,7 @@ export function analyze(input: AnalysisInput): Technicals | null {
     pooled,
     read: technicalRead(M, E, { universe: input.universe, sym: input.sym, pooled }),
     reactions,
+    seasonality: seasonalContext(B.d, B.tr, input.bench ?? []),
     events,
     ms: Math.round(now() - t0),
   };

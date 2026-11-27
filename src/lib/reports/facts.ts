@@ -4,7 +4,9 @@
 // without its source. No I/O: shared by the server generator, scripts and tests.
 import type { Cell, CompanyDataset, DerivedPart, Period, SegmentFact, SourceRef, Statement } from "@/lib/financials/types";
 import type { Estimates, PeriodCode } from "@/lib/estimates/core";
-import type { Fact, FactArea, FactRef, GlanceItem, ReportChart, ReportInputs, ReportTable, TableCell } from "./types";
+import type { Fact, FactArea, FactRef, GlanceItem, ReportChart, ChartPoint, ReportInputs, ReportTable, TableCell } from "./types";
+import { isBankIndustry } from "@/lib/financials/dataset";
+import { isFinIndustry } from "./peers";
 import { buildInsights } from "./insights";
 import { numbersIn } from "./vet";
 import { money, mult, pct, perShare } from "./fmt";
@@ -120,7 +122,7 @@ export function isoWeek(date: string): string {
 
 /** Version key: changes when a new periodic filing or earnings release lands, or a new week starts. */
 /** Bump when the report format changes so stored reports are rewritten with it. */
-export const REPORT_FORMAT = "r6";
+export const REPORT_FORMAT = "r7";
 
 export function dataVersionOf(d: CompanyDataset, today: string): string {
   const periodic = d.filings.find((f) => f.form === "10-K" || f.form === "10-Q");
@@ -130,6 +132,7 @@ export function dataVersionOf(d: CompanyDataset, today: string): string {
 
 export function buildReportData(inp: ReportInputs): ReportData {
   const { data: d } = inp;
+  const financialInstitution = isFinIndustry(d.profile.industry);
   const p = new Pack();
   const t = d.profile.ticker;
   const A = d.statements.annual;
@@ -140,7 +143,12 @@ export function buildReportData(inp: ReportInputs): ReportData {
 
   // ---------- profile & filings ----------
   if (tenK) {
-    p.add("profile", `${d.profile.name} (${t}), ${d.profile.sector} / ${d.profile.industry}; headquartered in ${d.profile.address.city}, ${d.profile.address.state}; fiscal year ends ${d.profile.fiscalYearEnd.slice(0, 2)}/${d.profile.fiscalYearEnd.slice(2)}${d.profile.ceo ? `; CEO ${d.profile.ceo}` : ""}.`,
+    const hq = [d.profile.address?.city, d.profile.address?.state].filter(Boolean).join(", ");
+    const yearEnd = /^\d{4}$/.test(d.profile.fiscalYearEnd ?? "") ? d.profile.fiscalYearEnd : null;
+    const profile = [`${d.profile.name} (${t})`, [d.profile.sector, d.profile.industry].filter(Boolean).join(" / "),
+      hq && `headquartered in ${hq}`, yearEnd && `fiscal year ends ${yearEnd.slice(0, 2)}/${yearEnd.slice(2)}`,
+      d.profile.ceo && `CEO ${d.profile.ceo}`].filter(Boolean).join("; ");
+    p.add("profile", `${profile}.`,
       { kind: "filing", accn: tenK.accn, doc: tenK.doc, form: tenK.form, filed: tenK.filed, label: `Form 10-K filed ${tenK.filed}` });
     p.add("filings", `Latest annual report: Form 10-K filed ${tenK.filed} for the period ending ${tenK.report ?? "n/a"}.`,
       { kind: "filing", accn: tenK.accn, doc: tenK.doc, form: tenK.form, filed: tenK.filed, label: `Form 10-K filed ${tenK.filed}` });
@@ -284,7 +292,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
       const debt = cellAt(bal, "totalDebt", bi), cash = cellAt(bal, "cash", bi), sti = cellAt(bal, "shortTermInvestments", bi);
       let ev: number | null = null;
       let evParts: DerivedPart[] = sharesParts;
-      if (debt && cash) {
+      if (!financialInstitution && debt && cash) {
         ev = mcap + debt.v - cash.v - (sti?.v ?? 0);
         evParts = [...sharesParts, ...partsOf(debt, "Total debt"), ...partsOf(cash, "Cash"), ...(sti ? partsOf(sti, "Short-term investments") : [])];
         const evRef: FactRef = { kind: "derived", formula: "Market cap + total debt − cash − short-term investments", parts: evParts, market: mkt, label: "Enterprise value" };
@@ -300,7 +308,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
         const id = val.evSales = p.add("valuation", `Enterprise value to trailing revenue: ${mult(ev / ttmRev.v)}.`, { kind: "derived", formula: "EV ÷ TTM revenue", parts: [...evParts, ...derivedParts(ttmRev.ref)], market: mkt, label: "EV/Sales (TTM)" });
         valuationRows.push({ label: "EV / Sales (TTM)", cells: [{ text: mult(ev / ttmRev.v), ref: p.ref(id) }, { text: "EV ÷ TTM revenue" }] });
       }
-      if (ttmFcf) {
+      if (!financialInstitution && ttmFcf) {
         const id = val.fcfYield = p.add("valuation", `Free-cash-flow yield (TTM free cash flow ÷ market cap): ${pct(ttmFcf.v / mcap)}.`, { kind: "derived", formula: "TTM free cash flow ÷ market cap", parts: [...derivedParts(ttmFcf.ref), ...sharesParts], market: mkt, label: "FCF yield" });
         valuationRows.push({ label: "FCF yield", cells: [{ text: pct(ttmFcf.v / mcap), ref: p.ref(id) }, { text: "TTM FCF ÷ market cap" }] });
       }
@@ -311,7 +319,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
     }
   }
   const nd = balanceIds.get("netDebt");
-  if (nd) valuationRows.push({ label: "Net debt", cells: [{ text: p.facts.find((f) => f.id === nd)!.text.split(": ").pop()!.replace(/\.$/, ""), ref: p.ref(nd) }, { text: `At ${qbPer?.end ?? ""}` }] });
+  if (!financialInstitution && nd) valuationRows.push({ label: "Net debt", cells: [{ text: p.facts.find((f) => f.id === nd)!.text.split(": ").pop()!.replace(/\.$/, ""), ref: p.ref(nd) }, { text: `At ${qbPer?.end ?? ""}` }] });
 
   // ---------- estimates ----------
   const est = inp.estimates;
@@ -443,8 +451,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
         rowFrom("Net income", annualIds.get("netIncome")),
         rowFrom("Diluted EPS", annualIds.get("epsDiluted"), true),
         rowFrom("EPS growth", growthIds.get("epsDiluted"), false, true),
-        rowFrom("Free cash flow", annualIds.get("fcf")),
-        rowFrom("FCF margin", marginIds.get("fcf")),
+        ...(!financialInstitution ? [rowFrom("Free cash flow", annualIds.get("fcf")), rowFrom("FCF margin", marginIds.get("fcf"))] : []),
         rowFrom("Share repurchases", annualIds.get("buybacks")),
       ].filter((r) => r.cells.some(Boolean)),
       note: "From 10-K XBRL; growth and margins are calculated from the reported values.",
@@ -465,6 +472,52 @@ export function buildReportData(inp: ReportInputs): ReportData {
       note: "From 10-Q/10-K XBRL; fourth quarters are derived as fiscal year minus the first three quarters.",
     });
   }
+  let fundingChart: ReportChart | undefined;
+  if (isBankIndustry(d.profile.industry)) {
+    const points = new Map<string, ChartPoint[]>();
+    const periods = qPeriods.slice(-4);
+    const lines = [
+      ["income", "netInterestIncome", "Net interest income"],
+      ["income", "nonInterestIncome", "Noninterest income"],
+      ["income", "nonInterestExpense", "Noninterest expense"],
+      ["income", "provisionCreditLosses", "Provision for credit losses"],
+      ["balance", "loans", "Loans, net of allowance"],
+      ["balance", "deposits", "Deposits"],
+      ["kpis", "loansToDeposits", "Net loans / deposits"],
+      ["kpis", "efficiencyRatio", "Noninterest expense / revenue"],
+      ["kpis", "equityToAssets", "Book equity / assets"],
+    ] as const;
+    const rows = lines.map(([statement, key, label]) => {
+      const st = Q[statement];
+      const row = rowOf(st, key);
+      const series: ChartPoint[] = periods.map(() => ({ v: null }));
+      points.set(key, series);
+      const cells = periods.map((period, i) => {
+        const cell = row?.cells[st.periods.findIndex((x) => x.end === period.end)];
+        if (!row || !cell || !Number.isFinite(cell.v)) return null;
+        if (key === "netInterestIncome" && partsOf(cell, label).some((part) => /AfterProvision/i.test(part.concept))) return null;
+        const ref = srcOf(cell);
+        if (!ref) return null;
+        const text = fmtUnit(cell.v, row.unit);
+        const id = p.add("quarterly", `${periodName(period, true)} ${label} (period ended ${period.end}): ${text}.`, ref, { v: cell.v });
+        series[i] = { v: cell.v, f: id ?? undefined };
+        return { text, ref };
+      });
+      return { label, cells, bold: key === "netInterestIncome" || key === "deposits" };
+    }).filter((r) => r.cells.some(Boolean));
+    const loans = points.get("loans")!, deposits = points.get("deposits")!;
+    if (deposits.filter((d, i) => d.v != null && loans[i].v != null).length >= 2) {
+      fundingChart = { id: "bank-funding", type: "combo", title: "Loans and deposit funding", subtitle: "Quarter-end balances",
+        x: periods.map((period) => periodName(period, true)), size: "half",
+        series: [
+          { name: "Deposits", kind: "bar", unit: "usd", points: deposits, tone: "peer" },
+          { name: "Loans, net", kind: "line", unit: "usd", points: loans, tone: "self" },
+        ] };
+    }
+    const hasBankLine = ["netInterestIncome", "provisionCreditLosses", "deposits", "loans"].some((key) => points.get(key)?.some((point) => point.f));
+    if (hasBankLine) tables.push({ id: "bank-operations", title: "Bank earnings, funding and credit", columns: periods.map((x) => periodName(x, true)), rows,
+      note: "Income and provisions are quarterly flows. Loans, deposits and book equity are period-end balances. The expense ratio uses reported revenue and may differ from management’s adjusted efficiency ratio." });
+  }
   if (valuationRows.length) tables.push({ id: "valuation", title: "Valuation snapshot", columns: ["Value", "Basis"], rows: valuationRows, note: inp.price ? `Share price as of ${inp.price.asOf} (market data); fundamentals from SEC filings.` : undefined });
   if (estRows.length) tables.push({ id: "estimates", title: "Street consensus", columns: ["Period ends", "EPS", "EPS range", "Revenue", "Analysts", "EPS rev. 30d"], rows: estRows, note: `Third-party consensus as of ${est!.asOf.slice(0, 10)}.` });
   tables.push(...segTables);
@@ -484,7 +537,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
   return {
     facts: p.facts,
     tables,
-    charts: insights.charts,
+    charts: fundingChart ? [...insights.charts, fundingChart] : insights.charts,
     glance: insights.glance,
     peers: insights.peers,
     dataVersion: dataVersionOf(d, inp.today),

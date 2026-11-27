@@ -19,7 +19,8 @@ export interface ExtValue {
   fiscal_label: string | null;
   value: number | string;
   source_id: string;
-  anchor: { quote?: string | null; page?: number | null; sheet?: string | null } | null;
+  source_kind?: string;
+  anchor: { cell?: string | null; name?: string | null; id?: string | null; quote?: string | null; page?: number | null; sheet?: string | null } | null;
   derived: { formula?: string; inputs?: { kind: string; period_end: string }[] } | null;
 }
 export interface ExtDoc {
@@ -38,28 +39,34 @@ export interface ExtDoc {
 /** Ids of documents served from the partner corpus carry this prefix. */
 export const EXT_PREFIX = "x:";
 
-export function mapUnit(u: string | null): string {
-  switch (u) {
+export function mapUnit(u: string | null, label = ""): string {
+  switch (u?.trim()) {
     case "USD":
       return "usd";
     case "USD_per_unit":
+      return /per (?:common |diluted |ordinary )?share/i.test(label) ? "usdPerShare" : "usdPerUnit";
     case "USD_per_share":
       return "usdPerShare";
     case "%":
       return "pct";
-    case "pp":
+    case "bp":
+    case "bps":
       return "bps";
+    case "x":
+      return "ratio";
     default:
-      return "count";
+      return u?.trim() || "other";
   }
 }
 
-const monthsOf = (kind: string) => (kind === "A" ? 12 : 3);
+const monthsOf = (kind: string) => (kind === "A" ? 12 : kind === "I" ? 0 : 3);
 /** Where the quoted line is printed in the stored document: page (PDFs, decks) or worksheet. */
 const placeOf = (v: ExtValue) => ({
   ...(v.anchor?.quote ? { x: v.anchor.quote } : {}),
   ...(typeof v.anchor?.page === "number" && v.anchor.page > 0 ? { p: v.anchor.page } : {}),
   ...(v.anchor?.sheet ? { sh: v.anchor.sheet } : {}),
+  ...(v.anchor?.sheet && v.anchor.cell && /^[A-Z]{1,3}[1-9]\d{0,6}$/i.test(v.anchor.cell) ? { sheetCell: v.anchor.cell.toUpperCase() } : {}),
+  ...(v.source_kind === "xbrl" && v.anchor?.name ? { ixConcept: v.anchor.name, ixId: v.anchor.id ?? undefined } : {}),
 });
 const secParts = (url: string) => {
   const m = url.match(/\/Archives\/edgar\/data\/\d+\/(\d{10})(\d{2})(\d{6})\/([^/?#]+)/);
@@ -70,15 +77,45 @@ export function buildExternalPayload(ticker: string, defs: ExtDef[], allValues: 
   // Figures read from files the reviewed list shows to be another company's never reach the page.
   const refused = hasGuardedSources(ticker) ? new Set(allDocs.filter((d) => guardedSourceOf(ticker, d.url)).map((d) => d.id)) : new Set<string>();
   const docs = refused.size ? allDocs.filter((d) => !refused.has(d.id)) : allDocs;
-  const values = refused.size ? allValues.filter((v) => !refused.has(v.source_id)) : allValues;
+  const allowed = refused.size ? allValues.filter((v) => !refused.has(v.source_id)) : allValues;
+  // A balance at a date and a flow over a period are different observations even when their
+  // vendor KPI id and end date match. Keep the original id for the flow and separate its stock.
+  const instants = new Set(allowed.filter((v) => v.period_kind === "I").map((v) => v.kpi_id));
+  const flows = new Set(allowed.filter((v) => v.period_kind === "Q" || v.period_kind === "A").map((v) => v.kpi_id));
+  const reserved = new Set(defs.map((d) => d.kpi_id));
+  const instantKey = new Map<string, string>();
+  for (const id of instants) {
+    let key = id;
+    if (flows.has(id)) {
+      do key += ":as-of"; while (reserved.has(key));
+      reserved.add(key);
+    }
+    instantKey.set(id, key);
+  }
+  defs = defs.flatMap((d) => {
+    const key = instantKey.get(d.kpi_id);
+    if (!key) return [d];
+    const parent = d.parent_id ? instantKey.get(d.parent_id) ?? null : null;
+    const stock = { ...d, kpi_id: key, parent_id: parent,
+      name: key === d.kpi_id ? d.name : `${d.name} (period end)` };
+    return key === d.kpi_id ? [stock] : [d, stock];
+  });
+  const values = allowed.map((v) => v.period_kind === "I" && instantKey.get(v.kpi_id) !== v.kpi_id
+    ? { ...v, kpi_id: instantKey.get(v.kpi_id)! } : v);
+  const stockKeys = new Set(instantKey.values());
   const docIdx = new Map<string, number>();
   const outDocs: PayloadDoc[] = [];
   const docById = new Map(docs.map((d) => [d.id, d]));
-  const di = (id: string): number | undefined => {
+  const di = (id: string, kind?: string): number | undefined => {
     const hit = docIdx.get(id);
     if (hit != null) return hit;
     const d = docById.get(id);
-    if (!d) return undefined;
+    if (!d && !(kind === "xbrl" && /^\d{10}-\d{2}-\d{6}$/.test(id))) return undefined;
+    if (!d) {
+      outDocs.push({ id: `sec:${id}`, accn: id, doc: null, kind: "filing", filed: null });
+      docIdx.set(id, outDocs.length - 1);
+      return outDocs.length - 1;
+    }
     const sec = secParts(d.url);
     outDocs.push({ id: `${EXT_PREFIX}${id}`, accn: sec.accn, doc: sec.doc, kind: d.doc_type, filed: d.published });
     docIdx.set(id, outDocs.length - 1);
@@ -97,25 +134,31 @@ export function buildExternalPayload(ticker: string, defs: ExtDef[], allValues: 
         const src = all.get(`${v.kpi_id}|${inp.kind}|${inp.period_end}`);
         if (!src) return [];
         const label = `${defById.get(v.kpi_id)?.name ?? v.kpi_id} (${src.fiscal_label ?? inp.period_end})`;
-        return [{ label, v: Number(src.value), sign: (i === 0 ? 1 : -1) as 1 | -1, d: di(src.source_id), ...placeOf(src), e: src.period_end, m: inp.kind === "A" ? 12 : inp.kind === "Q" ? 3 : 0 }];
+        return [{ label, v: Number(src.value), sign: (i === 0 ? 1 : -1) as 1 | -1, d: di(src.source_id, src.source_kind), ...placeOf(src), e: src.period_end, m: inp.kind === "A" ? 12 : inp.kind === "Q" ? 3 : 0 }];
       });
       if (parts.length) return { ...base, f: { formula: v.derived.formula ?? "derived", parts } };
     }
-    return { ...base, d: di(v.source_id), ...placeOf(v) };
+    return { ...base, d: di(v.source_id, v.source_kind), ...placeOf(v) };
   };
 
   const byKpi = new Map<string, { q: Record<string, PayloadCell>; y: Record<string, PayloadCell> }>();
   const quarters = new Set<string>();
   const years = new Set<string>();
   for (const v of values) {
-    if (v.period_kind !== "Q" && v.period_kind !== "A") continue;
+    if (v.period_kind !== "Q" && v.period_kind !== "A" && v.period_kind !== "I") continue;
     if (!Number.isFinite(Number(v.value))) continue;
     const slot = byKpi.get(v.kpi_id) ?? { q: {}, y: {} };
     byKpi.set(v.kpi_id, slot);
-    if (v.period_kind === "Q") (slot.q[v.period_end] = cellOf(v)), quarters.add(v.period_end);
+    if (v.period_kind !== "A") (slot.q[v.period_end] = cellOf(v)), quarters.add(v.period_end);
     else (slot.y[v.period_end] = cellOf(v)), years.add(v.period_end);
   }
 
+  // Include a year-end balance in the annual view only when the company prints a fiscal year
+  // ending on exactly that date. It remains an instant (m=0), never a four-quarter sum.
+  for (const k of stockKeys) {
+    const slot = byKpi.get(k);
+    if (slot) for (const end of years) if (slot.q[end]) slot.y[end] = slot.q[end];
+  }
   const kids = new Map<string, string[]>();
   for (const d of defs) if (d.parent_id && defById.has(d.parent_id)) kids.set(d.parent_id, [...(kids.get(d.parent_id) ?? []), d.kpi_id]);
   const isRevenue = (d: ExtDef) => /revenue|net sales|sales/i.test(`${d.name} ${d.category ?? ""}`);
@@ -149,7 +192,8 @@ export function buildExternalPayload(ticker: string, defs: ExtDef[], allValues: 
       label: d.name,
       parent: d.parent_id && defById.has(d.parent_id) ? d.parent_id : null,
       total: kids.has(d.kpi_id),
-      unit: mapUnit(d.unit),
+      unit: mapUnit(d.unit, d.name),
+      ...(stockKeys.has(d.kpi_id) ? { pit: true } : {}),
       bd: d.category,
       sc: titleOf(gid),
       q: cells.q,
@@ -183,7 +227,7 @@ export function buildExternalPayload(ticker: string, defs: ExtDef[], allValues: 
   for (const [pid, ks] of kids) {
     const parent = cellsBy.get(pid);
     const parts = ks.filter((k) => defById.get(k)?.sums_to_parent).map((k) => cellsBy.get(k)).filter(Boolean) as PayloadSeries[];
-    if (!parent || parts.length < 2) continue;
+    if (!parent || parts.length < 2 || parts.some((p) => p.unit !== parent.unit || !!p.pit !== !!parent.pit)) continue;
     for (const kind of ["q", "fy"] as const) {
       const pc = kind === "q" ? parent.q : parent.y;
       for (const [e, c] of Object.entries(pc)) {

@@ -58,6 +58,12 @@ describe("KPI series", () => {
     expect(Object.keys(seriesOf(cet1, "Q").vals)).toHaveLength(2);
     expect(seriesOf(nim, "Q").basis).toBe("quarterly");
   });
+  it("never substitutes a quarterly flow or an interim balance for a fiscal year total", () => {
+    expect(seriesOf(nim, "A").vals).toEqual({});
+    expect(seriesOf(cet1, "A").vals).toEqual({});
+    const balances = { ...cet1, values: { I: { "2025-09-30": src(12, 2, "Q4 FY25"), "2026-06-30": src(13, 2, "Q3 FY26") } } };
+    expect(Object.keys(seriesOf(balances as KpiItem, "A").vals)).toEqual(["2025-09-30"]);
+  });
   it("prints level, QoQ and YoY in points for rates, with page and quote", () => {
     const [latest] = kpiLines(nim, "Q", 5);
     expect(latest).toContain("2.48%");

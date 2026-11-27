@@ -14,7 +14,7 @@ export const KINDS: Record<ReportKind, KindDef> = {
     sections: [
       { id: "summary", title: "Investment summary", brief: "4-6 bullets: what the company is, what drives the numbers now, the debate, and what matters next." },
       { id: "business", title: "Business overview", brief: "How the company makes money: segments, mix, which segments drove growth and how the mix has shifted.", tables: ["segments-1", "segments-2"], charts: ["segment-mix", "segment-growth"] },
-      { id: "financials", title: "Financial profile", brief: "Multi-year growth, margin and cash-flow trajectory; the operating-margin bridge, incremental margins and seasonality; what changed recently.", tables: ["financials"], charts: ["revenue-annual", "margins-annual", "margin-bridge"] },
+      { id: "financials", title: "Financial profile", brief: "Multi-year growth, margin and cash-flow trajectory; the operating-margin bridge, incremental margins and seasonality; what changed recently.", tables: ["bank-operations", "financials"], charts: ["bank-funding", "revenue-annual", "margins-annual", "margin-bridge"] },
       { id: "capital", title: "Balance sheet & capital allocation", brief: "Cash, debt, coverage, cash conversion, capex intensity, buybacks, dividends, dilution and stock compensation.", charts: ["cash-flow", "capital-returns"] },
       { id: "peers", title: "Competitive positioning", brief: "How the company compares with its peers on growth, profitability, cash generation, valuation and share-price performance: where it ranks, how far from the median, what explains the gaps, and the growth-adjusted valuation.", tables: ["peers"], charts: ["peer-panel", "peer-scatter"] },
       { id: "valuation", title: "Valuation & the street", brief: "Current multiples against the company's own five-year history and its peers, consensus expectations versus the reported trajectory, revisions, rating mix, targets and recent analyst actions.", tables: ["valuation", "estimates"], charts: ["valuation-history", "target-range", "price-performance", "eps-revisions"] },
@@ -32,7 +32,7 @@ export const KINDS: Record<ReportKind, KindDef> = {
     sections: [
       { id: "setup", title: "Setup into the print", brief: "Date, recent trend in results and estimates, the stock's performance against the S&P 500 and peers, and where it trades against its own history.", charts: ["price-performance", "valuation-history"] },
       { id: "street", title: "What the street expects", brief: "Consensus EPS and revenue, the range and dispersion, revision direction, implied growth versus the reported trajectory, and the rating mix.", tables: ["estimates"], charts: ["eps-revisions", "rating-mix"] },
-      { id: "watch", title: "What to watch", brief: "4-6 bullets: specific lines, margins, segments, seasonality and open management commitments to check.", tables: ["quarters"], charts: ["revenue-quarterly", "margins-quarterly"] },
+      { id: "watch", title: "What to watch", brief: "4-6 bullets: specific lines, margins, segments, seasonality and open management commitments to check.", tables: ["bank-operations", "quarters"], charts: ["bank-funding", "revenue-quarterly", "margins-quarterly"] },
       { id: "peers", title: "Read-across from peers", brief: "How the company's growth, margins and valuation compare with its peers' latest reported quarters, and what that positioning implies into the print.", tables: ["peers"], charts: ["peer-panel"] },
       { id: "history", title: "How the stock reacts", brief: "Historical earnings-day moves, direction hit rate, post-print drift, the surprise record and how the stock reacted to beats versus misses.", tables: ["reactions"], charts: ["reactions", "surprises"] },
       { id: "scenarios", title: "Scenarios", brief: "Upside and downside paths: what each would require, using only cited numbers; anchor to street targets and the trading range.", charts: ["target-range"] },
@@ -48,7 +48,7 @@ export const KINDS: Record<ReportKind, KindDef> = {
     sections: [
       { id: "headline", title: "Results at a glance", brief: "4-6 bullets with the headline numbers of the latest reported quarter.", charts: ["revenue-quarterly"] },
       { id: "vs", title: "Versus expectations", brief: "EPS surprise history and how the quarter compared with consensus.", charts: ["surprises"] },
-      { id: "drivers", title: "Drivers", brief: "What moved revenue and margins year over year: the operating-margin bridge, incremental margin, segment contributions to growth and mix shift.", tables: ["quarters"], charts: ["margins-quarterly", "margin-bridge", "segment-growth"] },
+      { id: "drivers", title: "Drivers", brief: "What moved revenue and margins year over year: the operating-margin bridge, incremental margin, segment contributions to growth and mix shift.", tables: ["bank-operations", "quarters"], charts: ["bank-funding", "margins-quarterly", "margin-bridge", "segment-growth"] },
       { id: "peers", title: "Versus peers", brief: "How the quarter's growth and margins compare with peers, and whether the company is gaining or losing ground.", tables: ["peers"], charts: ["peer-panel"] },
       { id: "guidance", title: "Guidance & management commitments", brief: "What management promised and whether earlier promises were kept, with quotes." },
       { id: "reaction", title: "Market reaction", brief: "How the stock reacted to this and prior releases, versus the S&P 500 and peers.", tables: ["reactions"], charts: ["reactions", "price-performance"] },
@@ -64,7 +64,7 @@ export const KINDS: Record<ReportKind, KindDef> = {
     sections: [
       { id: "recommendation", title: "Thesis", brief: "The core thesis in 3-5 bullets. If a firm rating is cited, frame the thesis around it; otherwise present the balanced case without recommending." },
       { id: "variant", title: "Where we could differ from consensus", brief: "Compare consensus expectations and revisions with the trajectory in reported numbers.", charts: ["eps-revisions"] },
-      { id: "drivers", title: "Key value drivers", brief: "The few metrics that determine the outcome, their recent trend and what drives them (margin bridge, segment contributions).", tables: ["financials"], charts: ["revenue-annual", "margins-annual"] },
+      { id: "drivers", title: "Key value drivers", brief: "The few metrics that determine the outcome, their recent trend and what drives them (margin bridge, segment contributions).", tables: ["bank-operations", "financials"], charts: ["bank-funding", "revenue-annual", "margins-annual"] },
       { id: "relative", title: "Relative value", brief: "Positioning against peers on growth, margins, returns and multiples; the growth-adjusted valuation gap and whether it looks justified.", tables: ["peers"], charts: ["peer-scatter", "peer-panel"] },
       { id: "valuation", title: "Valuation", brief: "Current multiples against the five-year history, cash generation, street targets and the trading range.", tables: ["valuation", "estimates"], charts: ["valuation-history", "target-range"] },
       { id: "catalysts", title: "Catalysts", brief: "Dated events and what each could reveal." },

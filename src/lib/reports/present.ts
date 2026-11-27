@@ -8,6 +8,15 @@ function marketNote(m: { label: string; value: number; asOf: string }[] | undefi
   return m?.length ? ` · uses ${m.map((x) => `${x.label.toLowerCase()} $${x.value.toFixed(2)} as of ${x.asOf} (market data)`).join(", ")}` : "";
 }
 
+export function webSourceUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Turn a fact/cell reference into a source-panel target (null for market/firm data, shown as a note). */
 export function refTarget(ref: FactRef, ticker: string, text: string): SourceTarget | null {
   const n = numbersIn(text).at(-1);
@@ -18,7 +27,7 @@ export function refTarget(ref: FactRef, ticker: string, text: string): SourceTar
     case "sec": return { ticker, label, unit, value: ref.src.value, src: ref.src };
     case "derived": return { ticker, label, unit, value: n?.value ?? 0, derived: { formula: `${ref.formula}${marketNote(ref.market)}`, parts: ref.parts } };
     case "filing": return { ticker, label: ref.label, unit: "usd", value: 0, doc: { accn: ref.accn, doc: ref.doc, form: ref.form, filed: ref.filed, title: ref.label } };
-    case "web": return { ticker, label: ref.label, unit: "usd", value: 0, external: { url: ref.url, quote: ref.quote, date: ref.date, confidence: "Verbatim quote checked against the transcript" } };
+    case "web": return webSourceUrl(ref.url) ? { ticker, label: ref.label, unit: "usd", value: 0, external: { url: ref.url, quote: ref.quote, date: ref.date, confidence: "Verbatim quote checked against the transcript" } } : null;
     default: return null;
   }
 }
@@ -28,7 +37,7 @@ export function refCaption(ref: FactRef): string {
     case "sec": return `${ref.tk ? `${ref.tk} · ` : ""}SEC XBRL · ${ref.src.concept} · ${ref.src.start ? `${ref.src.start} → ` : ""}${ref.src.end} · ${ref.src.accn}`;
     case "derived": return `${ref.tk ? `${ref.tk} · ` : ""}Calculated · ${ref.formula}${marketNote(ref.market)}`;
     case "filing": return `${ref.form === "4" ? "Form 4" : `Form ${ref.form}`} filed ${ref.filed} · ${ref.accn}`;
-    case "web": return `${ref.label}${ref.url ? ` · ${new URL(ref.url).hostname.replace(/^www\./, "")}` : ""}`;
+    case "web": return [ref.label, webSourceUrl(ref.url)?.hostname.replace(/^www\./, "")].filter(Boolean).join(" · ");
     case "market": return `Market data as of ${ref.asOf} (third-party; not from SEC filings)`;
     case "composite": return `Calculated across ${ref.members.length} sourced figure${ref.members.length === 1 ? "" : "s"} · ${ref.formula}`;
     case "firm": return `Firm coverage record as of ${ref.asOf}`;

@@ -48,10 +48,10 @@ const list = (xs: string[]) =>
  */
 export function missingNote(kinds: SectionKind[], headlines: string[]): string | null {
   const parts: string[] = [];
-  if (kinds.length) parts.push(`Not printed in the company's documents: ${list(kinds.map(words))}.`);
+  if (kinds.length) parts.push(`Outside the available statement tables: ${list(kinds.map(words))}.`);
   if (headlines.length)
     parts.push(
-      `No table prints ${list(headlines.map((h) => (/^[A-Z][a-z]/.test(h) ? h.charAt(0).toLowerCase() + h.slice(1) : h)))}.`,
+      `These tables do not show ${list(headlines.map((h) => (/^[A-Z][a-z]/.test(h) ? h.charAt(0).toLowerCase() + h.slice(1) : h)))}.`,
     );
   return parts.length ? parts.join(" ") : null;
 }

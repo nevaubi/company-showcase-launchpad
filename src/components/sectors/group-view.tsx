@@ -21,7 +21,7 @@ import { boardRows, type BoardRow } from "@/lib/sectors/board";
 import { groupTape, tapeAsOf } from "@/lib/sectors/breadth";
 import { driversOf } from "@/lib/sectors/drivers";
 import { byUnit, count, mult, pct, pts, ratio, tone, usd } from "@/lib/sectors/format";
-import { COL_SETS, COLS, COMPANY_NAME_W, companyColW, DIST, fitCompanies, IND_W, joinRows, sortRows, summary, tableSort, tapeOn, type ColSet, type GroupSearch, type Row, type Summary } from "@/lib/sectors/group";
+import { COL_SETS, COLS, COMPANY_NAME_W, figAt, companyColW, DIST, fitCompanies, IND_W, joinRows, sortRows, summary, tableSort, tapeOn, type ColSet, type GroupSearch, type Row, type Summary } from "@/lib/sectors/group";
 import { BREAKDOWN_METRICS, fmtMetric, groupQuery, loadFailure, overviewQuery, qLabel, tapeQuery, type GroupFile, type ValRange } from "@/lib/sectors/groups";
 import { baseMembers, membersOf, pageMembers, type Member } from "@/lib/sectors/members";
 import { groupRisk, marketIndex, type MarketIndex, type Signal } from "@/lib/sectors/risk";
@@ -137,11 +137,8 @@ export function GroupView({
           eyebrow={d.kind === "sector" ? `Sector${d.etf ? ` · ${d.etf}` : ""}` : `Industry · ${d.sector}`}
           title={d.name}
           actions={<SectorSourceLink sector={d.kind === "sector" ? d.name : d.sector} />}
-          description={`${d.constituents.length} covered companies, classified by SIC code with documented overrides. Fundamentals are Σ numerator ÷ Σ denominator over the companies reporting both, for ${
-            ref ? `${qLabel(ref.q)} (${ref.n} companies)` : "the latest quarter"
-          }: the newest quarter at least half as many companies have reported as the one before${
-            ref?.early ? `; ${qLabel(ref.early.q)} has ${ref.early.n} so far` : ""
-          }. Built ${fmtDate(d.generated.slice(0, 10))}${breadthLine}.`}
+          description={`${d.constituents.length} covered companies · ${ref ? `${qLabel(ref.q)} fundamentals` : "Quarterly fundamentals"} · Built ${fmtDate(d.generated.slice(0, 10))}${breadthLine}. Each metric shows its own reporting cohort.`}
+
         />
       </div>
       <SummaryStrip d={d} s={sum} onPick={pick} />
@@ -192,11 +189,15 @@ export function GroupView({
 }
 
 /* ---------- summary strip ---------- */
-const cos = (n: number | null | undefined) => `${count(n)} ${n === 1 ? "company" : "cos"}`;
+const coverageCount = (known: number | null, total: number) => `${count(known)} / ${count(total)} companies`;
 
 function SummaryStrip({ d, s, onPick }: { d: GroupFile; s: Summary; onPick: (m: string, q?: string) => void }) {
-  const omD = s.om.v != null && s.omYearAgo != null ? s.om.v - s.omYearAgo : null;
-  const early = s.ref?.early ? ` ${qLabel(s.ref.early.q)} is left out: ${s.ref.early.n} companies have reported it so far.` : "";
+  const bank = d.kind === "industry" && d.name === "Banks";
+  const profitabilityKey = bank ? "roe" : "om";
+  const profit = bank ? figAt(d, "roe", s.ref) : s.om;
+  const prior = profit.i != null && profit.i >= 4 ? d.agg[profitabilityKey]?.agg[profit.i - 4] : null;
+  const change = profit.v != null && prior != null ? profit.v - prior : null;
+  const early = s.ref?.early ? ` The latest partial quarter is ${qLabel(s.ref.early.q)}.` : "";
   const b = s.breadth;
   const share = b.above200;
   const thin = share?.thin && share.known > 0;
@@ -213,23 +214,23 @@ function SummaryStrip({ d, s, onPick }: { d: GroupFile; s: Summary; onPick: (m: 
         label="Revenue growth"
         value={pct(s.rev.v, { sign: true })}
         sub={`median ${pct(s.rev.med, { sign: true })}`}
-        basis={s.rev.q ? `${qLabel(s.rev.q)} · ${cos(s.rev.n)}` : undefined}
+        basis={s.rev.q ? `${qLabel(s.rev.q)} · ${coverageCount(s.rev.n, s.n)}` : undefined}
         title={`Σ revenue ÷ Σ year-ago revenue − 1 for ${s.rev.q ? qLabel(s.rev.q) : "the latest quarter"}.${early} Open the companies behind it`}
         onClick={() => onPick("rev_growth", s.rev.q ?? undefined)}
       />
       <Tile
-        label="Operating margin"
-        value={pct(s.om.v)}
-        sub={omD != null ? <span className={tone(omD)}>{pts(omD)} YoY</span> : `median ${pct(s.om.med)}`}
-        basis={s.om.q ? `${qLabel(s.om.q)} TTM · ${cos(s.om.n)}` : undefined}
-        title={`Σ operating income ÷ Σ revenue, trailing twelve months to ${s.om.q ? qLabel(s.om.q) : "the latest quarter"}; company median ${pct(s.om.med)}.${early} Open the companies behind it`}
-        onClick={() => onPick("om", s.om.q ?? undefined)}
+        label={bank ? "Return on equity" : "Operating margin"}
+        value={pct(profit.v)}
+        sub={change != null ? <span>{pts(change)} YoY</span> : `median ${pct(profit.med)}`}
+        basis={profit.q ? `${qLabel(profit.q)} TTM · ${coverageCount(profit.n, s.n)}` : undefined}
+        title={`${bank ? "Trailing net income ÷ quarter-end equity" : "Trailing operating income ÷ revenue"}, summed across companies with both inputs. Company median ${pct(profit.med)}.${early} Open the contributing companies.`}
+        onClick={() => onPick(profitabilityKey, profit.q ?? undefined)}
       />
       <Tile
         label="P/E"
         value={mult(s.pe.v)}
         sub={s.pe.pct != null ? `${ordinal(Math.round(s.pe.pct * 100))} pct of 10Y` : s.pe.q ? "quarter-end caps" : undefined}
-        basis={s.pe.v != null ? (s.pe.q ? `${qLabel(s.pe.q)} · ${cos(s.pe.n)}` : `today · ${cos(s.pe.n)}`) : undefined}
+        basis={s.pe.v != null ? (s.pe.q ? `${qLabel(s.pe.q)} · ${coverageCount(s.pe.n, s.n)}` : `today · ${coverageCount(s.pe.n, s.n)}`) : undefined}
         title={
           s.pe.q
             ? `Σ quarter-end market cap ÷ Σ trailing earnings, ${qLabel(s.pe.q)} (no current multiple in the file). Open the companies behind it`
@@ -973,7 +974,16 @@ function FilterChip({ on, onClick, label, n }: { on: boolean; onClick: () => voi
 const corrBg = (v: number | null | undefined) => heat(v, 0.6);
 
 function Macro({ d }: { d: GroupFile }) {
-  const rows = (d.macro ?? []).filter((m) => m.d || m.m).sort((a, b) => Math.abs(b.m?.corr ?? b.d?.corr ?? 0) - Math.abs(a.m?.corr ?? a.d?.corr ?? 0));
+  const [window, setWindow] = useState<"d" | "m">("m");
+  const rows = (d.macro ?? []).filter((m) => m.d?.corr != null || m.m?.corr != null)
+    .sort((a, b) => Math.abs(b[window]?.corr ?? 0) - Math.abs(a[window]?.corr ?? 0));
+  const leader = rows.find((m) => m[window]?.corr != null);
+  const fit = leader?.[window];
+  // The pipeline fits on decimal returns for percent factors, bp for yields
+  // and spreads, and thousands for payroll changes. Keep those units here.
+  const shock = leader?.unit === "%" ? { size: 0.01, label: "+1%" }
+    : leader?.unit === "bp" ? { size: 25, label: "+25 bp" }
+    : leader?.unit === "k" ? { size: 100, label: "+100k jobs" } : null;
   if (!rows.length)
     return (
       <Section name="Macro sensitivity" title="Macro sensitivity">
@@ -983,14 +993,28 @@ function Macro({ d }: { d: GroupFile }) {
   const fac = new Map((d.factors ?? []).map((f) => [f.id, f]));
   const c = (v: number | undefined | null) => (v == null ? "–" : `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}`);
   return (
-    <Section name="Macro sensitivity" title="Macro sensitivity" caption="Correlation of the group's cap-weighted return with changes in each series; below about 0.2 either way is weak">
+    <Section name="Macro sensitivity" title="Macro sensitivity" caption="Cap-weighted member returns · ranked by absolute correlation"
+      actions={<Segmented size="xs" label="Sensitivity horizon" value={window} onChange={setWindow} options={[{ v: "m", l: "Monthly" }, { v: "d", l: "Daily" }]} />}>
+      {leader && fit && (
+        <div className="grid grid-cols-2 gap-x-4 border-b bg-muted/25 px-3.5 py-2.5">
+          <div><p className="eyebrow">Closest historical relationship</p>
+            <p className="mt-1 text-[13px] font-medium">{leader.name}</p>
+            <p className="num mt-0.5 text-[11px] text-muted-foreground">{ratio(fit.corr)} correlation · {fit.n} {window === "m" ? "months" : "sessions"}</p>
+          </div>
+          {shock && fit.beta != null && <div className="text-right">
+            <p className="eyebrow">Fitted sensitivity</p>
+            <p className="num mt-1 text-[14px] font-semibold">{pct(fit.beta * shock.size, { sign: true, digits: 2 })}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Return difference per {shock.label} factor move</p>
+          </div>}
+        </div>
+      )}
       <table className="w-full text-[13px]">
         <thead>
           <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
             <th className="pl-3.5 text-left">Series</th>
             <th className="w-[84px] text-right">Daily, 1Y</th>
             <th className="w-[96px] text-right">Monthly, 10Y</th>
-            <th className="w-[130px] text-right max-sm:hidden">Latest</th>
+            <th className="w-[130px] text-right max-sm:hidden">{window === "m" ? "Months" : "Sessions"}</th>
           </tr>
         </thead>
         <tbody>
@@ -1013,13 +1037,13 @@ function Macro({ d }: { d: GroupFile }) {
                 <td className="num text-right" style={corrBg(m.m?.corr)} title={m.m ? `${m.m.n} months` : undefined}>
                   {c(m.m?.corr)}
                 </td>
-                <td className="num text-right text-[12px] text-muted-foreground max-sm:hidden">{f?.latest ? `${f.latest[1]} · ${fmtDate(f.latest[0], { month: "short", day: "numeric" })}` : ""}</td>
+                <td className="num text-right text-[12px] text-muted-foreground max-sm:hidden">{m[window]?.n ?? "–"}{m[window]?.to && <span className="ml-1.5 text-[10px]">to {m[window]!.to!.slice(0, 7)}</span>}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">Rate and spread series use changes in basis points, the others percentage changes. Correlation is not causation.</p>
+      <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">Sensitivities use a separate historical regression for each factor. Shared exposures can influence the result.</p>
     </Section>
   );
 }
@@ -1078,37 +1102,42 @@ function Kpis({ d }: { d: GroupFile }) {
         <QuietLine>No industry-specific KPIs are tracked for this group yet.</QuietLine>
       </Section>
     );
+  const grouped = new Map<string, typeof k>();
+  for (const metric of k) {
+    const industry = metric.industry || d.name;
+    if (!grouped.has(industry)) grouped.set(industry, []);
+    grouped.get(industry)!.push(metric);
+  }
   return (
-    <Section name="Industry KPIs" title="Industry KPIs" caption="From each company's filings or releases; median or sum as stated">
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
-            <th className="pl-3.5 text-left">KPI</th>
-            <th className="w-[110px] text-right">Latest</th>
-            <th className="w-[80px] text-right">Year ago</th>
-            <th className="w-[80px] text-right">Companies</th>
-          </tr>
-        </thead>
-        <tbody>
-          {k.map((x) => {
-            let i = x.agg.length - 1;
-            while (i >= 0 && x.agg[i] == null) i--;
-            const u = x.unit === "%" ? "%" : x.unit === "days" ? "days" : x.unit === "USD" ? "usd" : x.unit;
-            return (
-              <tr key={x.id} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 last:[&>td]:border-b-0" title={x.definition}>
-                <td className="max-w-0 truncate pl-3.5">
-                  {x.name} <span className="text-[11px] text-muted-foreground">{x.how}{x.industry ? ` · ${x.industry}` : ""}</span>
-                </td>
-                <td className="num text-right">
-                  {i >= 0 ? fmtMetric(x.agg[i], u) : "–"} <span className="text-[11px] text-muted-foreground">{i >= 0 ? qLabel(x.quarters[i]) : ""}</span>
-                </td>
-                <td className="num text-right text-muted-foreground">{i >= 4 ? fmtMetric(x.agg[i - 4], u) : "–"}</td>
-                <td className="num text-right">{i >= 0 && x.n ? x.n[i] : "–"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <Section name="Industry KPIs" title="Industry KPIs" caption="Reporting companies only · figures as filed, grouped by industry">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[510px] text-[13px]">
+          <thead className="text-[11px] text-muted-foreground">
+            <tr className="[&>th]:h-7 [&>th]:border-b [&>th]:px-3 [&>th]:font-medium">
+              <th className="text-left">Operating measure</th><th className="text-left">Basis</th>
+              <th className="text-right">Latest</th><th className="text-right">Year ago</th>
+              <th className="text-right">Coverage</th>
+            </tr>
+          </thead>
+          {[...grouped].map(([industry, metrics]) => (
+            <tbody key={industry}>
+              <tr><th scope="rowgroup" colSpan={5} className="border-y bg-muted/40 px-3 py-1 text-left text-[11px] font-semibold">{industry}</th></tr>
+              {metrics.map((x) => {
+                let i = x.agg.length - 1;
+                while (i >= 0 && x.agg[i] == null) i--;
+                return <tr key={x.id} className="border-b last:border-0 hover:bg-muted/20 [&>td]:px-3 [&>td]:py-1.5" title={x.definition}>
+                  <th scope="row" className="px-3 text-left font-normal">{x.name}</th>
+                  <td className="text-[11px] capitalize text-muted-foreground">{x.how}</td>
+                  <td className="num text-right font-medium">{fmtMetric(x.agg[i], x.unit)}
+                    {i >= 0 && <span className="ml-1.5 inline-block text-[10px] font-normal text-muted-foreground">{qLabel(x.quarters[i])}</span>}</td>
+                  <td className="num text-right text-muted-foreground">{fmtMetric(x.agg[i - 4], x.unit)}</td>
+                  <td className="num text-right">{i >= 0 && x.n?.[i] != null ? `${x.n[i]}${x.members_total ? " / " + x.members_total : ""}` : "–"}</td>
+                </tr>;
+              })}
+            </tbody>
+          ))}
+        </table>
+      </div>
     </Section>
   );
 }

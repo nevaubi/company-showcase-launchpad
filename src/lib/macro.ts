@@ -3,14 +3,17 @@ import type { MacroDef } from "@/lib/coverage";
 
 export type Obs = [string, number][];
 
-const back = (d: string, months: number) => {
+export const monthsBefore = (d: string, months: number) => {
   const t = new Date(`${d}T00:00:00Z`);
-  t.setUTCMonth(t.getUTCMonth() - months);
+  const day = t.getUTCDate();
+  t.setUTCDate(1);
+  t.setUTCMonth(t.getUTCMonth() - months + 1, 0);
+  t.setUTCDate(Math.min(day, t.getUTCDate()));
   return t.toISOString().slice(0, 10);
 };
 
 /** Value at or before `date` (binary search on sorted observations). */
-export function valueAt(obs: Obs, date: string): number | null {
+function observationAt(obs: Obs, date: string): Obs[number] | null {
   let lo = 0;
   let hi = obs.length - 1;
   let ans = -1;
@@ -21,26 +24,58 @@ export function valueAt(obs: Obs, date: string): number | null {
       lo = mid + 1;
     } else hi = mid - 1;
   }
-  return ans >= 0 ? obs[ans][1] : null;
+  return ans >= 0 ? obs[ans] : null;
+}
+
+export function valueAt(obs: Obs, date: string): number | null {
+  return observationAt(obs, date)?.[1] ?? null;
+}
+
+const monthNumber = (d: string) => Number(d.slice(0, 4)) * 12 + Number(d.slice(5, 7));
+
+/** Restrict calendar comparisons to the target period; daily and weekly series allow a holiday. */
+function periodValue(obs: Obs, target: string, frequency: MacroDef["frequency"]) {
+  const marketCalendar = frequency === "Daily" || frequency === "Weekly";
+  // Monthly and quarterly publishers can label periods by their first or
+  // last day. September 30 must be allowed to compare to August 31.
+  const cutoff = marketCalendar ? target : target.slice(0, 7) + "-31";
+  const found = observationAt(obs, cutoff);
+  if (!found) return null;
+  const valid = marketCalendar
+    ? Date.parse(target) - Date.parse(found[0]) <= 7 * 86400000
+    : monthNumber(target) === monthNumber(found[0]);
+  return valid ? found[1] : null;
+}
+
+/** All tenor observations in a curve must come from the same market session. */
+export function sharedCurveDates(series: Obs[]): string[] {
+  if (!series.length || series.some((obs) => !obs.length)) return [];
+  const dates = series.map((obs) => new Set(obs.filter(([, v]) => Number.isFinite(v)).map(([d]) => d)));
+  return [...dates[0]].filter((d) => dates.every((available) => available.has(d))).sort();
 }
 
 /** Apply the series' display transform (year-over-year %, period change or trailing 12-month sum). */
-export function transformed(def: Pick<MacroDef, "transform">, obs: Obs): Obs {
+export function transformed(def: Pick<MacroDef, "transform" | "frequency">, obs: Obs): Obs {
   if (def.transform === "yoy") {
     const out: Obs = [];
     for (const [d, v] of obs) {
-      const prior = valueAt(obs, back(d, 12));
-      if (prior && obs[0][0] <= back(d, 12)) out.push([d, (v / prior - 1) * 100]);
+      const prior = periodValue(obs, monthsBefore(d, 12), def.frequency);
+      if (prior != null && prior !== 0) out.push([d, (v / prior - 1) * 100]);
     }
     return out;
   }
-  if (def.transform === "diff") return obs.slice(1).map(([d, v], i) => [d, v - obs[i][1]]);
+  if (def.transform === "diff") {
+    return obs.slice(1).flatMap(([d, v], i): Obs =>
+      monthNumber(d) - monthNumber(obs[i][0]) === 1 ? [[d, v - obs[i][1]]] : [],
+    );
+  }
   if (def.transform === "sum12") {
     const out: Obs = [];
     for (let i = 11; i < obs.length; i++) {
-      let s = 0;
-      for (let k = i - 11; k <= i; k++) s += obs[k][1];
-      out.push([obs[i][0], s]);
+      const window = obs.slice(i - 11, i + 1);
+      if (window.every(([day], j) => monthNumber(day) === monthNumber(window[0][0]) + j)) {
+        out.push([obs[i][0], window.reduce((sum, [, v]) => sum + v, 0)]);
+      }
     }
     return out;
   }
@@ -79,14 +114,19 @@ export interface Reading {
 export function readingOf(def: Pick<MacroDef, "frequency">, obs: Obs): Reading {
   const last = obs.at(-1);
   if (!last) return { latest: null, date: null, prior: null, priorLabel: "", yearAgo: null };
-  const prev = def.frequency === "Daily" ? valueAt(obs, back(last[0], 1)) : (obs.at(-2)?.[1] ?? null);
+  const priorDate = def.frequency === "Weekly"
+    ? new Date(Date.parse(last[0]) - 7 * 86400000).toISOString().slice(0, 10)
+    : monthsBefore(last[0], def.frequency === "Quarterly" ? 3 : def.frequency === "Annual" ? 12 : 1);
+  const prev = def.frequency === "Weekly"
+    ? (obs.at(-2)?.[0] === priorDate ? obs.at(-2)![1] : null)
+    : periodValue(obs, priorDate, def.frequency);
   return {
     latest: last[1],
     date: last[0],
     prior: prev,
     priorLabel:
       def.frequency === "Daily" ? "1M ago" : def.frequency === "Weekly" ? "prior week" : def.frequency === "Quarterly" ? "prior qtr" : def.frequency === "Annual" ? "prior year" : "prior month",
-    yearAgo: valueAt(obs, back(last[0], 12)),
+    yearAgo: periodValue(obs, monthsBefore(last[0], 12), def.frequency),
   };
 }
 
@@ -127,7 +167,7 @@ export function summarize(def: MacroDef, raw: Obs, now = new Date().toISOString(
   const obs = transformed(def, raw);
   const r = readingOf(def, obs);
   const last = obs.at(-1)?.[0];
-  const win = (years: number) => (last ? obs.filter((o) => o[0] >= back(last, years * 12)).map((o) => o[1]) : []);
+  const win = (years: number) => (last ? obs.filter((o) => o[0] >= monthsBefore(last, years * 12)).map((o) => o[1]) : []);
   const ten = win(10);
   const five = win(5);
   let pct10y: number | null = null;
@@ -138,7 +178,7 @@ export function summarize(def: MacroDef, raw: Obs, now = new Date().toISOString(
     const sd = Math.sqrt(five.reduce((s, v) => s + (v - mean) ** 2, 0) / five.length);
     z5y = sd > 0 ? (r.latest - mean) / sd : 0;
   }
-  const recent = last ? obs.filter((o) => o[0] >= back(last, 60)) : [];
+  const recent = last ? obs.filter((o) => o[0] >= monthsBefore(last, 60)) : [];
   const step = Math.max(1, Math.ceil(recent.length / 72));
   const spark = recent.filter((_, i) => i % step === 0 || i === recent.length - 1).map(([d, v]) => [d, Math.round(v * 1e4) / 1e4] as [string, number]);
   return {

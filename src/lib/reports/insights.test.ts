@@ -118,6 +118,24 @@ describe("segment and fit charts", () => {
   const jpm = load("JPM");
   const peers = ["BAC", "WFC", "C", "GS", "MS"].map((t) => peerSnapshot(load(t), bars(t), lastClose(bars(t))));
   const built = buildReportData({ today: "2026-11-06", data: jpm, price: { price: 337, asOf: "2026-11-06" }, estimates: null, promises: null, reactions: null, coverage: null, peers, prices: { self: bars("JPM"), spy: bars("SPY") } });
+  it("shows the period-end bank funding and credit figures with filing references", () => {
+    const bank = built.tables.find((t) => t.id === "bank-operations");
+    expect(bank?.columns.at(-1)).toBe("Q2 FY2026");
+    const cells = Object.fromEntries(bank!.rows.map((r) => [r.label, r.cells.at(-1)]));
+    expect(cells["Deposits"]?.ref).toMatchObject({ kind: "sec", src: { end: "2026-06-30", value: 2713700000000 } });
+    expect(cells["Provision for credit losses"]?.ref).toMatchObject({ kind: "sec", src: { value: 2515000000 } });
+    expect(cells["Net loans / deposits"]?.text).toBe("55.9%");
+    expect(cells["Net loans / deposits"]?.ref?.kind).toBe("derived");
+    const chart = built.charts.find((c) => c.id === "bank-funding");
+    expect(chart?.type).toBe("combo");
+    if (chart?.type === "combo") {
+      const last = chart.series[0].points.at(-1)!;
+      expect(last.v).toBe(2713700000000);
+      expect(built.facts.find((f) => f.id === last.f)?.ref).toEqual(cells["Deposits"]?.ref);
+    }
+    const valuation = built.tables.find((t) => t.id === "valuation")!;
+    expect(valuation.rows.some((r) => ["FCF yield", "Enterprise value", "EV / Sales (TTM)", "Net debt"].includes(r.label))).toBe(false);
+  });
   it("plots only years in which every shown segment is reported", () => {
     const mix = built.charts.find((c) => c.id === "segment-mix");
     expect(mix && mix.type === "stacked").toBe(true);

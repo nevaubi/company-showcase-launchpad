@@ -3,7 +3,7 @@ import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { FirmLogo } from "@/components/estimates/firm-logo";
 import { useSource } from "@/components/source/source-context";
-import type { Estimates as LiveEstimates } from "@/lib/estimates/core";
+import { revisionPct, type Estimates as LiveEstimates } from "@/lib/estimates/core";
 import { startOf } from "@/lib/statements/filed";
 import { fmtDate, fmtRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ import {
   ago,
   basisLabel,
   cleanQuote,
+  fiscalEpsHistory,
   fCnt,
   fEps,
   fPct,
@@ -584,13 +585,12 @@ const SERIES_COLOR = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var
 function RevisionChart({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners> }) {
   const [ref, W] = useWidth<HTMLDivElement>();
   const snaps = d.snapshots ?? [];
-  const series = CODES.map((c, i) => ({
-    c,
-    color: SERIES_COLOR[i],
-    pts: snaps
-      .filter((s) => s.p[c]?.eps != null)
-      .map((s) => ({ t: Date.parse(s.as_of), v: s.p[c]!.eps!, s })),
-  })).filter((s) => s.pts.length > 1);
+  const series = CODES.flatMap((c, i) => {
+    const end = d.consensus?.periods.find((p) => p.code === c)?.end;
+    if (!end) return [];
+    const pts = fiscalEpsHistory(snaps, c, end);
+    return pts.length > 1 ? [{ c, end, color: SERIES_COLOR[i], pts }] : [];
+  });
   const all = series.flatMap((s) => s.pts);
   const H = 180,
     m = { t: 10, r: 12, b: 22, l: 48 };
@@ -646,14 +646,14 @@ function RevisionChart({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpen
                   onClick={() =>
                     o.yahoo(
                       `${PERIOD_NAME[s.c]} EPS consensus`,
-                      `snapshot ${fmtDate(p.s.as_of)}`,
+                      `snapshot ${fmtDate(p.date)}`,
                       p.v,
                       "usdPerShare",
-                      `Snapshot ${p.s.as_of}: ${PERIOD_NAME[s.c]} (period ending ${p.s.p[s.c]!.end}) consensus EPS ${fEps(p.v)} from ${fCnt(p.s.p[s.c]!.eps_n)} analysts, range ${fEps(p.s.p[s.c]!.eps_lo)} – ${fEps(p.s.p[s.c]!.eps_hi)}. Stored by FiledUnder from Yahoo Finance.`,
+                      `Snapshot ${p.date}: ${PERIOD_NAME[s.c]} (period ending ${s.end}) consensus EPS ${fEps(p.v)} from ${fCnt(p.reading.eps_n)} analysts, range ${fEps(p.reading.eps_lo)} – ${fEps(p.reading.eps_hi)}. Stored by FiledUnder from Yahoo Finance.`,
                     )
                   }
                 >
-                  <title>{`${PERIOD_NAME[s.c]} · ${p.s.as_of}: ${fEps(p.v)}`}</title>
+                  <title>{`${PERIOD_NAME[s.c]} · ${p.date}: ${fEps(p.v)}`}</title>
                 </circle>
               ))}
             </g>
@@ -664,7 +664,7 @@ function RevisionChart({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpen
         {series.map((s) => (
           <span key={s.c} className="inline-flex items-center gap-1.5">
             <span className="h-0.5 w-3" style={{ background: s.color }} />
-            {PERIOD_NAME[s.c]}
+            {PERIOD_NAME[s.c]} · {fmtDate(s.end)}
           </span>
         ))}
       </div>
@@ -764,8 +764,8 @@ function Revisions({
             <tbody>
               {live.periods.map((p) => {
                 const ch =
-                  p.trend.current != null && p.trend.d90 ? p.trend.current / p.trend.d90 - 1 : null;
-                const quote = `Yahoo Finance EPS trend for ${PERIOD_NAME[p.code as PeriodCode] ?? p.code}: now ${fEps(p.trend.current)}, 7 days ago ${fEps(p.trend.d7)}, 30 days ${fEps(p.trend.d30)}, 60 days ${fEps(p.trend.d60)}, 90 days ${fEps(p.trend.d90)}; ${p.revisions.up30 ?? 0} up and ${p.revisions.down30 ?? 0} down revisions in 30 days.`;
+                  revisionPct(p.trend.current, p.trend.d90);
+                const quote = `Yahoo Finance EPS trend for ${PERIOD_NAME[p.code as PeriodCode] ?? p.code}: now ${fEps(p.trend.current)}, 7 days ago ${fEps(p.trend.d7)}, 30 days ${fEps(p.trend.d30)}, 60 days ${fEps(p.trend.d60)}, 90 days ${fEps(p.trend.d90)}; ${p.revisions.up30 ?? "–"} up and ${p.revisions.down30 ?? "–"} down revisions in 30 days.`;
                 return (
                   <tr key={p.code} className="border-b last:border-0">
                     <td className="whitespace-nowrap px-3 py-2">
@@ -793,8 +793,8 @@ function Revisions({
                       {fPctS(ch)}
                     </td>
                     <td className="num px-3 py-2 text-right whitespace-nowrap tabular-nums">
-                      <span className="text-positive">{p.revisions.up30 ?? 0}</span> /{" "}
-                      <span className="text-negative">{p.revisions.down30 ?? 0}</span>
+                      <span className="text-positive">{p.revisions.up30 ?? "–"}</span> /{" "}
+                      <span className="text-negative">{p.revisions.down30 ?? "–"}</span>
                     </td>
                   </tr>
                 );

@@ -25,7 +25,7 @@ export const allSignalsQuery = {
   queryFn: async () => {
     const out: SignalLite[] = [];
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase.from("supply_signals").select("ticker,kind,country,impact,title,amount_usd").not("country", "is", null).range(from, from + 999);
+      const { data, error } = await supabase.from("supply_signals").select("ticker,kind,country,impact,title,amount_usd").not("country", "is", null).order("id").range(from, from + 999);
       if (error) throw error;
       out.push(...((data ?? []) as SignalLite[]));
       if (!data || data.length < 1000) break;

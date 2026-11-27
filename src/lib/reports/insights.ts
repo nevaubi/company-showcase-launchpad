@@ -9,7 +9,7 @@ import type { Pack } from "./facts";
 import { coverageOf } from "@/lib/coverage";
 import { money, mult, perShare, pct, pp } from "./fmt";
 import {
-  METRIC_DEF, cellAt, daysBefore, fmtMetric, lastQuarter, median, ols, ordinal, partsOf, peerSnapshot, quantile, rankOf, sum4, totalReturn, weeklyCloses, withLivePrice,
+  METRIC_DEF, cellAt, daysBefore, fmtMetric, isFinIndustry, lastQuarter, median, ols, ordinal, partsOf, peerSnapshot, quantile, rankOf, sum4, totalReturn, weeklyCloses, withLivePrice,
   type PeerMetricKey, type PeerSnapshot,
 } from "./peers";
 import type { ChartPoint, ChartSeries, ChartUnit, FactRef, GlanceItem, ReportChart, ReportInputs, ReportTable, TableCell } from "./types";
@@ -56,6 +56,7 @@ const shortName = (n: string) => n.replace(/,?\s+(Inc\.?|Corporation|Corp\.?|Com
 export function buildInsights(c: InsightCtx): Insights {
   const { p, inp, d } = c;
   const t = d.profile.ticker;
+  const fin = isFinIndustry(d.profile.industry);
   const charts: ReportChart[] = [];
   const tables: ReportTable[] = [];
   const pt = (id: string | null | undefined): ChartPoint => ({ v: p.value(id), f: id ?? undefined });
@@ -76,7 +77,7 @@ export function buildInsights(c: InsightCtx): Insights {
       series("Gross margin", "line", "pct", c.annual.margin.get("grossProfit")),
       series("Operating margin", "line", "pct", c.annual.margin.get("operatingIncome"), { tone: "self" }),
       series("Net margin", "line", "pct", c.annual.margin.get("netIncome")),
-      series("FCF margin", "dash", "pct", c.annual.margin.get("fcf")),
+      ...(!fin ? [series("FCF margin", "dash", "pct", c.annual.margin.get("fcf"))] : []),
     ]);
     if (m.length) charts.push({ id: "margins-annual", type: "combo", title: "Margin trajectory", subtitle: "Fiscal years, % of revenue", x: aCols, series: m, size: "half" });
     const mq = has([
@@ -89,7 +90,7 @@ export function buildInsights(c: InsightCtx): Insights {
       series("Capex", "bar", "usd", c.annual.ids.get("capex")),
       series("Free cash flow", "line", "usd", c.annual.ids.get("fcf"), { tone: "self" }),
     ]);
-    if (cf.length >= 2) charts.push({ id: "cash-flow", type: "combo", title: "Cash generation and reinvestment", subtitle: "Fiscal years", x: aCols, series: cf, size: "half" });
+    if (!fin && cf.length >= 2) charts.push({ id: "cash-flow", type: "combo", title: "Cash generation and reinvestment", subtitle: "Fiscal years", x: aCols, series: cf, size: "half" });
     const cr = has([
       series("Buybacks", "bar", "usd", c.annual.ids.get("buybacks")),
       series("Dividends", "bar", "usd", c.annual.ids.get("dividends")),
@@ -97,7 +98,7 @@ export function buildInsights(c: InsightCtx): Insights {
     const fcfLine = series("Free cash flow", "dash", "usd", c.annual.ids.get("fcf"), { tone: "self" });
     // Only worth a chart when the company returns cash in most of the years shown.
     const years = c.annual.idx.filter((_, k) => cr.reduce((sum, x) => sum + Math.max(0, x.points[k]?.v ?? 0), 0) > 0).length;
-    if (cr.length && years >= 3) charts.push({ id: "capital-returns", type: "stacked", title: "Capital returned versus free cash flow", subtitle: "Fiscal years", x: aCols, series: [...cr, ...(fcfLine.points.some((x) => x.v != null) ? [fcfLine] : [])], size: "half" });
+    if (!fin && cr.length && years >= 3) charts.push({ id: "capital-returns", type: "stacked", title: "Capital returned versus free cash flow", subtitle: "Fiscal years", x: aCols, series: [...cr, ...(fcfLine.points.some((x) => x.v != null) ? [fcfLine] : [])], size: "half" });
   }
 
   // ---------- operating analysis (TTM vs prior TTM) ----------
@@ -105,7 +106,6 @@ export function buildInsights(c: InsightCtx): Insights {
   const qEnd = last >= 0 ? Q.income.periods[last]?.end : null;
   const thru = qEnd ? `the four quarters through ${qEnd}` : "the last four quarters";
   const rev = sum4(Q.income, "revenue", last), revP = sum4(Q.income, "revenue", last - 4);
-  const fin = isBankIndustry(d.profile.industry) || /insurance|capital markets|financial services|investment banking/i.test(d.profile.industry);
   if (rev && revP && rev.v > 0 && revP.v > 0 && !fin) {
     const bridge: { label: string; v: number; f: string | null }[] = [];
     const ratioOf = (key: string, at: number, base: { v: number }) => { const s = sum4(Q.income, key, at); return s ? { r: s.v / base.v, s } : null; };

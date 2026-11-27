@@ -25,6 +25,8 @@ export interface SourceRef {
   quote?: string;
   page?: number;
   sheet?: string;
+  sheetCell?: string;
+  elementId?: string;
 }
 
 export interface DerivedPart extends SourceRef {

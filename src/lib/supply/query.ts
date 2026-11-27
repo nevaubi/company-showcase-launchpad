@@ -3,6 +3,31 @@ import type { RiskLink } from "./core";
 import type { TaggedShare } from "./chain";
 import { dedupeCurrent } from "./identity";
 import { pageSupplyLinks } from "./read";
+import { disclosurePaths, type Disclosure } from "./disclosures";
+
+/** Fetch both directions for the selected company, then just the other legs of its documented programs. */
+export const disclosureQuery = (ticker: string) => ({
+  queryKey: ["supply-disclosures", ticker],
+  queryFn: async () => {
+    if (!/^[A-Z0-9.-]{1,12}$/.test(ticker)) throw new Error("Invalid company ticker");
+    const read = async (programs?: string[]) => {
+      const output: Disclosure[] = [];
+      for (let from = 0; ; from += 500) {
+        const query = supabase.from("supply_disclosures").select("*");
+        const filtered = programs ? query.in("pathway", programs)
+          : query.or(`provider_key.eq.${ticker},recipient_key.eq.${ticker}`);
+        const { data, error } = await filtered.order("source_date", { ascending: false }).order("id").range(from, from + 499);
+        if (error) throw error;
+        output.push(...data);
+        if (data.length < 500) return output;
+      }
+    };
+    const direct = await read();
+    const programs = [...new Set(direct.flatMap((r) => r.pathway ? [r.pathway] : []))];
+    return { direct, paths: programs.length ? disclosurePaths(ticker, await read(programs)) : [] };
+  },
+  staleTime: 30 * 60_000,
+});
 
 /** Links from each company's latest 10-K and any newer 10-Q — what the map shows. */
 export const supplyLinksQuery = {

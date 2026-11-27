@@ -13,8 +13,9 @@ import { Input } from "@/components/ui/input";
 import { coverageOf } from "@/lib/coverage";
 import { fmtDate } from "@/lib/format";
 import type { EarningsTranscript } from "@/lib/transcripts.functions";
-import { gist, talkShare } from "@/lib/transcripts/analyze";
-import { callFigures, callTone, checkSummary, checkTakeaways, exchanges, firmTicker, topicShift, type ToneScore, type TopicTrend } from "@/lib/transcripts/insights";
+import { transcriptStatistics } from "@/lib/transcripts/statistics";
+import { gist } from "@/lib/transcripts/analyze";
+import { callTone, exchanges, firmTicker, topicShift, type ToneScore, type TopicTrend } from "@/lib/transcripts/insights";
 import type { TranscriptTurn } from "@/lib/transcripts/parse";
 import { cn } from "@/lib/utils";
 import { PageNav, Quiet, Section, SECTION_SCROLL_MARGIN, jumpTo } from "./layout";
@@ -73,14 +74,12 @@ export function CallReader({
 }) {
   const co = coverageOf(ticker);
   const exclude = useMemo(() => [ticker, co?.shortName ?? ""], [ticker, co]);
-  const share = useMemo(() => talkShare(t), [t]);
-  const figures = useMemo(() => callFigures(t, 8), [t]);
+  const {share,figures,tone,summary,takeaways} = useMemo(() => t.statistics?.version === 1 ? t.statistics : transcriptStatistics(t),[t]);
   const topics = useMemo(() => topicShift(t, prev, 12, exclude), [t, prev, exclude]);
   // topic terms are counted in lower case: show them as the call writes them ("iPhone Duo"), else in sentence case
   const cased = useMemo(() => termCasing([...new Set([...topics.map((r) => r.term)])], t.turns.map((x) => x.text)), [t, topics]);
   const term = (x: string) => cased.get(x) ?? sentenceCase(x);
-  const tone = useMemo(() => callTone(t), [t]);
-  const prevTone = useMemo(() => (prev ? callTone(prev) : null), [prev]);
+  const prevTone = useMemo(() => (prev ? (prev.statistics?.version === 1 ? prev.statistics.tone : callTone(prev)) : null), [prev]);
   const asked = useMemo(
     () =>
       exchanges(
@@ -90,8 +89,6 @@ export function CallReader({
       ),
     [t, topics],
   );
-  const summary = useMemo(() => (t.digest?.summary ? checkSummary(t, t.digest.summary) : null), [t]);
-  const takeaways = useMemo(() => (t.digest?.takeaways.length ? checkTakeaways(t, t.digest.takeaways) : null), [t]);
   // The page's takeaways carry labels ("iPhone revenue") the bare sentences lack; when enough of them check
   // out against the call they are the key numbers, otherwise the figures management stated stand in.
   const showTakeaways = !!takeaways && takeaways.kept.length >= 4;
@@ -222,7 +219,7 @@ export function CallReader({
         id="call-summary"
         name="Call summary"
         title={t.title}
-        caption={`${t.date ? fmtDate(t.date) : ""} · ${t.words.toLocaleString("en-US")} words · about ${minutes} min · ${asked.length} analyst questions`}
+        caption={`${t.date ? (t.archiveKind || t.dateBasis === "event" ? "Call " : "Published ") + fmtDate(t.date) : ""} · ${t.words.toLocaleString("en-US")} words · about ${minutes} min · ${asked.length} analyst questions`}
         actions={
           <Button size="sm" variant="outline" asChild>
             <Link to="/app/research" search={{ q: askQ }}>
@@ -233,6 +230,12 @@ export function CallReader({
       >
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="min-w-0 lg:border-r">
+            {t.archiveSummary && (
+              <div className="border-b px-4 py-3">
+                <p className="text-[13px] leading-5">{t.archiveSummary.text}</p>
+                <MachineWritten by={`FiledUnder call analysis${t.archiveSummary.asOf ? " · "+fmtDate(t.archiveSummary.asOf) : ""}`} href={t.url} sourceLabel="Company source" />
+              </div>
+            )}
             {summary && (
               <div className="border-b px-4 py-3">
                 <p className="text-[13px] leading-5">{summary.text}</p>
@@ -591,7 +594,7 @@ export function CallReader({
           })}
         </div>
         <p className="border-t px-4 py-2.5 text-[11px] text-muted-foreground">
-          Third-party transcript from The Motley Fool, retrieved {fmtDate(t.fetchedAt)}. Figures said on calls are not SEC filings: check them against the{" "}
+          {t.source} · archived {fmtDate(t.fetchedAt)}. Compare figures with the{" "}
           <Link to="/app/companies/$ticker/financials" params={{ ticker }} className="underline">
             reported financials
           </Link>

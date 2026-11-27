@@ -12,6 +12,8 @@ import { writeFileSync } from "node:fs";
 import { classifyError } from "../src/lib/jobs/failure";
 import { args, log, sb } from "./lib/supa";
 import { saveSignals } from "./lib/supply-save";
+import { supplyNewsCandidate, supplyNewsDomains } from "./lib/supply-news";
+import { coverageDetails } from "../src/lib/coverage-details.server";
 import { readDataset } from "./lib/datasets";
 import { IR_MODELS, openaiStructured } from "../src/lib/openai.server";
 import { quoteInText } from "../src/lib/supply/core";
@@ -205,17 +207,31 @@ async function fromNews(co: Co, short: string) {
   const freq = new Map<string, number>();
   for (const c of [...(data ?? []).map((d) => d.country as string), ...(l ?? []).flatMap((x) => (x.regions as string[] | null) ?? [])]) freq.set(c, (freq.get(c) ?? 0) + 1);
   const top = [...freq].sort((a, b) => b[1] - a[1]).map((x) => x[0]).filter((c) => !/^(united states|us|u\.s\.|global|worldwide)$/i.test(c)).slice(0, 3);
-  const qs = [`${short} tariffs export controls supply chain`, ...top.map((c) => `${short} ${c} regulation OR tariff OR government OR election OR plant`)];
-  const found = await Promise.allSettled(qs.map((q) => tavilySearch(q, { topic: "news", days: 120, maxResults: 5 })));
+  const issuer = coverageDetails(co.ticker);
+  const domains = supplyNewsDomains(issuer.website, issuer.ir);
+  const qs = [`${short} supplier orders production agreement supply chain tariffs export controls`, ...top.map((c) => `${short} ${c} regulation OR tariff OR government OR election OR plant`)];
+  const found = await Promise.allSettled(qs.map((q) => tavilySearch(q, { topic: "news", days: 120, maxResults: 5, domains })));
+  if (found.every((r) => r.status === "rejected")) throw (found[0] as PromiseRejectedResult).reason;
   const seen = new Set<string>();
-  const srcs: Src[] = [];
+  const candidates: { url: string; filed: string; title: string }[] = [];
   for (const f of found) if (f.status === "fulfilled") for (const r of f.value.results) {
-    if (seen.has(r.url) || r.content.length < 200) continue;
-    seen.add(r.url);
-    srcs.push({ text: `${r.title}\n${r.content}`, meta: { form: "News", filed: r.publishedAt ? new Date(r.publishedAt).toISOString().slice(0, 10) : null, url: r.url, doc: r.title.slice(0, 200) } });
+    const candidate = supplyNewsCandidate(r, domains, Date.now());
+    if (!candidate || seen.has(candidate.url)) continue;
+    seen.add(candidate.url);
+    candidates.push({ ...candidate, title: r.title });
   }
-  const items = await extract(co, `news(${srcs.length})`, srcs.slice(0, 16), `Sources are recent news snippets. Extract only items that concern ${short} specifically: kind=policy (tariffs, export controls, laws, government action, local politics/conflict in a country it operates or sources in) or mgmt_action. Ignore items about other companies.`);
-  await save(co, "web", rows(co, items, srcs.slice(0, 16), "web"));
+  // Keep the scheduled pass bounded; verify exact quotes on the publisher's page.
+  const articles = candidates.sort((a, b) => b.filed.localeCompare(a.filed)).slice(0, 4);
+  const pages = await Promise.allSettled(articles.map((a) => firecrawlScrape(a.url)));
+  const srcs: Src[] = [];
+  for (const [i, page] of pages.entries()) {
+    if (page.status !== "fulfilled" || page.value.markdown.length < 300) continue;
+    const { url, filed, title } = articles[i];
+    srcs.push({ text: page.value.markdown.slice(0, 18_000), meta: { form: "News", filed, url, doc: title.slice(0, 200) } });
+  }
+  if (articles.length && !srcs.length) throw new Error("No publisher article could be read; keeping stored news.");
+  const items = await extract(co, `news(${srcs.length})`, srcs, `Extract only policy changes or management actions specifically about ${short}. Identify named counterparties and products when the quoted sentence supports them; distinguish announced orders, expected plans and actual shipments. Omit inferred financial effects and generic sector news.`);
+  await save(co, "web", rows(co, items, srcs, "web"));
 }
 
 const { COVERAGE } = await import("../src/lib/coverage");

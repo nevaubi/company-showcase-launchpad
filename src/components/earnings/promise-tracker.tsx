@@ -40,7 +40,7 @@ export function PromiseTracker({
         <MachineWritten by="Summaries, grades and the credibility score; quotes verified word for word." />
       </div>
       {loading ? (
-        <Quiet>Reading the last five earnings calls. The first load for a company takes about a minute.</Quiet>
+        <Quiet>Loading the most recent commitment analysis.</Quiet>
       ) : error || data?.error ? (
         <Quiet>{error?.message ?? data?.error}</Quiet>
       ) : !ps.length ? (

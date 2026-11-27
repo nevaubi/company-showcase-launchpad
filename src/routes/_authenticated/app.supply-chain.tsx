@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSource } from "@/components/source/source-context";
 import { CompanyPicker } from "@/components/supply/company-picker";
+import { IssuerDisclosures } from "@/components/supply/issuer-disclosures";
 import { FollowPanel } from "@/components/supply/follow-panel";
 import { OffscreenCue, type Cue } from "@/components/supply/off-screen-cue";
 import { holdInPlace, releaseReserve } from "@/components/supply/scroll-to";
@@ -202,9 +203,9 @@ function SupplyChainPage() {
   const strip = useMemo(() => stripFacts(ticker, graph, all as ProLink[], names), [ticker, graph, all, names]);
   // What the globe tints: every country the company's links and signals tie it to.
   const exposureRows = useMemo(
-    () => countryExposure((all as ProLink[]).filter((l) => l.ticker === ticker || l.counterparty_ticker === ticker), (signals ?? []).filter((x) => x.ticker === ticker), revenue)
+    () => countryExposure((all as ProLink[]).filter((l) => l.ticker === ticker || l.counterparty_ticker === ticker), (signals ?? []).filter((x) => x.ticker === ticker), revenue, { ticker, names })
       .filter((r) => r.country !== "United States" || r.links + r.facilities > 0),
-    [all, signals, ticker, revenue],
+    [all, signals, ticker, revenue, names],
   );
   /* The countries the region register lists: the ones the company's own filings and verified signals name. The first is the
      default for the dossier and the region shock, and the hotspots among them back the header when no link names one. */
@@ -277,7 +278,7 @@ function SupplyChainPage() {
       <PageHeader
         eyebrow="Filings and data"
         title="Supply chain map"
-        description="Customers, suppliers, partners and competitors as each company's latest 10-K and 10-Q name them. A figure, flag or region appears only when its sentence states it, and every link opens that sentence."
+        description="Explore relationships named in SEC filings and trace product pathways through dated company announcements."
         actions={<CompanyPicker ticker={ticker} name={focusName} companies={companies} links={linkCounts} onPick={(tk) => go(tk)} />}
       />
       <SectionNav sections={SUPPLY_SECTIONS} />
@@ -369,6 +370,7 @@ function SupplyChainPage() {
           />
           </FollowPanel>
         </div>
+        <IssuerDisclosures key={ticker} ticker={ticker} onPick={go} />
       </section>
 
       <section id="supply-summary" data-section="Summary" aria-label="Summary" className={cn("mt-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]", ANCHOR)}>

@@ -38,6 +38,11 @@ export interface ParsedTranscript {
 }
 
 export interface TranscriptRef {
+  /** Date in the publisher URL, which can be days after the call. */
+  publishedDate?: string;
+  dateBasis?: "event" | "published";
+  contentVersion?: string;
+  archiveKind?: "transcript" | "remarks";
   url: string;
   /** e.g. "Q3 2026" — the company's fiscal quarter as named on the page */
   quarter: string | null;
@@ -95,6 +100,7 @@ function looksLikeName(s: string) {
 const isQaHeading = (l: string) => /^#{2,3}\s*(questions?\s*(&|and)\s*answers?|q\s*&\s*a)\b/i.test(l);
 const isPreparedHeading = (l: string) => /^#{2,3}\s*(prepared remarks|full conference call transcript)\b/i.test(l);
 const isEnd = (l: string) =>
+  /^<h[12]\b/i.test(l) ||
   /^#{1,3}\s/.test(l) ||
   /^(\**duration:|\**call participants:|more [a-z]+ analysis|all earnings call transcripts|this article is a transcript|\*\*ad\*\*$)/i.test(l);
 const isJunk = (l: string) =>
@@ -133,6 +139,10 @@ function firmsFromOperator(turns: { speaker: string; text: string }[]) {
   return firms;
 }
 
+interface RawTurn {
+  speaker: string; role: string | null; section: "prepared" | "qa" | null; paras: string[];
+}
+
 export function parseTranscript(markdown: string): ParsedTranscript {
   const lines = markdown.replace(/\r/g, "").split("\n").map((l) => l.trim());
   const participants = participantsFrom(markdown);
@@ -141,7 +151,7 @@ export function parseTranscript(markdown: string): ParsedTranscript {
   if (start < 0) start = lines.findIndex((l) => !!speakerLine(l));
   if (start < 0) return { speakers: [], turns: [], words: 0, qaStart: null };
 
-  const raw: { speaker: string; role: string | null; section: "prepared" | "qa" | null; paras: string[] }[] = [];
+  const raw: RawTurn[] = [];
   let section: "prepared" | "qa" | null = null;
   let explicitQa = false;
   for (let i = start; i < lines.length; i++) {
@@ -166,7 +176,17 @@ export function parseTranscript(markdown: string): ParsedTranscript {
     if (text) raw[raw.length - 1].paras.push(text);
   }
 
-  const turnsRaw = raw.filter((t) => t.paras.length);
+  return { ...classifyTurns(raw.filter(t => t.paras.length),participants,explicitQa), digest: digestFrom(markdown) };
+}
+
+/** Earlier archives retain speaker names, stated roles, and every word; use the current attribution rules. */
+export function upgradeLegacyTranscript<T extends ParsedTranscript>(t:T): T {
+  const roles = new Map(t.speakers.filter(s=>s.role).map(s=>[s.name,s.role!]));
+  const raw = t.turns.map(turn=>({speaker:turn.speaker,role:roles.get(turn.speaker) || null,section:turn.section,paras:[turn.text]}));
+  return {...t,...classifyTurns(raw,roles,false)};
+}
+
+function classifyTurns(turnsRaw:RawTurn[],participants:Map<string,string>,explicitQa:boolean):ParsedTranscript {
   const firms = firmsFromOperator(turnsRaw.map((t) => ({ speaker: t.speaker, text: t.paras.join(" ") })));
 
   // Who is who, most certain first: explicit roles ("-- Analyst"), the participants list (exact name,
@@ -262,7 +282,7 @@ export function parseTranscript(markdown: string): ParsedTranscript {
   }
   const order: Record<SpeakerKind, number> = { management: 0, analyst: 1, unidentified: 2, operator: 3 };
   const speakers = [...bySpeaker.values()].sort((a, b) => order[a.kind] - order[b.kind] || b.words - a.words);
-  return { speakers, turns, words: turns.reduce((s, t) => s + t.words, 0), qaStart, digest: digestFrom(markdown) };
+  return { speakers, turns, words: turns.reduce((s, t) => s + t.words, 0), qaStart };
 }
 
 /** Lower-case surname for matching spellings of one person ("Jen-Hsun Huang" and "Jensen Huang"), ignoring suffixes. */
@@ -284,6 +304,20 @@ function cleanRole(role: string | null): string | null {
   if (!role) return null;
   if (/analyst$/i.test(role)) return "Analyst";
   return role;
+}
+
+/** A publisher can post a call days later. Only the explicit DATE section establishes the event date. */
+export function datedTranscriptRef(url:string,markdown:string):TranscriptRef {
+  const ref=transcriptRef(url);
+  const heading=markdown.match(/^#{2,3}\s+date:?\s*\n+([^\n]+)/im)?.[1] || "";
+  const m=heading.match(/\b(Jan[a-z]*|Feb[a-z]*|Mar[a-z]*|Apr[a-z]*|May|Jun[a-z]*|Jul[a-z]*|Aug[a-z]*|Sep[a-z]*|Oct[a-z]*|Nov[a-z]*|Dec[a-z]*)\.?\s+(\d{1,2}),?\s+(20\d{2})\b/i);
+  if(!m || !ref.date) return {...ref,publishedDate:ref.date || undefined,dateBasis:"published"};
+  const month=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(m[1].slice(0,3).toLowerCase());
+  const dt=new Date(Date.UTC(Number(m[3]),month,Number(m[2])));
+  const date=dt.toISOString().slice(0,10);
+  if(dt.getUTCDate()!==Number(m[2]) || date>ref.date || Date.parse(ref.date)-dt.getTime()>60*86400_000)
+    return {...ref,publishedDate:ref.date,dateBasis:"published"};
+  return {...ref,date,publishedDate:ref.date,dateBasis:"event"};
 }
 
 /** Transcript page URL → quarter and date, e.g. ".../2026/10/13/jpmorgan-chase-jpm-q3-2026-earnings-call-transcript". */

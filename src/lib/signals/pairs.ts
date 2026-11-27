@@ -2,7 +2,7 @@
 // trailing year and traded in the following quarter, so every trade uses only past data.
 import { Samples } from "./backtest";
 import { adfT, corr, EG_CRIT_5, halfLife, ols } from "./stats";
-import { roundTripCost } from "./features";
+import { tradeCost, roundTripCost } from "./features";
 
 export interface PairLeg {
   ticker: string;
@@ -76,7 +76,7 @@ export function formPairs(legs: PairLeg[], F: number): PairPick[] {
 export const spreadZ = (legs: PairLeg[], p: PairPick, t: number) => (Math.log(legs[p.a].c[t]) - p.alpha - p.beta * Math.log(legs[p.b].c[t])) / p.sd;
 
 /** Trade each formed pair over the next quarter. Entry next open after the spread first crosses ±2. */
-export function tradePairs(legs: PairLeg[], picks: PairPick[], F: number, end: number, out: Samples) {
+export function tradePairs(legs: (PairLeg & { volume: Float64Array })[], picks: PairPick[], F: number, end: number, out: Samples) {
   for (const p of picks) {
     let t = F + 1;
     const stop = Math.min(F + PAIRS.step, end - 2);
@@ -88,14 +88,22 @@ export function tradePairs(legs: PairLeg[], picks: PairPick[], F: number, end: n
         const A = legs[p.a], B = legs[p.b];
         const ca = roundTripCost(A.dv20[t]), cb = roundTripCost(B.dv20[t]);
         let x = t + 1;
-        const last = Math.min(t + PAIRS.maxHold, end - 1);
-        while (x < last && Math.sign(spreadZ(legs, p, x)) === Math.sign(z)) x++;
-        if (ca != null && cb != null && x < end) {
-          const ra = A.c[x] / A.o[t + 1] - 1, rb = B.c[x] / B.o[t + 1] - 1;
+        const timeout = t + PAIRS.maxHold;
+        const limit = Math.min(timeout, end);
+        // A close observes convergence. An early exit can execute only at the following open.
+        while (x < limit && (!(A.volume[x] > 0 && B.volume[x] > 0) || Math.sign(spreadZ(legs, p, x)) === Math.sign(z))) x++;
+        const early = x < limit;
+        const exit = early ? x + 1 : timeout;
+        const enter = t + 1;
+        if (exit < end && ca != null && cb != null &&
+            [t, enter, exit].every((j) => A.volume[j] > 0 && B.volume[j] > 0)) {
+          const ra = (early ? A.o[exit] : A.c[exit]) / A.o[enter] - 1;
+          const rb = (early ? B.o[exit] : B.c[exit]) / B.o[enter] - 1;
           const gross = (dir * (ra - rb)) / 2; // half the capital in each leg
           if (Number.isFinite(gross)) {
-            const net = gross - (ca + cb) / 2;
-            out.push(t, net, net, gross);
+            const held = Math.max(1, exit - enter + (early ? 0 : 1));
+            const cost = (tradeCost(ca, dir, held) + tradeCost(cb, dir === 1 ? -1 : 1, held)) / 2;
+            out.push(t, gross - cost, gross - cost, gross);
           }
         }
         t = x + 1;

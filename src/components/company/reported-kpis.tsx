@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { openIrCell } from "@/components/ir/breakdowns";
 import { IrPanel } from "@/components/ir/panel";
-import { DASH, IR } from "@/components/ir/typography";
+import { IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useKeepReaderBelow } from "@/components/company/hold-height";
@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getIrData } from "@/lib/ir.functions";
 import { irPageKey, loadIrPage } from "@/lib/ir/client";
 import { fmtIr, unitCaption } from "@/lib/ir/display";
-import { keyLines, type KeyLine } from "@/lib/ir/highlights";
+import { formatKpiChange, keyLines, type KeyLine } from "@/lib/ir/highlights";
 import { fiscalCalendar, fiscalLabel, periodGrids } from "@/lib/ir/periods";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -42,12 +42,6 @@ function useNear<T extends Element>(margin = "600px") {
   return [setEl, near] as const;
 }
 
-const fmtChange = (v: number | null, unit: string) => {
-  if (v == null) return DASH;
-  const pts = unit === "pct" || unit === "bps";
-  const s = `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v) >= 100 && !pts ? Math.round(Math.abs(v)).toLocaleString("en-US") : Math.abs(v).toFixed(1)}`;
-  return pts ? `${s} pts` : `${s}%`;
-};
 /** Costs and credit losses improve when they fall. */
 const inverted = (l: KeyLine) => l.s.cat === "cost" || l.s.met === "cost" || l.s.met === "expense" || /charge-?off|provision|non-?performing|delinquen|efficiency ratio/i.test(l.s.label);
 const toneOf = (v: number | null, l: KeyLine) => (v == null || Math.abs(v) < 0.05 ? "" : v > 0 !== inverted(l) ? "text-positive" : "text-negative");
@@ -164,8 +158,8 @@ export function ReportedKpis({ ticker }: { ticker: string }) {
                       {fmtIr(l.cell.v, l.s.unit, scale)}
                     </button>
                   </td>
-                  <td className={cn("py-1 pr-3 align-top", IR.num, toneOf(l.yoy, l))}>{fmtChange(l.yoy, l.s.unit)}</td>
-                  <td className={cn("hidden py-1 pr-3 align-top sm:table-cell", IR.num, toneOf(l.qoq, l))}>{fmtChange(l.qoq, l.s.unit)}</td>
+                  <td className={cn("py-1 pr-3 align-top", IR.num, toneOf(l.yoy, l))}>{formatKpiChange(l.yoy, l.s.unit)}</td>
+                  <td className={cn("hidden py-1 pr-3 align-top sm:table-cell", IR.num, toneOf(l.qoq, l))}>{formatKpiChange(l.qoq, l.s.unit)}</td>
                   <td className="hidden py-1 pr-4 align-top sm:table-cell">
                     <div className="flex h-5 items-center justify-end">
                       <Spark points={l.trend.map((v, i) => ({ label: `Quarter ${i + 1} of ${l.trend.length}`, value: v, text: v == null ? undefined : fmtIr(v, l.s.unit, scale) }))} name={`${l.s.label}, last ${l.trend.length} quarters`} width={72} />

@@ -50,3 +50,15 @@ describe("technicals library port", () => {
     expect(h.tr).toEqual([1, 1.05, 1.05]);
   });
 });
+
+it("compares matched, completed calendar months and drops missing month-end quotes", async () => {
+  const { monthEndReturns, seasonalContext } = await import("./seasonality");
+  const dates = ["2025-01-31", "2025-02-28", "2025-03-28", "2025-04-30", "2025-05-30", "2025-06-11"];
+  const prices = [100, 110, 120, 130, 143, 164];
+  const rows = monthEndReturns(dates, prices);
+  expect(rows.map(r => r[0])).toEqual(["2025-02","2025-05"]);
+  const ctx = seasonalContext(dates, prices, [{sym:"XLF", kind:"sector", d: dates.slice(0,2), tr:[100,104]}]);
+  expect(ctx[1].median).toBeCloseTo(.1);
+  expect(ctx[1].excess[0].median).toBeCloseTo(.06);
+  expect(ctx[4].excess[0]).toMatchObject({n:0, median:null});
+});

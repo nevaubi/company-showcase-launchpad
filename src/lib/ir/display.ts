@@ -125,6 +125,7 @@ export function fmtIr(v: number, unit: string, scale: Scale, f: IrFormat = {}): 
       return signed(v, scale === "B" ? nonzero(x, 2) : scale === "full" ? nonzero(x, 0) : x < 10 && x !== 0 ? nonzero(x, 1) : n0.format(x));
     }
     case "usdPerShare":
+    case "usdPerUnit":
       return signed(v, n2.format(a));
     case "pct":
       return signed(v, `${(d != null ? FIXED[Math.min(2, d)] : n1).format(a)}%`);
@@ -204,12 +205,14 @@ export function printedUnit(texts: string[]): string {
 export function unitCaption(unit: string, scale: Scale, countCaption?: string) {
   if (unit === "count" && countCaption) return countCaption;
   if (unit === "usd") return scale === "full" ? "US dollars" : scale === "K" ? "$ thousands" : scale === "M" ? "$ millions" : "$ billions";
-  if (unit === "usdPerShare") return "$ per unit";
+  if (unit === "usdPerShare") return "$ per share";
+  if (unit === "usdPerUnit") return "$ per unit";
+  if (unit === "pp") return "percentage points";
   if (unit === "pct") return "percent";
   if (unit === "bps") return "basis points";
   if (unit === "ratio") return "ratio";
   if (unit === "other") return "as printed, unit by line";
-  return "count";
+  return unit;
 }
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -242,11 +245,15 @@ export function printedToken(quote: string, value: number): string {
   return hit ?? quote;
 }
 
-export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell["l"]; x?: string; p?: number; sh?: string; s?: string; e?: string }, label: string): SourceRef | undefined {
+export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell["l"]; x?: string; p?: number; sh?: string; sheetCell?: string; ixConcept?: string; ixId?: string; s?: string; e?: string }, label: string): SourceRef | undefined {
   if (c.d == null) return undefined;
   const doc = p.docs[c.d];
   if (!doc) return undefined;
   const l = c.l;
+  if (doc.id.startsWith("sec:") && doc.accn) return {
+    accn: doc.accn, concept: c.ixConcept ?? label, elementId: c.ixId, value: c.v,
+    end: c.e ?? "", start: c.s, ...(doc.doc ? { doc: doc.doc } : {}),
+  };
   return {
     accn: doc.accn ?? "",
     concept: `${l && !Array.isArray(l) ? "Slide" : !l && c.x && /[a-z]{3}/i.test(c.x) && !doc.id.startsWith("x:") ? "Release text" : "Release table"} · ${label}`,
@@ -255,7 +262,7 @@ export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell[
     value: c.v,
     irDoc: doc.id,
     // Partner-corpus values cite a printed line: the viewer goes to its page, finds the line, then the figure in it.
-    ...(doc.id.startsWith("x:") && c.x ? { search: printedToken(c.x, c.v), quote: c.x, ...(c.p ? { page: c.p } : {}), ...(c.sh ? { sheet: c.sh } : {}) } : {}),
+    ...(doc.id.startsWith("x:") ? { ...(c.x ? { search: printedToken(c.x, c.v), quote: c.x } : {}), ...(c.p ? { page: c.p } : {}), ...(c.sh ? { sheet: c.sh, sheetCell: c.sheetCell } : {}) } : {}),
     // A figure stated in the release's text cites its sentence: the viewer finds it, then the figure in it.
     ...(!doc.id.startsWith("x:") && !l && c.x && /[a-z]{3}/i.test(c.x) ? { search: printedToken(c.x, c.v), quote: c.x } : {}),
     ...(Array.isArray(l) ? { cell: { t: l[0], r: l[1], c: l[2] } } : l ? { box: l } : {}),

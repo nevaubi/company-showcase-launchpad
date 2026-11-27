@@ -2,7 +2,7 @@ import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { coverageOf } from "@/lib/coverage";
-import { vetPromises, type CallText, type RawPromise, type TrackedPromise } from "@/lib/earnings/promises";
+import { type TrackedPromise } from "@/lib/earnings/promises";
 
 /**
  * Management promise tracker: reads the last few earnings calls, extracts forward-looking
@@ -15,58 +15,8 @@ export const getPromises = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ promises: TrackedPromise[]; calls: { url: string; date: string; quarter: string | null }[]; error?: string }> => {
     const co = coverageOf(data.ticker);
     if (!co) return { promises: [], calls: [], error: "Not a covered company" };
-    const { listCalls, loadTranscript } = await import("@/lib/transcripts.server");
-    const list = await listCalls(co);
-    const refs = list.calls.slice(0, 5);
-    if (!refs.length) return { promises: [], calls: [], error: list.error ?? "No earnings calls found" };
-    const { cached, structured } = await import("@/lib/ai.server");
-    return cached(
-      `promises:v1:${co.ticker}:${refs[0].date}`,
-      30 * 86400_000,
-      async () => {
-        const loaded = await Promise.all(refs.map((r) => loadTranscript(co, r.url).catch(() => ({ transcript: null }))));
-        const calls: CallText[] = loaded
-          .map((l, i) => (l.transcript ? { url: refs[i].url, date: refs[i].date!, quarter: refs[i].quarter ?? null, text: l.transcript.turns.filter((t) => t.kind === "management").map((t) => t.text).join("\n") } : null))
-          .filter((c): c is CallText => !!c)
-          .sort((a, b) => a.date.localeCompare(b.date));
-        if (calls.length < 2) return { promises: [], calls, error: "Need at least two readable calls" };
-        const res = await structured<{ promises: RawPromise[] }>({
-          name: "promises",
-          effort: "medium",
-          instructions:
-            "You track whether management keeps its word. From the earnings-call management remarks below (oldest first, each headed by its call date), list concrete forward-looking commitments: numeric guidance, margin/growth targets, product or plant launch dates, capex/buyback/dividend plans, cost programs, debt targets. Skip vague aspirations. 'quote' MUST be copied character-for-character from that call (one or two sentences). Then grade each against LATER calls only: kept / missed / partial, with 'outcomeQuote' copied character-for-character from the later call and its outcomeCallDate; if no later call settles it, status 'pending' with outcomeQuote and outcomeCallDate null. summary: one plain sentence of what was promised. note: one short sentence explaining the grade. deadline: the stated timeframe or null. 8-20 promises, prefer ones that are gradable.",
-          input: calls.map((c) => `=== CALL ${c.date} (${c.quarter ?? ""}) ===\n${c.text.slice(0, 40_000)}`).join("\n\n"),
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["promises"],
-            properties: {
-              promises: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["quote", "callDate", "category", "summary", "deadline", "status", "outcomeQuote", "outcomeCallDate", "note"],
-                  properties: {
-                    quote: { type: "string" },
-                    callDate: { type: "string" },
-                    category: { type: "string", enum: ["guidance", "margin", "growth", "product", "capital", "cost", "balance sheet", "other"] },
-                    summary: { type: "string" },
-                    deadline: { type: ["string", "null"] },
-                    status: { type: "string", enum: ["kept", "missed", "partial", "pending"] },
-                    outcomeQuote: { type: ["string", "null"] },
-                    outcomeCallDate: { type: ["string", "null"] },
-                    note: { type: "string" },
-                  },
-                },
-              },
-            },
-          },
-        });
-        return { promises: vetPromises(res.promises ?? [], calls), calls: calls.map(({ url, date, quarter }) => ({ url, date, quarter })) };
-      },
-      (r) => r.promises.length > 0,
-    );
+    const { storedPromises } = await import("./earnings/promises.server");
+    return storedPromises(co);
   });
 
 /** Earnings preview (next print) and recap (latest print); may only cite browser-assembled fact ids. */

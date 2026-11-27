@@ -1,11 +1,11 @@
 // Pure: the payload is bounded by what the IR page shows, not by how many documents are stored. After the build:
 // 1. sections are laid out only from tables of documents filed in the newest 37 months; a series is kept only
 //    when a kept section's row uses it (its history from older documents stays, inside those rows) or it carries
-//    a standard key (`sc`, read by the standardized KPIs); groups, checks, aliases, table layouts and fill
+//    a table scope (`sc`, retained when there is room); groups, checks, aliases, table layouts and fill
 //    conflicts follow the kept series and sections;
 // 2. over the cap (8 MB serialized), sections of the "more" group are dropped from the oldest documents first;
 // 3. still over, periods older than 40 quarters before the newest are dropped;
-// 4. still over: not ok (the rebuild does not upload it and reports the sizes).
+// 4. still over, omit unplaced scoped rows, retaining every displayed row and its parents.
 // Each step is recorded in `stats.quality.budget`.
 import type { IrPayload, PayloadSeries } from "@/lib/ir/payload";
 import { assembleStatements, type Statement } from "@/lib/ir/statements";
@@ -15,7 +15,7 @@ export const BUDGET_MONTHS = 37;
 export const BUDGET_QUARTERS = 40;
 
 export interface BudgetStep {
-  step: "recent" | "more" | "periods";
+  step: "recent" | "more" | "periods" | "displayed";
   /** serialized bytes after the step */
   bytes: number;
   /** sections or periods dropped */
@@ -38,16 +38,16 @@ const monthsBack = (d: string, n: number) => {
   return new Date(Date.UTC(y, m - 1 - n, Math.min(day, 28))).toISOString().slice(0, 10);
 };
 
-const size = (p: IrPayload) => JSON.stringify(p).length;
+const size = (p: IrPayload) => new Blob([JSON.stringify(p)]).size;
 
-/** The payload reduced to the given sections' series (and every series with a standard key). */
-function keepSections(p: IrPayload, kept: Statement[]): IrPayload {
+/** The payload reduced to the given sections' series (and unplaced scoped series when there is room). */
+function keepSections(p: IrPayload, kept: Statement[], keepUnplaced = true): IrPayload {
   const keys = new Set<string>();
   for (const s of kept) {
     for (const k of s.keys) keys.add(k);
     for (const r of s.rows) if (r.kind === "line") for (const k of r.ks) keys.add(k);
   }
-  for (const s of p.series) if (s.sc) keys.add(s.k);
+  if (keepUnplaced) for (const s of p.series) if (s.sc) keys.add(s.k);
   // A kept line's parent chain stays (hierarchy and checks read it).
   const byKey = new Map(p.series.map((s) => [s.k, s]));
   for (const k of [...keys]) {
@@ -164,6 +164,15 @@ export function budgetPayload(
     };
     bytes = size(out);
     steps.push({ step: "periods", bytes, dropped });
+  }
+  // `sc` is a table scope, not a standardized measure ID. Unplaced scoped lines can still
+  // exceed the cap after period trimming (especially banks). Keep every displayed row and
+  // its ancestors. The worker preserves the full pre-budget data as a separate archive.
+  if (bytes > cap) {
+    const previous = out.series.length;
+    out = keepSections(out, kept, false);
+    bytes = size(out);
+    steps.push({ step: "displayed", bytes, dropped: previous - out.series.length });
   }
   return {
     payload: out,

@@ -56,7 +56,7 @@ function AltHub() {
   const navigate = useNavigate({ from: "/app/alt-data" });
   const [theme, setTheme] = useState<ThemeFilter>("all");
   const [find, setFind] = useState("");
-  const dataset = d && DATASETS[d] ? d : null;
+  const dataset = d && DATASETS[d] && (theme === "all" || DATASETS[d].theme === theme) ? d : null;
   // a theme or a dataset that removes content keeps the page's height under the reader until they scroll up
   const { ref, hold } = useHoldPage<HTMLDivElement>();
   return (
@@ -115,7 +115,7 @@ function AltHub() {
       </div>
       {dataset && (
         <div data-section="Dataset records" className="min-w-0">
-          <DatasetFeed dataset={dataset} />
+          <DatasetFeed dataset={dataset} find={find} />
         </div>
       )}
       <PlantHazardsPanel />

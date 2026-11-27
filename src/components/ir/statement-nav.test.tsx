@@ -54,7 +54,7 @@ describe("statement controls from the sections' kinds", () => {
   it("writes one quiet sentence for what the documents do not print", () => {
     expect(missingNote([], [])).toBeNull();
     expect(missingNote(["average", "capital"], ["CET1 ratio", "Return on equity"])).toBe(
-      "Not printed in the company's documents: average balances and yields and capital. No table prints CET1 ratio and return on equity.",
+      "Outside the available statement tables: average balances and yields and capital. These tables do not show CET1 ratio and return on equity.",
     );
   });
 
@@ -90,7 +90,7 @@ describe("statement controls from the sections' kinds", () => {
   it("states the bank statements the JPM fixture does not hold, without alarm styling", () => {
     render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
     const note = document.querySelector("[data-statements-absent]");
-    expect(note?.textContent).toMatch(/^Not printed in the company's documents: .*balance sheet/);
+    expect(note?.textContent).toMatch(/^Outside the available statement tables: .*balance sheet/);
     expect(note?.className).not.toMatch(/amber|warning|destructive|red/);
   });
 

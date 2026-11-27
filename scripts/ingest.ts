@@ -13,7 +13,7 @@
  *      [--concurrency=3] [--fresh]   (--fresh re-downloads mutable SEC JSON; filing documents are cached)
  */
 import { createHash } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { buildStatements, type CompanyFacts, type RawFact } from "../src/lib/financials/build";
 import { ALL_LINES } from "../src/lib/financials/schema";
 import { CLASS_CONCEPTS, classFactsFromInline, tickerShareClass, type ShareClass } from "../src/lib/financials/share-class";
@@ -846,8 +846,9 @@ export async function treasuryObservations(id: string, since: string): Promise<[
     if (!res.ok) throw new Error(`treasury ${id} ${res.status}`);
     const j = (await res.json()) as { data: Record<string, string>[]; meta: { "total-pages": number } };
     for (const r of j.data) {
-      const n = Number(r[spec.field]);
-      if (Number.isFinite(n)) out.push([r.record_date, n]);
+      const raw = r[spec.field];
+      const n = Number(raw);
+      if (raw != null && String(raw).trim() !== "" && Number.isFinite(n)) out.push([r.record_date, n]);
     }
     if (page >= j.meta["total-pages"]) break;
   }
@@ -856,6 +857,20 @@ export async function treasuryObservations(id: string, since: string): Promise<[
 
 async function ingestMacro(s: MacroDef) {
   const observations = s.provider === "treasury" ? await treasuryObservations(s.id, s.since) : await fredObservations(s);
+  const path = `${OUT}macro/${s.id}.json`;
+  const prior = await readFile(path, "utf8").then((text) => JSON.parse(text) as MacroSeries).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  if (!observations.length || observations.some(([day, val], i) => !/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today ||
+    !Number.isFinite(val) || (i > 0 && day <= observations[i - 1][0]))) throw new Error("Empty, future, or out-of-order series");
+  const dates = new Set(observations.map(([day]) => day));
+  if (prior?.observations.some(([day]) => !dates.has(day))) throw new Error("Published observations missing from response; retained stored history");
+  if (prior && JSON.stringify(prior.observations) === JSON.stringify(observations)) {
+    console.log(`  ${s.id}: unchanged`);
+    return;
+  }
   const series: MacroSeries = {
     id: s.id,
     title: s.title,
@@ -866,7 +881,9 @@ async function ingestMacro(s: MacroDef) {
     source: "snapshot",
     agency: s.agency,
   };
-  await writeFile(`${OUT}macro/${s.id}.json`, JSON.stringify(series));
+  const tmp = `${path}.${process.pid}.tmp`;
+  await writeFile(tmp, JSON.stringify(series));
+  await rename(tmp, path);
   console.log(`  ${s.id}: ${observations.length} obs`);
 }
 

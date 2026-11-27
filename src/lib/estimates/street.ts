@@ -42,6 +42,18 @@ export interface Snapshot {
     >
   >;
 }
+/** Historical estimates for one fiscal endpoint, including before it rolled from next to current. */
+export function fiscalEpsHistory(snapshots: Snapshot[], code: PeriodCode, end: string) {
+  return snapshots.flatMap((snap) => {
+    const matches = Object.entries(snap.p).filter(([key, row]) =>
+      key.endsWith(code.slice(-1)) && row?.end === end && row.eps != null && Number.isFinite(row.eps),
+    );
+    if (matches.length !== 1) return [];
+    const reading = matches[0][1]!;
+    return [{ t: Date.parse(snap.as_of), v: reading.eps!, date: snap.as_of, reading }];
+  });
+}
+
 export interface Revision {
   from_date: string;
   eps_from: number | null;

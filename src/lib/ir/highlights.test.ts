@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IrPayload, PayloadGroup, PayloadSeries } from "./payload";
-import { biggestMoves, changeOf, currency, keyLines, latestQuarter, yearAgo } from "./highlights";
+import { biggestMoves, changeOf, formatKpiChange, currency, keyLines, latestQuarter, yearAgo } from "./highlights";
 
 const Q = ["2024-09-30", "2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"];
 const ser = (k: string, vals: (number | null)[], extra: Partial<PayloadSeries> = {}): PayloadSeries => ({
@@ -27,6 +27,12 @@ describe("IR highlights", () => {
     expect(changeOf(110, 100, "usd")).toBeCloseTo(10);
     expect(changeOf(41.5, 40, "pct")).toBeCloseTo(1.5);
     expect(changeOf(-5, 10, "usd")).toBeNull();
+  });
+
+  it("distinguishes basis points from percentage points and skips a missing quarter", () => {
+    expect(formatKpiChange(changeOf(86, 61, "bps"), "bps")).toBe("+25.0 bps");
+    expect(formatKpiChange(changeOf(10.9, 11.2, "pct"), "pct")).toBe("−0.3 pts");
+    expect(keyLines(p, Q.filter((e) => e !== "2026-06-30"))[0].qoq).toBeNull();
   });
 
   it("finds the year-ago column by date and the latest well-reported quarter", () => {

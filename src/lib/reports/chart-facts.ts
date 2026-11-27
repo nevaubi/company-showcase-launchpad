@@ -1,6 +1,6 @@
 // Which facts a finished report must keep: cited ones, every plotted value, the glance tiles, and
 // the members behind composite (cross-company / comparison) facts. Pure.
-import type { Fact, GlanceItem, ReportChart, ReportSection } from "./types";
+import type { Fact, GlanceItem, ReportChart, ReportSection, ReportTable } from "./types";
 
 export function chartFactIds(c: ReportChart): string[] {
   const out: (string | undefined)[] = [];
@@ -31,13 +31,17 @@ export function chartFactIds(c: ReportChart): string[] {
   return out.filter((x): x is string => !!x);
 }
 
-export function keptFactIds(sections: ReportSection[], charts: ReportChart[], glance: GlanceItem[], facts: Fact[]): Set<string> {
+export function keptFactIds(sections: ReportSection[], charts: ReportChart[], glance: GlanceItem[], facts: Fact[], tables: ReportTable[] = []): Set<string> {
   const keep = new Set<string>();
   for (const s of sections) for (const c of [...s.paragraphs, ...s.bullets]) for (const id of c.factIds) keep.add(id);
   for (const c of charts) for (const id of chartFactIds(c)) keep.add(id);
   for (const g of glance) if (g.f) keep.add(g.f);
   const byId = new Map(facts.map((f) => [f.id, f]));
-  for (const id of [...keep]) {
+  for (const table of tables) for (const row of table.rows) for (const cell of row.cells) {
+    if (cell?.ref?.kind === "composite") for (const id of cell.ref.members) keep.add(id);
+  }
+  // Set iteration includes newly visited inputs, also for nested composite facts.
+  for (const id of keep) {
     const f = byId.get(id);
     if (f?.ref.kind === "composite") for (const m of f.ref.members) keep.add(m);
   }

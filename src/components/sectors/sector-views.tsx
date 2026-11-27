@@ -1,6 +1,6 @@
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Fragment, useMemo, type KeyboardEvent } from "react";
+import { Fragment, useMemo, useState, type KeyboardEvent } from "react";
 import { Segmented } from "@/components/app/segmented";
 import { TickerMark } from "@/components/app/ticker";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import {
   BREAKDOWN_METRICS,
   breakdown,
+  bankRevenueEvidence,
   compQuery,
   fmtMetric,
   noteParts,
@@ -152,7 +153,7 @@ export function SectorNotes({ only, onlyName }: { only?: string; onlyName?: stri
     <Section
       id="notes"
       name="Weekly notes"
-      title={only ? (onlyName ? `This week's note on ${onlyName}` : "This week's note") : "This week's sector notes"}
+      title={only ? (onlyName ? `Sector note · ${onlyName}` : "Sector note") : "Sector notes"}
       caption={`Week of ${fmtDate(nw.week)} · each underlined number opens the aggregate it cites`}
     >
       <div className={cn("grid grid-cols-1 gap-px bg-border", !only && "md:grid-cols-2")}>
@@ -266,7 +267,7 @@ export function AggregateTrends({
       id="trends"
       name="Quarterly aggregates"
       title="Quarterly aggregates"
-      caption={`${g.metrics[metric]?.name ?? metric}: aggregate (solid) and company median (dashed) by calendar quarter${canBreak ? " · click a quarter for the companies behind it" : ""}`}
+      caption={`${g.metrics[metric]?.name ?? metric}: aggregate (solid), company median (dashed)${last != null ? ` · ${qLabel(g.quarters[last])}: ${s.n[last]} / ${g.constituents.length} companies` : ""}${canBreak ? " · click a quarter for the companies behind it" : ""}`}
       actions={
         <>
           <Segmented
@@ -345,7 +346,7 @@ export function AggregateTrends({
                 >
                   <rect x={x(k) - (W - m.l - m.r) / show.length / 2} y={m.t} width={(W - m.l - m.r) / show.length} height={H - m.t - m.b} fill="transparent" />
                   <circle cx={x(k)} cy={y(s.agg[i]!)} r={i === sel ? 4.5 : 2.5} fill="var(--chart-1)" stroke={i === sel ? "var(--background)" : undefined} />
-                  <title>{`${qLabel(g.quarters[i])}: ${fmtMetric(s.agg[i], unit)} aggregate, ${fmtMetric(s.med[i], unit)} median · ${s.n[i]} companies`}</title>
+                  <title>{`${qLabel(g.quarters[i])}: ${fmtMetric(s.agg[i], unit)} aggregate, ${fmtMetric(s.med[i], unit)} median · ${s.n[i]} of ${g.constituents.length} companies`}</title>
                 </g>
               ))}
               {last != null && (
@@ -363,6 +364,44 @@ export function AggregateTrends({
         )}
       </div>
     </Section>
+  );
+}
+
+function BankSourceDetail({ records }: { records: ReturnType<typeof bankRevenueEvidence> }) {
+  const [selection, setSelection] = useState("");
+  const selected = records.find((r) => r.ticker === selection) ?? records[0];
+  if (!selected) return null;
+  return (
+    <details className="my-3 rounded-md border px-3 py-2 text-xs">
+      <summary className="cursor-pointer font-medium">Bank revenue filings · {records.length} companies</summary>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <label htmlFor="bank-source-issuer">Inspect filing inputs</label>
+        <select id="bank-source-issuer" className="rounded border bg-background px-2 py-1" value={selected.ticker} onChange={(event) => setSelection(event.target.value)}>
+          {records.map(({ ticker }) => <option key={ticker}>{ticker}</option>)}
+        </select>
+      </div>
+      <p className="my-2 leading-relaxed text-muted-foreground">
+        Each period adds GAAP net interest income before provisions and noninterest income from the same filing. Amounts in USD.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead className="border-b text-right text-muted-foreground"><tr><th className="py-1 text-left">Filing period</th><th>Net interest</th><th>Noninterest</th><th>Net revenue</th></tr></thead>
+          <tbody>
+            {selected.parts.map(({ label, point }) => (
+              <tr key={point.accession + point.start + point.end} className="border-b">
+                <td className="py-2 pr-2"><a href={point.filing_url} target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">{label} · {point.form}</a>
+                  <div className="mt-0.5 text-muted-foreground">{point.start} – {point.end}</div>
+                </td>
+                {[point.InterestIncomeExpenseNet, point.NoninterestIncome, point.net_revenue].map((v, index) => (
+                  <td className="num whitespace-nowrap text-right" key={index} title={v.toLocaleString("en-US") + " USD"}>{fmtMetric(v, "usd")}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {selected.trailing != null && <p className="mt-2 text-right font-medium">Trailing net revenue <span className="num">{fmtMetric(selected.trailing, "usd")}</span></p>}
+    </details>
   );
 }
 
@@ -385,7 +424,7 @@ export function BreakdownSheet({ g, metric, q, onClose }: { g: GroupFile; metric
             {b && (
               <>
                 {" "}
-                · recomputed from {b.rows.length} companies: <span className="num font-medium text-foreground">{fmtMetric(b.value, unit)}</span>
+                · {b.rows.length} of {g.constituents.length} companies contributed: <span className="num font-medium text-foreground">{fmtMetric(b.value, unit)}</span>
               </>
             )}
           </SheetDescription>
@@ -403,6 +442,7 @@ export function BreakdownSheet({ g, metric, q, onClose }: { g: GroupFile; metric
               {fmtMetric(b.rows.reduce((s, x) => s + x.den, 0), "usd")}. Companies sorted by their weight in the denominator; each company's inputs come
               from its own filings for the fiscal quarter ending nearest the calendar quarter.
             </p>
+            {comp.data && <BankSourceDetail records={bankRevenueEvidence(comp.data, b)} />}
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b text-left text-[11px] text-muted-foreground">

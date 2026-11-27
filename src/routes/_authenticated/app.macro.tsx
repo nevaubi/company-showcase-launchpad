@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowUpRight, Loader2, Sparkles, X } from "lucide-react";
-import { toast } from "sonner";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { TimeSeriesChart } from "@/components/charts/time-series";
@@ -16,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getMacroBrief } from "@/lib/ai.functions";
 import { CURVE_TENORS, MACRO_TILES, macroDef, type MacroDef, type MacroGroup } from "@/lib/coverage";
 import { macroQuery, macroSummariesQuery } from "@/lib/data";
-import { changeText, displayUnits, fmtMacro, recessionBands, transformed, valueAt, type MacroSummary } from "@/lib/macro";
+import { changeText, displayUnits, fmtMacro, monthsBefore, recessionBands, sharedCurveDates, transformed, valueAt, type MacroSummary } from "@/lib/macro";
 import { fmtDate, fmtRelative, ordinal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { GROUPS, GROUP_IDS, macroSearch } from "@/lib/macro-search";
@@ -33,9 +32,9 @@ export const Route = createFileRoute("/_authenticated/app/macro")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { title: "Macro · FiledUnder" },
-      { name: "description", content: "120 U.S. government economic series (rates, inflation, labor, growth, fiscal, energy) with percentiles, comparisons and an AI macro brief." },
+      { name: "description", content: "U.S. economic series (rates, inflation, labor, growth, fiscal, energy) with percentiles, comparisons and an AI macro brief." },
       { property: "og:title", content: "Macro · FiledUnder" },
-      { property: "og:description", content: "120 U.S. government economic series with percentiles, comparisons and an AI macro brief." },
+      { property: "og:description", content: "U.S. economic series with percentiles, comparisons and an AI macro brief." },
     ],
   }),
   component: Macro,
@@ -64,34 +63,28 @@ function Macro() {
   const defs = s.group === "key" ? KEY.map((id) => macroDef(id)!).filter(Boolean) : MACRO_TILES.filter((d) => d.group === s.group);
   const agencies = useMemo(() => [...new Set(MACRO_TILES.map((d) => d.agency))].length, []);
 
-  const brief = useMutation({
-    mutationFn: () => {
-      const readings = MACRO_TILES.flatMap((d) => {
+  const readings = useMemo(() => MACRO_TILES.flatMap((d) => {
         const r = sm?.get(d.id);
         if (!r || r.latest == null) return [];
         const pct = r.pct10y != null ? `; ${ordinal(Math.round(r.pct10y * 100))} percentile of 10 years` : "";
         return [{ id: d.id, title: `${d.title} (${displayUnits(d)}), ${d.agency}`.slice(0, 140), latest: fmtMacro(d, r.latest), date: r.date ?? "", change: `${changeText(d, r)}; 1Y ago ${fmtMacro(d, r.yearAgo)}${pct}`.slice(0, 160) }];
-      });
-      const asOf = readings.map((r) => r.date).sort().at(-1) ?? new Date().toISOString().slice(0, 10);
-      return getMacroBrief({ data: { asOf, readings } });
-    },
-    onError: (e) => toast.error((e as Error).message),
+  }), [sm]);
+  const asOf = readings.map((r) => r.date).sort().at(-1);
+  const brief = useQuery({
+    queryKey: ["macro-brief", readings],
+    queryFn: () => getMacroBrief({ data: { asOf: asOf!, readings } }),
+    enabled: !!asOf,
+    staleTime: 6 * 3600_000,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
-  // The brief is cached server-side per data date, so opening the page normally reads the shared copy.
-  const asked = useRef(false);
-  useEffect(() => {
-    if (sm && !asked.current) {
-      asked.current = true;
-      brief.mutate();
-    }
-  }, [sm, brief]);
 
   return (
     <div className="grid grid-cols-1 gap-5">
       <PageHeader
         eyebrow={`${MACRO_TILES.length} series · ${agencies} agencies · BLS, BEA, Census, Federal Reserve, Treasury, EIA`}
         title="Macro"
-        description="The government data that moves earnings and multiples. Percentiles place each print in its ten-year range; grey bands mark NBER recessions."
+        description="Rates, inflation, credit and real activity. Compare each release with its own history and the sectors it affects."
         actions={<Segmented label="Chart span" value={s.span} onChange={(v) => set({ span: v })} options={SPANS} />}
       />
 
@@ -102,10 +95,10 @@ function Macro() {
               <Sparkles className="size-3.5" /> Macro brief
             </span>
           }
-          subtitle={brief.data ? `Written from ${MACRO_TILES.length} government series · ${fmtRelative(brief.data.cachedAt)}` : "An AI strategist's read of the latest prints"}
+          subtitle={brief.data ? `Based on ${readings.length} published series · ${fmtRelative(brief.data.cachedAt)}` : "An AI strategist's read of the latest prints"}
           actions={
-            <Button size="xs" variant={brief.data ? "outline" : "ink"} onClick={() => brief.mutate()} disabled={brief.isPending || !sm}>
-              {brief.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />} {brief.data ? "Refresh" : "Write brief"}
+            <Button size="xs" variant={brief.data ? "outline" : "ink"} onClick={() => void brief.refetch()} disabled={brief.isFetching || !asOf}>
+              {brief.isFetching ? <Loader2 className="animate-spin" /> : <Sparkles />} {brief.data ? "Refresh" : "Write brief"}
             </Button>
           }
         >
@@ -138,7 +131,7 @@ function Macro() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{sm ? "Summarize rates, inflation, labor, growth, credit, fiscal and energy in one read." : "Loading readings…"}</p>
+            <p className="text-sm text-muted-foreground">{brief.isError ? "The brief is unavailable. The published series below remain available." : sm ? "No dated readings available." : "Loading readings…"}</p>
           )}
         </Panel>
         <YieldCurvePanel />
@@ -177,32 +170,28 @@ function Macro() {
 
 function YieldCurvePanel() {
   const qs = useQueries({ queries: CURVE_TENORS.map((t) => macroQuery({ ...macroDef(t.id)!, since: "2022-01-01" })) });
-  const ready = qs.every((q) => q.data);
-  const curve = useMemo(() => {
-    if (!ready) return null;
-    const series = CURVE_TENORS.map((t, i) => ({ ...t, obs: qs[i].data!.observations }));
-    const latest = series.map((x) => x.obs.at(-1)![0]).sort()[0];
-    const at = (date: string) =>
-      series.map((x) => ({ label: x.label, years: x.years, value: valueAt(x.obs, date) })).filter((p): p is { label: string; years: number; value: number } => p.value != null);
-    const shift = (d: string, months: number) => {
-      const t = new Date(`${d}T00:00:00Z`);
-      t.setUTCMonth(t.getUTCMonth() - months);
-      return t.toISOString().slice(0, 10);
-    };
-    return {
-      asOf: latest,
-      lines: [
-        { id: "now", label: "Latest", color: "var(--foreground)", points: at(latest) },
-        { id: "6m", label: "6M ago", color: "var(--chart-2)", dashed: true, points: at(shift(latest, 6)) },
-        { id: "1y", label: "1Y ago", color: "var(--chart-1)", dashed: true, points: at(shift(latest, 12)) },
-        { id: "2y", label: "2Y ago", color: "var(--chart-5)", dashed: true, points: at(shift(latest, 24)) },
-      ],
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  const series = CURVE_TENORS.map((t, i) => ({ ...t, obs: qs[i].data?.observations ?? [] }));
+  const dates = sharedCurveDates(series.map((x) => x.obs));
+  const latest = dates.at(-1);
+  const at = (date: string) => {
+    const day = [...dates].reverse().find((d) => d <= date);
+    if (!day || Date.parse(date) - Date.parse(day) > 7 * 86400000) return [];
+    return series.map((x) => ({ label: x.label, years: x.years, value: valueAt(x.obs, day)! }));
+  };
+  const curve = latest ? {
+    asOf: latest,
+    lines: [
+      { id: "now", label: "Latest", color: "var(--foreground)", points: at(latest) },
+      { id: "6m", label: "6M ago", color: "var(--chart-2)", dashed: true, points: at(monthsBefore(latest, 6)) },
+      { id: "1y", label: "1Y ago", color: "var(--chart-1)", dashed: true, points: at(monthsBefore(latest, 12)) },
+      { id: "2y", label: "2Y ago", color: "var(--chart-5)", dashed: true, points: at(monthsBefore(latest, 24)) },
+    ].filter((line) => line.points.length),
+  } : null;
+  const pending = qs.some((q) => q.isPending);
+
   return (
-    <Panel title="Treasury yield curve" subtitle={curve ? `Constant-maturity yields, Federal Reserve H.15 · latest ${fmtDate(curve.asOf)}` : "Loading…"}>
-      {curve ? <YieldCurveChart lines={curve.lines} height={280} /> : <Skeleton className="h-[280px]" />}
+    <Panel title="Treasury yield curve" subtitle={curve ? `Constant-maturity yields, Federal Reserve H.15 · latest ${fmtDate(curve.asOf)}`  : pending ? "Loading…" : "No shared observation date across maturities"}>
+      {curve ? <YieldCurveChart lines={curve.lines} height={280} /> : pending ? <Skeleton className="h-[280px]" /> : <p className="text-sm text-muted-foreground">The tenors do not yet have a complete shared curve.</p>}
     </Panel>
   );
 }

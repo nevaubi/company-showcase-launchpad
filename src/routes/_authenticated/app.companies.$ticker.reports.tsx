@@ -1,11 +1,10 @@
-import { useFeatureGate } from "@/hooks/use-plan";
+import { DownloadMenu } from "@/components/reports/download-menu";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
-import { Check, ChevronDown, Download, FileText, Link2, RefreshCw, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Check, ChevronDown, FileText, Link2, RefreshCw, SlidersHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ReportDocument, type ReportBrand } from "@/components/reports/report-document";
@@ -16,10 +15,10 @@ import { useCompany } from "@/lib/data";
 import { RATING_LABEL, type Rating } from "@/lib/firm/core";
 import { coverageOf } from "@/lib/coverage";
 import { useProfile } from "@/lib/workspace";
+import { reportRefreshDue } from "@/lib/reports/refresh";
 import { dataVersionOf } from "@/lib/reports/facts";
 import { KIND_ORDER, KINDS } from "@/lib/reports/kinds";
-import type { ReportContent, ReportKind } from "@/lib/reports/types";
-import { downloadBlob } from "@/lib/export/xlsx-theme";
+import type { ReportKind } from "@/lib/reports/types";
 import { fmtDate, fmtRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -77,12 +76,9 @@ function ReportsTab() {
   const started = useRef(new Set<string>());
   useEffect(() => {
     if (list.isLoading || list.isError || !company.data) return;
-    const key = `${kind}:${current}`;
+    const key = `${ticker}:${kind}:${current}`;
     if (started.current.has(key)) return;
-    const lockFresh = base?.status === "generating" && base.started_at && Date.now() - Date.parse(base.started_at) < 4 * 60_000;
-    if (lockFresh || base?.status === "failed") return;
-    // Missing, out of date, or abandoned mid-write (the server reclaims a stale lock).
-    if (!base || (base.status === "ready" && base.data_version !== current) || base.status === "generating") {
+    if (reportRefreshDue(base, current)) {
       started.current.add(key);
       req.mutate({ ticker, kind, scope: "shared" });
     }
@@ -227,51 +223,5 @@ function Writing({ kind, name, startedAt }: { kind: ReportKind; name: string; st
       </ol>
       <div className="mt-6 space-y-2"><Skeleton className="h-3 w-11/12" /><Skeleton className="h-3 w-10/12" /><Skeleton className="h-3 w-8/12" /></div>
     </div>
-  );
-}
-
-function DownloadMenu({ content, brand }: { content: ReportContent | null; brand: ReportBrand }) {
-  const [docx, setDocx] = useState<Blob | null>(null);
-  const [building, setBuilding] = useState(false);
-  useEffect(() => setDocx(null), [content]);
-  const file = content ? `${content.ticker}-${content.kind}-${content.asOf}` : "report";
-  const prepare = async () => {
-    if (!content || docx || building) return;
-    setBuilding(true);
-    try {
-      const [{ reportToDocx }, { captureCharts }] = await Promise.all([import("@/lib/export/report-docx"), import("@/lib/export/chart-capture")]);
-      const root = document.querySelector(".report-doc");
-      setDocx(await reportToDocx(content, brand, root ? await captureCharts(root) : new Map()));
-    } catch (e) {
-      toast.error(`Word export failed: ${(e as Error).message}`);
-    } finally {
-      setBuilding(false);
-    }
-  };
-  const gate = useFeatureGate();
-  const print = () => {
-    if (!gate("exports")) return;
-    const root = document.documentElement;
-    const done = () => { root.classList.remove("printing-report"); window.removeEventListener("afterprint", done); };
-    root.classList.add("printing-report");
-    window.addEventListener("afterprint", done);
-    const title = document.title;
-    document.title = file;
-    window.print();
-    document.title = title;
-    setTimeout(done, 1000);
-  };
-  return (
-    <DropdownMenu onOpenChange={(o) => { if (o) prepare(); }}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ink" size="sm" disabled={!content}><Download /> Download</Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuItem onClick={print}>PDF<span className="ml-auto text-[11px] text-muted-foreground">Print → Save as PDF</span></DropdownMenuItem>
-        <DropdownMenuItem disabled={!docx} onClick={() => docx && gate("exports") && downloadBlob(docx, `${file}.docx`)}>
-          Word (.docx)<span className="ml-auto text-[11px] text-muted-foreground">{docx ? <Badge variant="outline">Ready</Badge> : building ? "Preparing…" : ""}</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

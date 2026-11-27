@@ -88,16 +88,13 @@ export function seriesOf(item: KpiItem, freq: Freq): { vals: Vals; basis: string
   const has = (k: string) => Object.keys(v[k] ?? {}).length > 0;
   if (freq === "A") {
     if (has("A")) return { vals: v.A as Vals, basis: "annual" };
-    // Balances and ratios: the year-end point-in-time value (latest observation in each calendar year).
-    const src = (has("I") ? v.I : v.Q) ?? {};
-    const byYear: Vals = {};
-    for (const k of Object.keys(src).sort()) byYear[k.slice(0, 4)] = src[k];
-    const vals: Vals = {};
-    for (const [, x] of Object.entries(byYear)) {
-      const key = Object.keys(src).find((k) => src[k] === x);
-      if (key) vals[key] = x;
-    }
-    return { vals, basis: has("I") ? "year-end, point in time" : "year-end of quarterly" };
+    // Point-in-time values may stand in only at a positively identified fiscal year end.
+    // A quarterly flow (or the latest available observation in a partial year) is never an annual result.
+    const vals = Object.fromEntries(Object.entries(v.I ?? {}).filter(([, cell]) =>
+      /\b(?:Q4|4Q)(?=\b|\d)|\bFY(?:\s*\d{2,4})?\s*$|\bfiscal year[- ]end\b/i.test(cell.label ?? "")
+      && !/\b(?:Q[123]|[123]Q)(?=\b|\d)/i.test(cell.label ?? "")
+    ));
+    return { vals, basis: "fiscal year-end, point in time" };
   }
   if (has("Q")) return { vals: v.Q as Vals, basis: "quarterly" };
   if (has("I")) return { vals: v.I as Vals, basis: "point in time" };
@@ -128,7 +125,7 @@ function nearKey(keys: string[], end: string, target: number, tol: number): stri
  * compare the wrong quarters; a change is omitted when no matching period exists. The source link is printed once per
  * document and the verbatim quote on the newest row only. */
 export function kpiLines(item: KpiItem, freq: Freq, periods: number): string[] {
-  const { vals, basis } = seriesOf(item, freq);
+  const { vals } = seriesOf(item, freq);
   const all = Object.keys(vals).sort();
   const ends = [...all].reverse().slice(0, periods);
   const seen = new Set<string>();
@@ -148,8 +145,7 @@ export function kpiLines(item: KpiItem, freq: Freq, periods: number): string[] {
     if (v.url) seen.add(key);
     const shown = fmtKpi(v.v, item.unit);
     const printed = v.printed && !shown.includes(v.printed.replace(/\s+/g, "")) ? ` (printed "${v.printed.replace(/\s+/g, "")}")` : "";
-    const partial = freq === "A" && basis.startsWith("year-end") && i === 0 && all.length > 1 && end.slice(5, 7) !== all[all.length - 2].slice(5, 7) ? " (latest observation, year not complete)" : "";
-    return `  ${v.label ?? end} (${end})${partial}: ${shown}${printed}${chg.length ? ` [${chg.join(", ")}]` : ""} — ${docTitle(v.doc_title)}${where}${quote}${link}`;
+    return `  ${v.label ?? end} (${end}): ${shown}${printed}${chg.length ? ` [${chg.join(", ")}]` : ""} — ${docTitle(v.doc_title)}${where}${quote}${link}`;
   });
 }
 

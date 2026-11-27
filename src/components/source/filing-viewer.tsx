@@ -25,6 +25,7 @@ export interface FactLocator {
   quote?: string;
   page?: number;
   sheet?: string;
+  sheetCell?: string;
 }
 
 export type LocateStatus =
@@ -281,6 +282,17 @@ export function FilingViewer({
         : locator.sheet
           ? (Array.from(d.querySelectorAll<HTMLTableElement>("table[data-sheet]")).find((t) => t.getAttribute("data-sheet") === locator.sheet) ?? null)
           : null;
+    if (!found.length && cited && locator.sheet && locator.sheetCell) {
+      const address = /^([A-Z]{1,3})([1-9]\d{0,6})$/i.exec(locator.sheetCell);
+      if (address) {
+        const col = Array.from(address[1].toUpperCase()).reduce((n, letter) => n * 26 + letter.charCodeAt(0) - 64, 0);
+        const el = cited.rows[Number(address[2]) - 1]?.cells[col - 1];
+        if (el) {
+          found = [el];
+          how = `sheet “${locator.sheet}”, cell ${locator.sheetCell}`;
+        }
+      }
+    }
     if (!found.length && locator.quote) {
       const row = (cited && quotedRow(cited, locator.quote)) || quotedRow(d.body, locator.quote);
       if (row) {
@@ -352,7 +364,7 @@ export function FilingViewer({
   useEffect(() => {
     if (frame.current?.contentDocument?.readyState === "complete" && srcDoc) locate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.quote, locator?.page, locator?.sheet, locator?.value, locator?.cell?.t, locator?.cell?.r, locator?.cell?.c, locator?.box?.p, locator?.box?.b?.join()]);
+  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.quote, locator?.page, locator?.sheet, locator?.sheetCell, locator?.value, locator?.cell?.t, locator?.cell?.r, locator?.cell?.c, locator?.box?.p, locator?.box?.b?.join()]);
 
   useEffect(() => {
     const d = frame.current?.contentDocument;

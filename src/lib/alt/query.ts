@@ -169,12 +169,16 @@ export const altCompanyQuery = (ticker: string) => ({
 });
 
 /** Latest events across all companies for one dataset. */
-export const altFeedQuery = (dataset: string) => ({
-  queryKey: ["alt_feed", dataset],
-  queryFn: async ({ client }: { client?: QueryClient }) => readAlt("*", (q) => {
-      const base = q.eq("dataset", dataset).eq("kind", "event").not("date", "is", null);
-      return (dataset === "contracts" ? withoutCopiedAwards(base) : base).order("date", { ascending: false }).limit(300);
-    }, client),
+export const altFeedQuery = (dataset: string, prefix = "") => ({
+  queryKey: ["alt_feed", dataset, prefix],
+  queryFn: async ({ client }: { client?: QueryClient }) => {
+    if (prefix && !/^[A-Z0-9.-]+$/.test(prefix)) return [];
+    return readAlt("*", (q) => {
+      let base = q.eq("dataset", dataset).eq("kind", "event").not("date", "is", null);
+      if (prefix) base = base.like("ticker", prefix + "%");
+      return (dataset === "contracts" ? withoutCopiedAwards(base) : base).order("date", { ascending: false }).order("uid").limit(300);
+    }, client);
+  },
   staleTime: 10 * 60_000,
 });
 

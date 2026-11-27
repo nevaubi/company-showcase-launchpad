@@ -98,7 +98,7 @@ const C: Record<string, Col> = {
   beat: { k: "beat", label: "Moved more", title: "Past reports whose move was larger than today's priced move", get: (r) => (r.priced && r.past && r.priced.lag <= REPORT_EXPIRY_LAG ? r.past.moves.filter((x) => Math.abs(x.m) > r.priced!.m).length / r.past.n : null), cell: (r) => (r.priced && r.past && r.priced.lag <= REPORT_EXPIRY_LAG ? <span className="num tabular-nums">{r.past.moves.filter((x) => Math.abs(x.m) > r.priced!.m).length} of {r.past.n}</span> : dash) },
   ratio: { k: "ratio", label: "Priced ÷ past", title: "Priced move ÷ past median move: above 1 the market expects a bigger move than usual", get: (r) => (r.priced && r.pastMedian && r.priced.lag <= REPORT_EXPIRY_LAG ? r.priced.m / r.pastMedian : null), cell: (r) => (r.priced && r.pastMedian && r.priced.lag <= REPORT_EXPIRY_LAG ? <span className={cn("num tabular-nums", (r.priced.m / r.pastMedian >= 1.5 || r.priced.m / r.pastMedian <= 0.67) && "font-semibold")}>{(r.priced.m / r.pastMedian).toFixed(2)}×</span> : dash) },
   iv: { k: "iv", label: "IV30", title: "Cboe 30-day implied volatility", get: (r) => r.iv30, cell: (r, open) => (r.iv30 != null ? btn(() => open(ext(r, "30-day implied volatility", r.iv30!, "pct", "Cboe IV30")), fmtPct(r.iv30, 1)) : dash) },
-  ivChg: { k: "ivChg", label: "1-day", title: "Change in IV30 since the previous recorded day, in volatility points", get: (r) => r.ivChg, cell: (r) => (r.ivChg != null ? <span className={cn("num tabular-nums", r.ivChg > 0.02 ? "text-negative" : r.ivChg < -0.02 && "text-positive")}>{pts(r.ivChg)}</span> : dash) },
+  ivChg: { k: "ivChg", label: "Δ prior quote", title: "Change in IV30 since the previous recorded day, in volatility points", get: (r) => r.ivChg, cell: (r) => (r.ivChg != null ? <span className={cn("num tabular-nums", r.ivChg > 0.02 ? "text-negative" : r.ivChg < -0.02 && "text-positive")}>{pts(r.ivChg)}</span> : dash) },
   rank: { k: "rank", label: "IV rank", title: "Where IV30 sits in its recorded range over the last year (0 = low, 100 = high); needs 20 recorded days", get: (r) => r.rank, cell: (r) => (r.rank != null ? <span className="num tabular-nums">{(r.rank * 100).toFixed(0)}</span> : dash) },
   m30: { k: "m30", label: "~30d move", title: "Move priced to the first expiry at least four weeks out", get: (r) => r.m30?.m ?? null, cell: (r, open) => (r.m30 ? btn(() => open(ext(r, `Move priced through ${fmtDate(r.m30!.e)}`, r.m30!.m, "pct", `At-the-money straddle for the ${r.m30!.e} expiry ÷ stock price ${r.price.toFixed(2)}`)), `±${fmtPct(r.m30.m, 1)}`) : dash) },
   front: { k: "front", label: "Front − 30d IV", title: "Nearest expiry's at-the-money IV minus the ~30-day one: positive (inverted) means an event is priced close in", get: (r) => (r.term[0]?.iv != null && r.atm_iv != null ? r.term[0].iv - r.atm_iv : null), cell: (r) => { const v = r.term[0]?.iv != null && r.atm_iv != null ? r.term[0].iv - r.atm_iv : null; return v != null ? <span className={cn("num tabular-nums", v > 0.05 && "font-semibold")}>{pts(v)}</span> : dash; } },
@@ -155,25 +155,27 @@ function OptionsHub() {
     });
   }, [q.data, cal.data, uni.data, rx.data]);
 
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const latest = all.reduce((d, r) => (r.date > d ? r.date : d), "");
-  const horizon = latest ? new Date(Date.parse(latest) + 28 * 86400000).toISOString().slice(0, 10) : "";
+  const horizon = new Date(Date.parse(today) + 28 * 86400000).toISOString().slice(0, 10);
+  const sameSession = all.filter((r) => r.date === latest);
   const rows = useMemo(() => {
     const needle = text.trim().toLowerCase();
     let out = all.filter((r) => !needle || r.ticker.toLowerCase().startsWith(needle) || r.name.toLowerCase().includes(needle));
-    if (view === "reports") out = out.filter((r) => r.report && r.report <= horizon && r.priced);
+    if (view === "reports") out = out.filter((r) => r.report && r.report >= today && r.report <= horizon && r.priced);
     const col = C[sort.c];
     return [...out].sort((a, b) => {
       const va = col.get(a);
       const vb = col.get(b);
-      if (va == null) return 1;
+      if (va == null) return vb == null ? a.ticker.localeCompare(b.ticker) : 1;
       if (vb == null) return -1;
       return (typeof va === "string" ? va.localeCompare(String(vb)) : va - (vb as number)) * sort.d;
     });
-  }, [all, text, view, sort, horizon]);
+  }, [all, text, view, sort, horizon, today]);
 
-  const ivMed = median(all.map((r) => r.iv30).filter((x): x is number => x != null));
-  const skewMed = median(all.map((r) => r.skew25).filter((x): x is number => x != null));
-  const nReports = all.filter((r) => r.report && r.report <= horizon && r.priced).length;
+  const ivMed = median(sameSession.map((r) => r.iv30).filter((x): x is number => x != null));
+  const skewMed = median(sameSession.map((r) => r.skew25).filter((x): x is number => x != null));
+  const nReports = all.filter((r) => r.report && r.report >= today && r.report <= horizon && r.priced).length;
   const days = Math.max(0, ...all.map((r) => (r.iv_n ?? 0) + 1));
 
   return (
@@ -181,7 +183,7 @@ function OptionsHub() {
       <PageHeader
         eyebrow="Markets"
         title="Options"
-        description="What the options market prices for every covered stock with listed options: the move into each upcoming report next to how the stock usually reacts, implied volatility and its rank, put/call positioning and skew. From Cboe's delayed quotes, recorded every weekday evening; click a figure for its quote."
+        description="Stored Cboe quotes, historical earnings moves and positioning. Each row shows its quote date."
         actions={
           <Segmented
             label="Options view"
@@ -205,9 +207,9 @@ function OptionsHub() {
       ) : (
         <div className="mt-4 min-w-0" data-section="Options board">
           <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
-            <Stat label="Stocks with listed options" value={all.length.toLocaleString("en-US")} hint={`quotes from ${fmtDate(latest)}`} />
-            <Stat label="Median implied vol · 30d" value={fmtPct(ivMed, 1)} />
-            <Stat label="Median skew · 25Δ" value={skewMed != null ? `${pts(skewMed)} pts` : "–"} hint="put IV − call IV" />
+            <Stat label="Stocks with quotes" value={all.length.toLocaleString("en-US")} hint={`${sameSession.length.toLocaleString("en-US")} on latest quote date · ${fmtDate(latest)}`} />
+            <Stat label="Median implied vol · 30d" value={fmtPct(ivMed, 1)} hint={fmtDate(latest)} />
+            <Stat label="Median skew · 25Δ" value={skewMed != null ? `${pts(skewMed)} pts` : "–"} hint={`Put IV − call IV · ${fmtDate(latest)}`} />
             <Stat label="Reports in the next 4 weeks" value={String(nReports)} hint={days < 20 ? `IV rank after 20 days (${days} recorded)` : `${days} days recorded`} />
           </div>
           <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -218,7 +220,7 @@ function OptionsHub() {
             <p className="text-[11px] text-muted-foreground">{VIEWS[view].blurb}</p>
           </div>
           {!rows.length ? (
-            <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">{view === "reports" ? "No covered stock with listed options reports in the next four weeks." : "No stock matches."}</p>
+            <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">{view === "reports" ? "No matching report has a stored straddle for this window." : "No stock matches."}</p>
           ) : (
             <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
               <div className="overflow-x-auto scrollbar-thin">
@@ -226,6 +228,7 @@ function OptionsHub() {
                   <thead>
                     <tr>
                       <th className="sticky left-0 top-0 z-30 border-b border-r bg-card px-3 py-2 text-left text-[11px] font-medium text-muted-foreground">Company</th>
+                      <th className="border-b bg-card px-2 py-2 text-left text-[11px] font-medium text-muted-foreground">Quote date</th>
                       <th className="hidden border-b bg-card px-2.5 py-2 text-right text-[11px] font-medium text-muted-foreground sm:table-cell">Price</th>
                       {VIEWS[view].cols.map((k) => (
                         <th key={k} aria-sort={sort.c === k ? (sort.d === 1 ? "ascending" : "descending") : "none"} className="border-b bg-card px-2.5 py-2 text-right align-bottom">
@@ -252,6 +255,7 @@ function OptionsHub() {
                             <span className="hidden truncate text-muted-foreground sm:inline">{r.name}</span>
                           </Link>
                         </td>
+                        <td className="num whitespace-nowrap border-b px-2 py-1.5 text-xs text-muted-foreground">{fmtDate(r.date, { month: "short", day: "numeric" })}</td>
                         <td className="num hidden border-b px-2.5 py-1.5 text-right tabular-nums text-muted-foreground group-hover:bg-secondary sm:table-cell">{r.price.toFixed(2)}</td>
                         {VIEWS[view].cols.map((k) => (
                           <td key={k} className="border-b px-2.5 py-1.5 text-right group-hover:bg-secondary">

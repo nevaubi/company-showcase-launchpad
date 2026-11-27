@@ -134,6 +134,22 @@ describe("IR statements", { timeout: 30_000 }, () => {
     ).toBeNull();
   });
 
+  it("returns all matching statement rows when the search names a printed table", () => {
+    render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
+    fireEvent.change(screen.getByLabelText("Find a line"), { target: { value: "consolidated statements of income" } });
+    const income = section("Consolidated statements of income");
+    expect(within(income).getByRole("rowheader", { name: "Card income" })).toBeTruthy();
+    expect(within(income).getByRole("rowheader", { name: "Investment banking fees" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Segment & corporate results - managed basis" })).toBeNull();
+  });
+
+  it("mounts a previously offscreen table immediately when filtering makes it the first result", () => {
+    render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
+    expect(screen.queryByRole("heading", { name: "Segment & corporate results - managed basis" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Find a line"), { target: { value: "Segment & corporate results - managed basis" } });
+    expect(section("Segment & corporate results - managed basis")).toBeTruthy();
+  });
+
   it("opens the stored document at a figure, and widens to the whole history", () => {
     render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
     const income = section("Consolidated statements of income");

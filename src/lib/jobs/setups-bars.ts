@@ -44,7 +44,7 @@ export function mergeOfficialBars(file: Bar[], rows: OfficialRow[], from: string
     if (!pos(c) || r.date > asOf) continue;
     const adj = num(r.adj_close);
     const o = num(r.open), h = num(r.high), l = num(r.low), v = num(r.volume);
-    official.set(r.date, [r.date, pos(o) ? o : c, pos(h) ? h : c, pos(l) ? l : c, c, pos(adj) ? adj : c, Number.isFinite(v) ? v : 0]);
+    official.set(r.date, [r.date, pos(o) ? o : 0, pos(h) ? h : c, pos(l) ? l : c, c, pos(adj) ? adj : c, Number.isFinite(v) ? v : 0]);
   }
   const lastOfficial = [...official.keys()].sort().at(-1) ?? "";
   let base = file.filter((b) => b[0].slice(0, 10) <= asOf);

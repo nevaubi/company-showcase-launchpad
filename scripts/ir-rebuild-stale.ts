@@ -16,7 +16,6 @@ import { args, dbGate, log, sb } from "./lib/supa";
 
 const settings = rebuildSettings({
   ...process.env,
-  IR_REBUILD_STALE: "1",
   ...(args.max ? { IR_REBUILD_MAX: args.max } : {}),
   ...(args.minutes ? { IR_REBUILD_MINUTES: args.minutes } : {}),
 });
@@ -39,18 +38,26 @@ async function saveState(s: RebuildState) {
   if (error) log(`saving lane state failed: ${error.message.slice(0, 160)}`);
 }
 
+const owner = `owner:${crypto.randomUUID()}`;
 async function takeLease(): Promise<boolean> {
-  const { data, error } = await sb.from("job_state").select("lease_until").eq("job", REBUILD_JOB).maybeSingle();
+  const now = new Date().toISOString();
+  // Create the initially unleased row once. Only the conditional UPDATE can claim it.
+  const { error: seedError } = await sb.from("job_state").upsert(
+    { job: REBUILD_JOB, cursor: 0 }, { onConflict: "job", ignoreDuplicates: true },
+  );
+  if (seedError) throw new Error(seedError.message);
+  const claim = sb.from("job_state").update({
+    paused_reason: owner, lease_until: new Date(Date.now() + LEASE_MS).toISOString(), updated_at: now,
+  }).eq("job", REBUILD_JOB);
+  if (args.force === undefined) claim.or(`lease_until.is.null,lease_until.lte.${now}`);
+  const { data, error } = await claim.select("job").maybeSingle();
   if (error) throw new Error(error.message);
-  if (data?.lease_until && new Date(data.lease_until) > new Date() && args.force === undefined) {
-    log(`another pass holds the lease until ${data.lease_until}`);
-    return false;
-  }
-  const { error: e2 } = await sb.from("job_state").upsert({ job: REBUILD_JOB, cursor: 0, lease_until: new Date(Date.now() + LEASE_MS).toISOString(), updated_at: new Date().toISOString() });
-  if (e2) throw new Error(e2.message);
-  return true;
+  if (!data) log("another pass holds the rebuild lease");
+  return !!data;
 }
-const releaseLease = () => sb.from("job_state").update({ lease_until: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("job", REBUILD_JOB);
+const releaseLease = () => sb.from("job_state")
+  .update({ paused_reason: null, lease_until: new Date().toISOString(), updated_at: new Date().toISOString() })
+  .eq("job", REBUILD_JOB).eq("paused_reason", owner);
 
 let stop = false;
 for (const signal of ["SIGTERM", "SIGINT"] as const)
@@ -61,6 +68,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const)
   });
 
 if (import.meta.main) {
+  if (!settings.enabled) process.exit(0);
   const t0 = Date.now();
   await dbGate(REBUILD_JOB);
   if (!(await takeLease())) process.exit(0);

@@ -53,6 +53,41 @@ describe("partner IR corpus payload", () => {
     expect(printedToken("Americas $ 52,648 $ 50,430", 52_648_000_000)).toBe("52,648");
   });
 
+  it("keeps as-of balances distinct from flows, including at the fiscal year end", async () => {
+    const { refOf } = await import("./display");
+    const stock = val("mixed", "I", "2025-06-30", 600, {
+      anchor: { quote: "", sheet: "Capital", cell: "N63" },
+    });
+    const p = buildExternalPayload("C", [def("mixed"), def("revenue")], [
+      val("mixed", "Q", "2025-06-30", 85), stock,
+      val("revenue", "A", "2025-06-30", 400), val("mixed", "I", "2025-09-30", 601),
+    ], docs);
+    const balance = p.series.find((s) => s.pit)!;
+    const flow = p.series.find((s) => s.k === "mixed")!;
+    expect(flow.q["2025-06-30"].v).toBe(85);
+    expect(balance.q["2025-06-30"]).toMatchObject({ v: 600, m: 0 });
+    expect(balance.y).toEqual({ "2025-06-30": balance.q["2025-06-30"] });
+    expect(refOf(p, balance.y["2025-06-30"], balance.label)).toMatchObject({ sheet: "Capital", sheetCell: "N63" });
+  });
+
+  it("opens an instant XBRL fact by the SEC accession and actual inline element", async () => {
+    const { refOf } = await import("./display");
+    const p = buildExternalPayload("JPM", [def("seg-assets")], [
+      val("seg-assets", "I", "2026-09-30", 200, {
+        source_kind: "xbrl", source_id: "0001628280-26-069523", anchor: { name: "us-gaap:Assets", id: "f-7370" },
+      }),
+    ], []);
+    const source = refOf(p, p.series[0].q["2026-09-30"], "Assets");
+    expect(source).toMatchObject({ accn: "0001628280-26-069523", concept: "us-gaap:Assets", elementId: "f-7370" });
+    expect(source).not.toHaveProperty("irDoc");
+  });
+
+  it("preserves native volume, energy, ratio, share and spread units", () => {
+    expect(["Mcf/d", "boe/d", "GWh", "shares", "bp", "bps", "pp", "x", "USD_per_unit"].map((u) => mapUnit(u)))
+      .toEqual(["Mcf/d", "boe/d", "GWh", "shares", "bps", "bps", "pp", "ratio", "usdPerUnit"]);
+    expect(mapUnit("USD_per_unit", "Tangible book value per common share")).toBe("usdPerShare");
+  });
+
   it("maps partner units to this site's units", () => {
     expect([mapUnit("USD"), mapUnit("%"), mapUnit("USD_per_share"), mapUnit("count")]).toEqual(["usd", "pct", "usdPerShare", "count"]);
   });

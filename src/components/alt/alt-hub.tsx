@@ -160,7 +160,7 @@ export function Leaders({ theme, find = "" }: { theme: ThemeFilter; find?: strin
     const sizes = all.map((x) => Math.abs(x.r.value)).sort((a, b) => a - b);
     const floor = sort === "latest" ? -Infinity : sizes[Math.floor(sizes.length / 2)] ?? -Infinity;
     const keyOf = (x: (typeof all)[number]) => (sort === "latest" ? x.r.value : sort === "typical" ? x.vsTypical : x.chg) ?? -Infinity;
-    const ranked = all.filter((x) => Math.abs(x.r.value) >= floor).sort((a, b) => keyOf(b) - keyOf(a)).map((x, i) => ({ ...x, rank: i + 1 }));
+    const ranked = all.filter((x) => Math.abs(x.r.value) >= floor && Number.isFinite(keyOf(x))).sort((a, b) => keyOf(b) - keyOf(a)).map((x, i) => ({ ...x, rank: i + 1 }));
     // the ticker filter keeps each company's rank among all companies
     return f ? ranked.filter((x) => x.r.ticker.startsWith(f)) : ranked;
   }, [q.data, sort, f]);
@@ -288,12 +288,13 @@ export function Catalogue({ theme, selected, onSelect }: { theme: ThemeFilter; s
 }
 
 /** The newest records of one dataset across coverage. */
-export function DatasetFeed({ dataset }: { dataset: string }) {
-  const q = useQuery(altFeedQuery(dataset));
+export function DatasetFeed({ dataset, find }: { dataset: string; find: string }) {
+  const prefix = find.trim().toUpperCase();
+  const q = useQuery(altFeedQuery(dataset, prefix));
   const info = DATASETS[dataset];
   return (
     <Panel collapse={false} bodyClassName="p-0" className="min-w-0 rounded-md border bg-card shadow-paper" title={`Newest ${info?.label.toLowerCase() ?? dataset}`} subtitle={`${info?.blurb ?? ""} · ${info?.source ?? ""}`}>
-      {q.isLoading ? <Skeleton className="m-3.5 h-48" /> : q.isError && !q.data ? <div role="alert" className="flex items-center gap-2 px-3.5 py-3 text-[13px] text-muted-foreground">Records are temporarily unavailable. <Button size="xs" variant="outline" onClick={() => q.refetch()}>Retry</Button></div> : <AltRecords rows={q.data ?? []} showTicker pageSize={12} empty="This dataset is a series per company; see the leaderboard." />}
+      {q.isLoading ? <Skeleton className="m-3.5 h-48" /> : q.isError && !q.data ? <div role="alert" className="flex items-center gap-2 px-3.5 py-3 text-[13px] text-muted-foreground">Records are temporarily unavailable. <Button size="xs" variant="outline" onClick={() => q.refetch()}>Retry</Button></div> : <AltRecords rows={q.data ?? []} showTicker pageSize={12} empty={prefix ? "No matching event records for this ticker filter." : "No event records in this dataset. Company series appear in the leaderboard."} />}
     </Panel>
   );
 }

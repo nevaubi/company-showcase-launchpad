@@ -74,7 +74,11 @@ export interface MarketContext {
   shortRatio: number | null;
 }
 
+export const EXECUTION_VERSION = 2;
+
 export interface SetupsFile {
+  /** Present only when aggregates exclude legacy and synthetic fills. */
+  executionVersion?: number;
   generatedAt: string;
   asOf: string;
   companies: number;
@@ -89,6 +93,12 @@ export interface SetupsFile {
   market?: MarketContext;
   /** "daily" when written by the scheduled job, "full" by the full-history script. */
   source?: "daily" | "full";
+}
+
+/** Preserve observations and watch-only pair spreads while an older aggregate is being replayed. */
+export function currentEvidence(file: SetupsFile): SetupsFile {
+  if (file.executionVersion === EXECUTION_VERSION) return file;
+  return { ...file, variants: [], setups: [], pairsProven: false };
 }
 
 export const variantKey = (s: StrategyId, side: 1 | -1, h: number) => `${s}:${side > 0 ? "L" : "S"}:${h}`;

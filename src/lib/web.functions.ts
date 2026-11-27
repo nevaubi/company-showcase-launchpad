@@ -50,84 +50,16 @@ export interface EarningsBrief {
   generatedAt: string;
 }
 
-/**
- * Latest earnings call brief: Tavily finds call coverage / transcripts / IR pages,
- * Firecrawl reads the best pages, the AI writes a sourced brief. Cached per ticker for 12h.
- */
+/** Read the latest stored call brief. */
 export const getEarningsCallBrief = createServerFn({ method: "POST" })
   .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: z.string().min(1).max(8), refresh: z.boolean().default(false) }).parse(d))
   .handler(async ({ data }): Promise<{ brief: EarningsBrief | null; error?: string }> => {
     const co = coverageOf(data.ticker);
     if (!co) return { brief: null, error: "Not a covered company" };
-    const { cached } = await import("@/lib/ai.server");
-    const key = `earnings-call:v1:${co.ticker}${data.refresh ? `:${Date.now()}` : ""}`;
-    return cached(key, 12 * 3600_000, () => buildBrief(co));
+    const { storedCallBrief } = await import("@/lib/transcripts.server");
+    return storedCallBrief(co);
   });
-
-async function buildBrief(co: NonNullable<ReturnType<typeof coverageOf>>): Promise<{ brief: EarningsBrief | null; error?: string }> {
-    const { tavilySearch, firecrawlScrape } = await import("@/lib/web.server");
-    const { structured } = await import("@/lib/ai.server");
-    try {
-      const { coverageDetails } = await import("@/lib/coverage-details.server");
-      const irSite = co.ir || coverageDetails(co.ticker).ir || "";
-      const irHost = irSite ? new URL(irSite).hostname : null;
-      const [calls, ir] = await Promise.all([
-        tavilySearch(`${co.shortName} ${co.ticker} latest quarterly earnings call transcript highlights guidance`, { topic: "news", days: 120, maxResults: 8 }),
-        irHost
-          ? tavilySearch(`${co.shortName} quarterly results press release`, { maxResults: 4, domains: [irHost] }).catch(() => ({ results: [] }))
-          : Promise.resolve({ results: [] as Awaited<ReturnType<typeof tavilySearch>>["results"] }),
-      ]);
-      const ranked = [...ir.results, ...calls.results].filter((r, i, a) => a.findIndex((x) => x.url === r.url) === i);
-      if (!ranked.length) return { brief: null, error: "No recent earnings call coverage found" };
-      const toRead = ranked.slice(0, 3);
-      const pages = await Promise.all(
-        toRead.map((r) => firecrawlScrape(r.url).then((p) => ({ ...r, body: p.markdown.slice(0, 14000) })).catch(() => ({ ...r, body: r.content }))),
-      );
-      const corpus = [
-        ...pages.map((p, i) => `[S${i + 1}] ${p.title} — ${p.url}\n${p.body}`),
-        ...ranked.slice(3, 9).map((r, i) => `[S${i + 4}] ${r.title} — ${r.url}${r.publishedAt ? ` (${r.publishedAt})` : ""}\n${r.content}`),
-      ].join("\n\n---\n\n");
-      const out = await structured<Omit<EarningsBrief, "sources" | "generatedAt"> & { sourceIdx: number[] }>({
-        name: "earnings_brief",
-        instructions: `You are an equity analyst. From the sources below, write a brief on ${co.shortName}'s (${co.ticker}) MOST RECENT quarterly earnings call/results only. Use only facts stated in the sources; quote numbers exactly with their period. If sources disagree, prefer the company's own release. No markdown links. sourceIdx lists the S-numbers (as integers) you relied on.`,
-        input: corpus,
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          required: ["title", "period", "summary", "highlights", "guidance", "analystQuestions", "sourceIdx"],
-          properties: {
-            title: { type: "string", description: "e.g. 'Q3 FY2026 earnings call'" },
-            period: { type: "string" },
-            summary: { type: "string", description: "3-4 sentence overview" },
-            highlights: {
-              type: "array",
-              items: { type: "object", additionalProperties: false, required: ["label", "detail"], properties: { label: { type: "string" }, detail: { type: "string" } } },
-            },
-            guidance: { type: "array", items: { type: "string" } },
-            analystQuestions: { type: "array", items: { type: "string" }, description: "Key topics analysts pressed management on" },
-            sourceIdx: { type: "array", items: { type: "integer" } },
-          },
-        },
-      });
-      const all = [...pages, ...ranked.slice(3, 9)];
-      const used = (out.sourceIdx ?? []).map((n) => all[n - 1]).filter(Boolean);
-      const brief: EarningsBrief = {
-        title: out.title,
-        period: out.period,
-        summary: out.summary,
-        highlights: out.highlights.slice(0, 8),
-        guidance: out.guidance.slice(0, 6),
-        analystQuestions: out.analystQuestions.slice(0, 6),
-        sources: (used.length ? used : all.slice(0, 4)).map((s) => ({ title: s.title, url: s.url })),
-        generatedAt: new Date().toISOString(),
-      };
-      return { brief };
-    } catch (e) {
-      console.error("earnings brief failed", e);
-      return { brief: null, error: (e as Error).message };
-    }
-}
 
 const errOut = (e: unknown) => ({ error: (e as Error).message });
 

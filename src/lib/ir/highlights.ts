@@ -28,10 +28,20 @@ export function latestQuarter(p: IrPayload, quarters: string[]): string | null {
 
 /** Change in percent (points for percentages and basis points). */
 export function changeOf(now: number | null | undefined, then: number | null | undefined, unit: string): number | null {
-  if (now == null || then == null) return null;
-  if (unit === "pct" || unit === "bps") return now - then;
+  if (now == null || then == null || !Number.isFinite(now) || !Number.isFinite(then)) return null;
+  if (unit === "pct" || unit === "bps" || unit === "pp") return now - then;
   if (then === 0 || Math.sign(now) !== Math.sign(then)) return null;
   return ((now - then) / Math.abs(then)) * 100;
+}
+
+/** Percentage-point and basis-point changes keep the unit in which the source reports them. */
+export function formatKpiChange(value: number | null, unit: string): string {
+  if (value == null || !Number.isFinite(value)) return "–";
+  const sign = value < 0 ? "−" : value > 0 ? "+" : "";
+  const relative = unit !== "pct" && unit !== "bps" && unit !== "pp";
+  const decimals = relative && Math.abs(value) >= 100 ? 0 : 1;
+  const figure = Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return sign + figure + (unit === "pct" || unit === "pp" ? " pts" : unit === "bps" ? " bps" : "%");
 }
 
 /** The column about one year before `end` (fiscal calendars drift a few days). */
@@ -64,7 +74,10 @@ function scored(p: IrPayload, quarters: string[]) {
   if (!end) return { end: null, lines: [] as KeyLine[] };
   const at = quarters.indexOf(end);
   const window = quarters.slice(Math.max(0, at - 7), at + 1);
-  const prev = at > 0 ? quarters[at - 1] : null;
+  const prior = quarters[at - 1];
+  const gapDays = prior ? (t(end) - t(prior)) / DAY : 0;
+  // Fiscal quarters may contain 12–14 weeks. A missing period is not a quarterly comparison.
+  const prev = gapDays >= 70 && gapDays <= 112 ? prior : null;
   const ago = yearAgo(quarters, end);
   const byKey = new Map(p.series.map((s) => [s.k, s]));
   const groupOf = new Map<string, { g: PayloadGroup; depth: number }>();

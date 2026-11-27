@@ -36,9 +36,9 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
       title={<span className="text-sm">Latest earnings call</span>}
       subtitle={
         b
-          ? `${b.title} · researched from ${b.sources.length} web sources · ${fmtRelative(b.generatedAt)}`
+          ? `${b.title} · ${b.sources.length} linked source${b.sources.length === 1 ? "" : "s"} · ${fmtRelative(b.generatedAt)}`
           : q.isLoading || refreshing
-            ? "Searching transcripts, press releases and coverage…"
+            ? "Loading the archived call…"
             : "No call brief on file"
       }
       actions={
@@ -67,7 +67,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
           <Skeleton className="h-24" />
           <Skeleton className="h-16" />
           <p className="text-[11px] text-muted-foreground">
-            Reading the call coverage: this takes 20–40 seconds the first time.
+            Loading stored call coverage.
           </p>
         </div>
       ) : !b ? (
@@ -133,7 +133,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
               ))}
             </ul>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              AI summary of third-party web sources. Verify against the company's filings.
+              Call coverage is linked to the sources above.
             </p>
           </div>
         </div>

@@ -61,9 +61,18 @@ describe("payload budget", () => {
     const parents = new Set(payload.series.map((x) => x.parent).filter(Boolean));
     expect(payload.series.every((x) => used.has(x.k) || x.sc || parents.has(x.k))).toBe(true);
   });
+  it("keeps the printed rows when an unused table scope exceeds the interactive limit", () => {
+    const large = { ...p.series[0], k: "unused", sc: "old cross-table scope".repeat(20000), q: {}, y: {}, at: undefined };
+    const cap = new Blob([JSON.stringify(p)]).size + 2048;
+    const { payload, budget } = budgetPayload({ ...p, series: [...p.series, large] }, { cap });
+    expect(budget.ok).toBe(true);
+    expect(budget.steps.at(-1)?.step).toBe("displayed");
+    expect(payload.series.some((s) => s.k === large.k)).toBe(false);
+    expect(view(payload)).toEqual(view(p));
+  });
   it("records every step and refuses a payload still over the cap", () => {
     const { budget } = budgetPayload(p, { cap: 1000, quarters: 1 });
-    expect(budget.steps.map((s) => s.step)).toEqual(["recent", "more", "periods"]);
+    expect(budget.steps.map((s) => s.step)).toEqual(["recent", "more", "periods", "displayed"]);
     expect(budget.ok).toBe(false);
     expect(budget.after).toBeGreaterThan(1000);
   });

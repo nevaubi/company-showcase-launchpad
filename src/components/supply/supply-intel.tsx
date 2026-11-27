@@ -44,9 +44,14 @@ const PAGE = 6;
 export const signalsQuery = (ticker: string) => ({
   queryKey: ["supply_signals", ticker],
   queryFn: async () => {
-    const { data, error } = await supabase.from("supply_signals").select("*").eq("ticker", ticker).limit(1000);
-    if (error) throw error;
-    return (data ?? []) as Signal[];
+    const rows: Signal[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from("supply_signals").select("*").eq("ticker", ticker)
+        .order("filed", { ascending: false, nullsFirst: false }).order("id").range(from, from + 999);
+      if (error) throw error;
+      rows.push(...data);
+      if (data.length < 1000) return rows;
+    }
   },
   staleTime: 10 * 60_000,
 });

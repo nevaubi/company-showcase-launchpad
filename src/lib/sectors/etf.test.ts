@@ -42,7 +42,8 @@ describe("fund risk", () => {
     expect(r.sessions).toBe(20);
     expect(r.to).toBe(day(40));
     const all = fundRisk([{ symbol: "SPY", closes: closes(A) }, { symbol: "GAP", closes: closes(A, [10, 11]) }], "SPY");
-    expect(all.sessions).toBe(38); // 41 closes less two days missing in one fund
+    expect(all.sessions).toBe(37); // two missing closes invalidate three daily returns
+    expect(all.beta[1]).toBeCloseTo(1);
   });
   it("gives nothing on a handful of sessions or without the benchmark", () => {
     const short = fundRisk([{ symbol: "SPY", closes: closes(A.slice(0, 12)) }, { symbol: "X", closes: closes(A.slice(0, 12)) }], "SPY");

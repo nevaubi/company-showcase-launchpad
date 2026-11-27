@@ -12,7 +12,7 @@ import { benchFromBars, BENCH_SYMBOLS, contextFromBench, parseCboeCsv, VIX3M_URL
 import { LIVE_BARS, scanTicker, tradeOutcome, type ScanOut } from "@/lib/signals/scan";
 import { finalize, variantPartial, type DailyAgg, type VariantPartial } from "@/lib/signals/backtest";
 import { formPairs, PAIRS, spreadZ, type PairLeg } from "@/lib/signals/pairs";
-import { isNearMiss, parseVariantKey, pickSetups, riskPlan, variantKey, variantMeta, type LiveFiring, type MarketContext, type PairSetup, type SetupsFile, type VariantMeta } from "@/lib/signals/setups";
+import { currentEvidence, EXECUTION_VERSION, isNearMiss, parseVariantKey, pickSetups, riskPlan, variantKey, variantMeta, type LiveFiring, type MarketContext, type PairSetup, type SetupsFile, type VariantMeta } from "@/lib/signals/setups";
 import { STRATEGY } from "@/lib/signals/strategies";
 import { parseRules, stepBot, type Candidate, type Ohlc, type Position } from "@/lib/signals/bots";
 import { GATE, OOS_START } from "@/lib/signals/backtest";
@@ -132,9 +132,9 @@ async function currentCycle(): Promise<Cycle | null> {
   return (data as Cycle | null) ?? null;
 }
 
-const advance = (asOf: string, from: string, to: string) => db().rpc("setup_advance", { _as_of: asOf, _from: from, _to: to });
-const lease = async (asOf: string, phase: string, secs = 60) => !!(await db().rpc("setup_lease", { _as_of: asOf, _phase: phase, _secs: secs })).data;
-const take = async (asOf: string, phase: string, n: number) => (await db().rpc("setup_take", { _as_of: asOf, _phase: phase, _n: n })).data as number | null;
+const advance = (asOf: string, from: string, to: string) => db().rpc("setup_advance", { _as_of: asOf, _from: from, _to: to }).throwOnError();
+const lease = async (asOf: string, phase: string, secs = 60) => !!(await db().rpc("setup_lease", { _as_of: asOf, _phase: phase, _secs: secs }).throwOnError()).data;
+const take = async (asOf: string, phase: string, n: number) => (await db().rpc("setup_take", { _as_of: asOf, _phase: phase, _n: n }).throwOnError()).data as number | null;
 
 export async function runSetups(left: () => boolean): Promise<Result> {
   const target = targetSession();
@@ -239,10 +239,10 @@ const PHASES: Record<string, Phase> = {
     // Partner bars skipped because no official bar exists yet; the session is provisional for them.
     const prov = () => (provisional.length ? { provisional: { skipped: provisional.length, bars: provisional.slice(0, 50) } } : {});
     while (left()) {
-      const { data: claimed } = await db().rpc("setup_claim_tickers", { _as_of: asOf, _n: 3 });
+      const { data: claimed } = await db().rpc("setup_claim_tickers", { _as_of: asOf, _n: 3 }).throwOnError();
       const list = (claimed ?? []) as { ticker: string; sector: string | null }[];
       if (!list.length) {
-        const { count } = await db().from("setup_scan").select("ticker", { count: "exact", head: true }).or(`scanned_for.is.null,scanned_for.lt.${asOf}`);
+        const { count } = await db().from("setup_scan").select("ticker", { count: "exact", head: true }).or(`scanned_for.is.null,scanned_for.lt.${asOf}`).throwOnError();
         if (!count || stuck) await advance(asOf, "scan", "cross");
         return { ok: true, items, detail: { asOf, phase: "scan", remaining: count ?? 0, corrected, ...prov() } };
       }
@@ -279,25 +279,36 @@ const PHASES: Record<string, Phase> = {
   /** Per-variant statistics from the database aggregates (one variant at a time). */
   async evaluate(asOf, left) {
     const { ctx } = await context(asOf);
-    const { data: list } = await db().rpc("setup_variant_list");
+    const { data: list } = await db().rpc("setup_variant_list").throwOnError();
     const variants = ((list ?? []) as { variant: string }[]).map((v) => v.variant).sort();
     const idx = new Map(ctx.dates.map((d, i) => [d, i]));
     let items = 0;
     while (left()) {
       const k = await take(asOf, "evaluate", 1);
       if (k == null) break;
-      if (k >= variants.length) {
-        await advance(asOf, "evaluate", "publish");
-        return { ok: true, items, detail: { asOf, phase: "evaluate", done: true } };
+      let variant = variants[k];
+      if (!variant) {
+        // A claimed variant can still be in flight, or its worker may have died before writing.
+        const { data } = await db().from("setup_variant_stats").select("variant").eq("as_of", asOf).contains("stats", { executionVersion: EXECUTION_VERSION }).throwOnError();
+        const complete = new Set(data.map((r) => r.variant));
+        variant = variants.find((key) => !complete.has(key)) ?? "";
+        if (!variant) {
+          await advance(asOf, "evaluate", "publish");
+          return { ok: true, items, detail: { asOf, phase: "evaluate", done: true } };
+        }
       }
-      const { data: rows, error } = await db().rpc("setup_variant_daily", { _variant: variants[k] });
+      const { data: rows, error } = await db().rpc("setup_variant_daily_v2", { _variant: variant });
       if (error) throw new Error(error.message);
       // One JSON array of [date, n, net, ex, gross, hits] per signal day (not row-limited).
       const days: DailyAgg[] = ((rows ?? []) as unknown as [string, number, number, number, number, number][])
         .map(([d, n, net, ex, gross, hits]) => ({ i: idx.get(d) ?? -1, n, net, ex, gross, hits }))
         .filter((r) => r.i >= 0);
-      const partial = variantPartial(variants[k], days, ctx.dates, ctx.regime);
-      await db().from("setup_variant_stats").upsert({ variant: variants[k], as_of: asOf, stats: { partial } as unknown as Json, updated_at: nowIso() });
+      const partial = variantPartial(variant, days, ctx.dates, ctx.regime);
+      const row = { variant, as_of: asOf, stats: { partial, executionVersion: EXECUTION_VERSION } as unknown as Json, updated_at: nowIso() };
+      // Concurrent retries cannot replace metadata once the publish phase has finalized this session.
+      const updated = await db().from("setup_variant_stats").update(row).eq("variant", variant).or(`as_of.lt.${asOf},and(as_of.eq.${asOf},stats->>executionVersion.is.null)`).select("variant").throwOnError();
+      if (!updated.data.length)
+        await db().from("setup_variant_stats").upsert(row, { onConflict: "variant", ignoreDuplicates: true }).throwOnError();
       items++;
     }
     return { ok: true, items, detail: { asOf, phase: "evaluate" } };
@@ -308,19 +319,19 @@ const PHASES: Record<string, Phase> = {
     if (!(await lease(asOf, "publish", 90))) return { ok: true, items: 0, detail: { asOf, phase: "publish", waiting: true } };
     const { ctx } = await context(asOf);
     const D = ctx.dates.length;
-    const { data: statRows } = await db().from("setup_variant_stats").select("variant, as_of, stats");
+    const { data: statRows } = await db().from("setup_variant_stats").select("variant, as_of, stats").eq("as_of", asOf).contains("stats", { executionVersion: EXECUTION_VERSION }).throwOnError();
     const parts = (statRows ?? [])
       .map((r) => (r.stats as { partial?: VariantPartial } & Partial<VariantMeta>).partial ?? (r.stats as unknown as VariantPartial))
       .filter((p): p is VariantPartial => !!p?.key && !!p.outSample);
-    const { data: fwd } = await db().rpc("setup_forward_stats");
+    const { data: fwd } = await db().rpc("setup_forward_stats_v2").throwOnError();
     const live = new Map(((fwd ?? []) as { variant: string; n: number; avg_net: number; avg_ex: number; hits: number; first_seen: string }[]).map((r) => [r.variant, r]));
     const variants: VariantMeta[] = finalize(parts).map((p) => {
       const L = live.get(p.key);
       return variantMeta(p, L ? { n: L.n, avgNet: round(L.avg_net, 5), avgExSpy: round(L.avg_ex, 5), hit: L.n ? round(L.hits / L.n, 4) : null, since: L.first_seen } : { n: 0, avgNet: null, avgExSpy: null, hit: null, since: null });
     });
     for (let k = 0; k < variants.length; k += 20)
-      await db().from("setup_variant_stats").upsert(variants.slice(k, k + 20).map((v) => ({ variant: v.key, as_of: asOf, stats: { partial: parts.find((p) => p.key === v.key), meta: v } as unknown as Json, updated_at: nowIso() })));
-    const sigs = await selectAll((a, b) => db().from("setup_signals").select("ticker, variant, fired_at, name, sector, strength, detail, price, atr, spark, context").eq("last_seen", asOf).gte("fired_at", ctx.dates[D - LIVE_BARS]).range(a, b));
+      await db().from("setup_variant_stats").upsert(variants.slice(k, k + 20).map((v) => ({ variant: v.key, as_of: asOf, stats: { executionVersion: EXECUTION_VERSION, partial: parts.find((p) => p.key === v.key), meta: v } as unknown as Json, updated_at: nowIso() })));
+    const sigs = await selectAll((a, b) => db().from("setup_signals").select("ticker, variant, fired_at, name, sector, strength, detail, price, atr, spark, context").eq("last_seen", asOf).gte("fired_at", ctx.dates[D - LIVE_BARS]).order("ticker").order("variant").order("fired_at").range(a, b));
     const liveF: LiveFiring[] = sigs
       .filter((s) => s.variant !== PAIR_KEY)
       .map((s) => ({ ticker: s.ticker, name: s.name ?? s.ticker, sector: s.sector ?? "", variant: s.variant, firedAt: s.fired_at, strength: Number(s.strength ?? 0), detail: s.detail ?? "", price: Number(s.price ?? 0), atr: Number(s.atr ?? 0), spark: (s.spark ?? []) as number[] }));
@@ -328,9 +339,9 @@ const PHASES: Record<string, Phase> = {
     const setups = pickSetups(variants, liveF, today);
     const pairs = sigs.filter((s) => s.variant === PAIR_KEY && s.fired_at === asOf).map((s) => s.context as unknown as PairSetup).sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 40);
     const market = await marketContext(asOf, ctx);
-    const { count } = await db().from("setup_scan").select("ticker", { count: "exact", head: true }).eq("scanned_for", asOf).is("error", null);
+    const { count } = await db().from("setup_scan").select("ticker", { count: "exact", head: true }).eq("scanned_for", asOf).is("error", null).throwOnError();
     const payload: SetupsFile = {
-      generatedAt: nowIso(), asOf, companies: count ?? 0, regime: today, oosStart: OOS_START, gate: GATE, variants, setups,
+      executionVersion: EXECUTION_VERSION, generatedAt: nowIso(), asOf, companies: count ?? 0, regime: today, oosStart: OOS_START, gate: GATE, variants, setups,
       pairsProven: !!variants.find((v) => v.key === PAIR_KEY)?.passed, pairs, market, source: "daily",
     };
     const { error } = await db().from("setup_results").upsert({ as_of: asOf, generated_at: payload.generatedAt, payload: payload as unknown as Json });
@@ -395,9 +406,14 @@ async function selectAll<T>(build: (from: number, to: number) => PromiseLike<{ d
 // ---------------------------------------------------------------- scan
 
 async function priceFile(ticker: string): Promise<Bar[]> {
-  const { data } = await db().storage.from("datasets").download(`prices/${sf(ticker)}.json`);
-  if (!data) return [];
-  return ((JSON.parse(await data.text()) as { bars?: Bar[] }).bars ?? []);
+  const { data, error } = await db().storage.from("datasets").download(`prices/${sf(ticker)}.json`);
+  if (error) {
+    if (/not found|does not exist/i.test(error.message)) return [];
+    throw new Error(`Price history for ${ticker}: ${error.message}`);
+  }
+  const bars = data && (JSON.parse(await data.text()) as { bars?: Bar[] }).bars;
+  if (!Array.isArray(bars)) throw new Error(`Invalid price file for ${ticker}`);
+  return bars;
 }
 
 interface BatchOut {
@@ -411,22 +427,22 @@ interface BatchOut {
 async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: string; sector: string | null }[]): Promise<BatchOut> {
   const D = ctx.dates.length;
   const tickers = list.map((x) => x.ticker);
+  const { data: previous } = await db().from("setup_scan").select("ticker, replay_version").in("ticker", tickers).throwOnError();
+  const complete = new Set(previous.filter((r) => r.replay_version === EXECUTION_VERSION).map((r) => r.ticker));
+  const needsReplay = tickers.some((ticker) => !complete.has(ticker));
   const tail = ctx.dates[D - SAMPLE_TAIL];
-  const shortFrom = ctx.dates[Math.max(0, D - 160)];
-  const failsFrom = ctx.dates[Math.max(0, D - 420)];
+  const shortFrom = needsReplay ? ctx.dates[0] : ctx.dates[Math.max(0, D - 160)];
+  const failsFrom = needsReplay ? ctx.dates[0] : ctx.dates[Math.max(0, D - 420)];
   const recentFrom = ctx.dates[Math.max(0, D - 45)];
   const [files, recent, earn, buys, shorts, sigs, fails] = await Promise.all([
-    Promise.all(tickers.map((t) => priceFile(t).catch(() => [] as Bar[]))),
-    db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").in("symbol", tickers).gte("date", recentFrom).lte("date", asOf).order("date").limit(5000),
-    db().from("earnings_events").select("ticker, filed").in("ticker", tickers).limit(5000),
-    db().from("insider_buys").select("ticker, filed, owner, value, plan_10b5").in("ticker", tickers).limit(5000),
-    db().from("short_volume").select("symbol, date, short_vol, total_vol").in("symbol", tickers).gte("date", shortFrom).limit(5000),
-    db().from("setup_signals").select("ticker, variant, fired_at, first_seen, outcome_net, side, horizon, cost").in("ticker", tickers).gte("fired_at", ctx.dates[Math.max(0, D - 80)]).limit(5000),
-    // SEC fails-to-deliver half-months (kept current by the gov-data job)
-    db().from("alt_data").select("ticker, date, value").eq("dataset", "settlement").in("ticker", tickers).gte("date", failsFrom).limit(5000),
+    Promise.all(tickers.map(priceFile)),
+    selectAll((a, b) => db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").in("symbol", tickers).gte("date", recentFrom).lte("date", asOf).order("symbol").order("date").range(a, b)),
+    selectAll((a, b) => db().from("earnings_events").select("ticker, filed").in("ticker", tickers).order("ticker").order("accn").range(a, b)),
+    selectAll((a, b) => db().from("insider_buys").select("ticker, filed, owner, value, plan_10b5").in("ticker", tickers).order("accn").order("owner").range(a, b)),
+    selectAll((a, b) => db().from("short_volume").select("symbol, date, short_vol, total_vol").in("symbol", tickers).gte("date", shortFrom).order("symbol").order("date").range(a, b)),
+    selectAll((a, b) => db().from("setup_signals").select("ticker, variant, fired_at, first_seen, outcome_net, outcome_version, side, horizon, cost").in("ticker", tickers).gte("fired_at", ctx.dates[Math.max(0, D - 80)]).order("ticker").order("variant").order("fired_at").range(a, b)),
+    selectAll((a, b) => db().from("alt_data").select("ticker, date, value").eq("dataset", "settlement").in("ticker", tickers).gte("date", failsFrom).order("ticker").order("date").order("uid").range(a, b)),
   ]);
-  // Without the official bars every partner bar in the window would count as provisional: fail the batch.
-  if (recent.error) throw new Error(`market_bars: ${recent.error.message}`);
   const provisional: string[] = [];
   const corrected: string[] = [];
   const samples: Record<string, unknown>[] = [];
@@ -439,16 +455,16 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
     const name = COVERAGE.find((c) => c.ticker === ticker)?.shortName ?? ticker;
     // The official `market_bars` row wins for every date both sources hold; a partner bar with no
     // official row yet (possibly a mid-session snapshot) is dropped and reported.
-    const merged = mergeOfficialBars(files[k], (recent.data ?? []).filter((r) => r.symbol === ticker), recentFrom, asOf);
+    const merged = mergeOfficialBars(files[k], recent.filter((r) => r.symbol === ticker), recentFrom, asOf);
     const bars = merged.bars;
     if (merged.provisional) provisional.push(`${ticker} ${merged.provisional}`);
     if (merged.corrected.length) corrected.push(ticker);
     const stale = bars.at(-1)?.[0] !== asOf;
     const events = {
-      earnings: (earn.data ?? []).filter((e) => e.ticker === ticker).map((e) => e.filed),
-      buys: (buys.data ?? []).filter((b) => b.ticker === ticker).map((b) => ({ filed: b.filed, owner: b.owner, value: Number(b.value ?? 0), plan: b.plan_10b5 })),
-      short: (shorts.data ?? []).filter((s) => s.symbol === ticker && Number(s.total_vol) > 0).map((s) => ({ date: s.date, ratio: Number(s.short_vol) / Number(s.total_vol) })),
-      fails: (fails.data ?? []).filter((x) => x.ticker === ticker && x.date && x.value != null).map((x) => ({ end: x.date as string, value: Number(x.value) })),
+      earnings: earn.filter((e) => e.ticker === ticker).map((e) => e.filed),
+      buys: buys.filter((b) => b.ticker === ticker).map((b) => ({ filed: b.filed, owner: b.owner, value: Number(b.value ?? 0), plan: b.plan_10b5 })),
+      short: shorts.filter((s) => s.symbol === ticker && Number(s.total_vol) > 0).map((s) => ({ date: s.date, ratio: Number(s.short_vol) / Number(s.total_vol) })),
+      fails: fails.filter((x) => x.ticker === ticker && x.date && x.value != null).map((x) => ({ end: x.date as string, value: Number(x.value) })),
     };
     let out: ScanOut | null = null;
     try {
@@ -462,28 +478,30 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
       continue;
     }
     const { a, f, bench } = out;
+    if (stale) {
+      scanRows.push({ ticker, sector, scanned_for: asOf, claimed_at: null, error: merged.provisional ? `provisional bar for ${merged.provisional} skipped (no official bar yet)` : "no bar for the session yet", updated_at: nowIso() });
+      continue;
+    }
     const last = D - 1;
     // Samples whose signal falls in the tail are rewritten (their outcomes may have just completed).
-    const tailSamples = out.samples.filter((s) => s.i >= D - SAMPLE_TAIL);
+    const tailSamples = out.samples.filter((s) => !complete.has(ticker) || s.i >= D - SAMPLE_TAIL);
     for (const s of tailSamples) samples.push({ ticker, variant: s.variant, d: ctx.dates[s.i], net: round(s.net, 6), ex: round(s.ex, 6), gross: round(s.gross, 6) });
     // Live signals (skip when the ticker's bar for the session isn't in yet).
-    const existing = new Map((sigs.data ?? []).filter((s) => s.ticker === ticker).map((s) => [`${s.variant}|${s.fired_at}`, s]));
+    const existing = new Map(sigs.filter((s) => s.ticker === ticker).map((s) => [`${s.variant}|${s.fired_at}`, s]));
     const spark = Array.from(a.c.slice(D - 60)).map((x) => round(x, 2));
-    if (!stale) {
-      for (const F of out.firings.filter((x) => x.i >= D - LIVE_BARS)) {
-        const key = `${F.variant}|${ctx.dates[F.i]}`;
-        const prev = existing.get(key);
-        existing.delete(key);
-        signals.push({
-          ticker, variant: F.variant, fired_at: ctx.dates[F.i], first_seen: prev?.first_seen ?? asOf, last_seen: asOf, name, sector, strategy: F.strategy, side: F.side, horizon: F.horizon,
-          strength: round(F.strength, 3), detail: F.detail, price: round(a.c[last], 4), atr: round(f.atr14[last], 4), dv20: Math.round(f.dv20[last]) || null, cost: round(F.cost, 5), spark,
-          context: { shortRatio: round(f.ev?.shortRatio5[last], 4), earnIn: Number.isFinite(f.ev?.earnAhead[last] ?? NaN) ? f.ev!.earnAhead[last] : null } as Json,
-        });
-      }
+    for (const F of out.firings.filter((x) => x.i >= D - LIVE_BARS)) {
+      const key = `${F.variant}|${ctx.dates[F.i]}`;
+      const prev = existing.get(key);
+      existing.delete(key);
+      signals.push({
+        ticker, variant: F.variant, fired_at: ctx.dates[F.i], first_seen: prev?.first_seen ?? asOf, last_seen: asOf, name, sector, strategy: F.strategy, side: F.side, horizon: F.horizon,
+        strength: round(F.strength, 3), detail: F.detail, price: round(a.c[last], 4), atr: round(f.atr14[last], 4), dv20: Math.round(f.dv20[last]) || null, cost: round(F.cost, 5), spark,
+        context: { shortRatio: round(f.ev?.shortRatio5[last], 4), earnIn: Number.isFinite(f.ev?.earnAhead[last] ?? NaN) ? f.ev!.earnAhead[last] : null } as Json,
+      });
     }
     // Outcomes of earlier signals whose holding period has finished.
     for (const s of existing.values()) {
-      if (s.outcome_net != null) continue;
+      if (s.outcome_net != null && s.outcome_version === EXECUTION_VERSION) continue;
       const i = idx.get(s.fired_at);
       if (i == null) continue;
       const o = tradeOutcome(a, bench, ctx.spy, i, s.side as 1 | -1, s.horizon, Number(s.cost ?? 0));
@@ -495,19 +513,23 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
     const from = Math.max(a.start, D - SERIES_BARS);
     const s5 = f.ev?.shortRatio5[last];
     series.push({
-      ticker, sector, start_date: ctx.dates[from], end_date: stale ? (bars.at(-1)?.[0] ?? asOf) : asOf,
+      ticker, sector, start_date: ctx.dates[from], end_date: asOf,
       o: Array.from(a.o.slice(from)).map((x) => round(x, 4)), c: Array.from(a.c.slice(from)).map((x) => round(x, 4)),
       dv20: Math.round(f.dv20[last]) || null, r5: round(a.c[last] / a.c[last - 5] - 1, 5), r21: round(a.c[last] / a.c[last - 21] - 1, 5),
       vol60: round(f.vol60[last], 5), above200: a.c[last] > f.sma200[last], near_high: a.c[last] >= 0.98 * f.max252[last],
       short5: s5 != null && Number.isFinite(s5) ? round(s5, 4) : null, updated_at: nowIso(),
     });
-    scanRows.push({ ticker, sector, scanned_for: asOf, claimed_at: null, bars: bars.length, samples: out.samples.length, error: stale ? (merged.provisional ? `provisional bar for ${merged.provisional} skipped (no official bar yet)` : "no bar for the session yet") : null, updated_at: nowIso() });
+    scanRows.push({ ticker, sector, scanned_for: asOf, claimed_at: null, bars: bars.length, samples: out.samples.length, replay_version: EXECUTION_VERSION, error: null, updated_at: nowIso() });
   }
-  const done = scanRows.filter((r) => !String(r.error ?? "").startsWith("scan:")).map((r) => r.ticker as string);
-  await db().from("setup_samples").delete().in("ticker", done).gte("d", tail).not("variant", "like", "custMom%");
-  if (samples.length) {
-    const { error } = await db().from("setup_samples").insert(samples as never);
-    if (error) throw new Error(error.message);
+  const done = scanRows.filter((r) => r.error === null).map((r) => r.ticker as string);
+  for (const historical of [true, false]) {
+    const group = done.filter((ticker) => complete.has(ticker) !== historical);
+    if (!group.length) continue;
+    await db().rpc("replace_setup_sample_slice_v2", {
+      p_tickers: group, p_from: historical ? ctx.dates[0] : tail, p_to: asOf,
+      p_rows: samples.filter((r) => group.includes(r.ticker as string)) as Json,
+      p_full: historical, p_keep_links: true,
+    }).throwOnError();
   }
   const fullSignals = signals.filter((s) => "last_seen" in s);
   const outcomes = signals.filter((s) => !("last_seen" in s));
@@ -515,9 +537,10 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
     const { error } = await db().from("setup_signals").upsert(fullSignals as never);
     if (error) throw new Error(error.message);
   }
-  for (const o of outcomes) await db().from("setup_signals").update({ outcome_net: o.outcome_net, outcome_ex: o.outcome_ex, outcome_at: o.outcome_at } as never).eq("ticker", o.ticker as string).eq("variant", o.variant as string).eq("fired_at", o.fired_at as string);
-  if (series.length) await db().from("setup_series").upsert(series as never);
-  await db().from("setup_scan").upsert(scanRows as never);
+  for (const o of outcomes) await db().from("setup_signals").update({ outcome_net: o.outcome_net, outcome_version: EXECUTION_VERSION, outcome_ex: o.outcome_ex, outcome_at: o.outcome_at } as never).eq("ticker", o.ticker as string).eq("variant", o.variant as string).eq("fired_at", o.fired_at as string).throwOnError();
+  if (series.length) await db().from("setup_series").upsert(series as never).throwOnError();
+  if (done.length) await db().from("setup_scan").upsert(scanRows.filter((r) => r.error === null) as never).throwOnError();
+  if (scanRows.some((r) => r.error !== null)) await db().from("setup_scan").upsert(scanRows.filter((r) => r.error !== null) as never).throwOnError();
   return { n: list.length, provisional, corrected };
 }
 
@@ -598,7 +621,7 @@ async function customerMomentum(asOf: string, ctx: EngineContext): Promise<numbe
 
 async function marketContext(asOf: string, ctx: EngineContext): Promise<MarketContext> {
   const D = ctx.dates.length;
-  const rows = await selectAll((a, b) => db().from("setup_series").select("above200, near_high, short5").eq("end_date", asOf).range(a, b));
+  const rows = await selectAll((a, b) => db().from("setup_series").select("above200, near_high, short5").eq("end_date", asOf).order("ticker").range(a, b));
   const shorts = rows.map((r) => Number(r.short5)).filter((x) => x > 0).sort((a, b) => a - b);
   return {
     vix: round(ctx.vix[D - 1], 2),
@@ -615,7 +638,7 @@ async function marketContext(asOf: string, ctx: EngineContext): Promise<MarketCo
 async function candidates(asOf: string, ctx: EngineContext): Promise<Candidate[]> {
   const D = ctx.dates.length;
   const { data: res } = await db().from("setup_results").select("payload").eq("as_of", asOf).maybeSingle();
-  const variants = ((res?.payload as unknown as SetupsFile | null)?.variants ?? []) as VariantMeta[];
+  const variants = res?.payload ? currentEvidence(res.payload as unknown as SetupsFile).variants : [];
   const byKey = new Map(variants.map((v) => [v.key, v]));
   const today = ctx.regime[D - 1];
   const sigs = await selectAll((a, b) => db().from("setup_signals").select("ticker, variant, name, sector, strength, price, atr, cost").eq("fired_at", asOf).neq("variant", PAIR_KEY).range(a, b));

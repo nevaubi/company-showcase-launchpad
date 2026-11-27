@@ -128,25 +128,16 @@ export const reactionsQuery = queryOptions({
   retry: 1,
 });
 
-/** The latest snapshot (within a week) for a handful of tickers, e.g. today's setups. */
-export const optionsLatestQuery = (tickers: string[]) =>
+/** The closing quote for this signal's trading session. Later quotes cannot describe its setup. */
+export const setupQuoteQuery = (ticker: string, session: string) =>
   queryOptions({
-    queryKey: ["options-latest", [...tickers].sort().join(",")],
-    queryFn: async (): Promise<Map<string, OptionsRow>> => {
-      const out = new Map<string, OptionsRow>();
-      if (!tickers.length) return out;
-      const since = new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 10);
-      const { data, error } = await supabase
-        .from("options_daily")
-        .select("ticker, date, price, iv30, atm_iv, skew25, pc_oi, pc_vol, call_oi, put_oi, call_vol, put_vol, term")
-        .in("ticker", tickers.slice(0, 200))
-        .gte("date", since)
-        .order("date", { ascending: false });
+    queryKey: ["setup-options", ticker, session],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("options_daily").select("date, price, term, skew25, pc_oi")
+        .eq("ticker", ticker).eq("date", session).maybeSingle();
       if (error) throw new Error(error.message);
-      for (const r of data ?? [])
-        if (!out.has(r.ticker))
-          out.set(r.ticker, { ...r, price: Number(r.price), iv30: num(r.iv30), atm_iv: num(r.atm_iv), skew25: num(r.skew25), pc_oi: num(r.pc_oi), pc_vol: num(r.pc_vol), term: (r.term ?? []) as unknown as TermPoint[] });
-      return out;
+      return data ? { date: data.date, price: Number(data.price), term: (data.term ?? []) as unknown as TermPoint[],
+        skew: num(data.skew25), putCall: num(data.pc_oi) } : null;
     },
     staleTime: 30 * 60_000,
     retry: 1,

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Panel } from "@/components/app/page-header";
 import { Segmented, type SegOption } from "@/components/app/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { fmtDate } from "@/lib/format";
 import { useSessionState } from "@/lib/use-session-state";
 import { SignalsByCounterparty, SignalsByType, signalsQuery } from "./supply-intel";
@@ -19,7 +20,7 @@ const LENSES: SegOption<Lens>[] = [
 const isLens = (v: unknown): v is Lens => v === "type" || v === "counterparty" || v === "terms";
 
 export function SupplySignals({ ticker, name }: { ticker: string; name: string }) {
-  const { data, isLoading } = useQuery(signalsQuery(ticker));
+  const { data, isLoading, isError, refetch } = useQuery(signalsQuery(ticker));
   const [lens, setLens] = useSessionState<Lens>("fu:supply:signals", "type", isLens);
   const n = data?.length ?? 0;
   const newest = (data ?? []).reduce((m, s) => (s.filed && s.filed > m ? s.filed : m), "");
@@ -32,6 +33,7 @@ export function SupplySignals({ ticker, name }: { ticker: string; name: string }
       actions={n > 0 ? <Segmented label="Read the statements" size="xs" value={lens} options={LENSES} onChange={setLens} /> : undefined}
     >
       {isLoading ? <Skeleton className="h-24 w-full" />
+        : isError && !data ? <p role="alert" className="flex items-center gap-2 text-xs text-muted-foreground">Statements could not be loaded. <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button></p>
         : !n ? <p className="text-xs text-muted-foreground">No contract exhibit, call statement, location or policy item has been read for {name} yet.</p>
         : lens === "counterparty" ? <SignalsByCounterparty ticker={ticker} />
         : lens === "terms" ? <AgreementTerms ticker={ticker} />

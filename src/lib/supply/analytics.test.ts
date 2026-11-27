@@ -69,6 +69,24 @@ describe("supply analytics", () => {
 });
 
 describe("headquarters ties", () => {
+  it("counts a sole-source relationship once when a filing also names its head-office country", () => {
+    const rows = countryExposure([L({ regions: ["Taiwan"], counterparty: "TSMC", single_source: true })], [], {});
+    expect(rows[0]).toMatchObject({ country: "Taiwan", links: 1, hq: 1, singleSource: 1 });
+  });
+
+  it("uses the outside filer's country when the selected company is the recipient of a filing link", () => {
+    const rows = countryExposure([L({ ticker: "TSM", counterparty: "ASML", counterparty_ticker: "ASML" })],
+      [], {}, { ticker: "ASML", names: { TSM: "TSMC" } });
+    expect(rows.map((r) => r.country)).toEqual(["Taiwan"]);
+  });
+
+  it("does not treat a head-office address as a regional sales figure or subtract a different ordinary link", () => {
+    const hits = regionShock("Taiwan", [
+      L({ counterparty: "TSMC", single_source: true, relation: "customer", share_pct: 25 }),
+      L({ counterparty: "Acme", regions: ["Taiwan"] }),
+    ], [], { AAA: 100 });
+    expect(hits[0]).toMatchObject({ hq: 1, links: 1, dollars: 0, singleSource: 1, score: 35 });
+  });
   it("counts a TSMC supplier link as a Taiwan tie worth 6 points", async () => {
     const { regionShock, counterpartyCountry } = await import("./analytics");
     expect(counterpartyCountry("Taiwan Semiconductor Manufacturing Company Limited")).toBe("Taiwan");

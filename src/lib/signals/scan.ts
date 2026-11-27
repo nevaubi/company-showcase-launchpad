@@ -64,7 +64,8 @@ export interface ScanOut {
 
 /** Realised trade: enter at the open after bar i, exit at the close of bar i + h. Null until that bar exists. */
 export function tradeOutcome(a: Aligned, bench: Aligned, spy: Aligned, i: number, side: 1 | -1, h: number, cost: number) {
-  if (i + h >= a.c.length) return null;
+  // Alignment carries prices across missing sessions for indicators. Those bars cannot fill an order.
+  if (i + h >= a.c.length || !(a.v[i] > 0 && a.v[i + 1] > 0 && a.v[i + h] > 0)) return null;
   const r = a.c[i + h] / a.o[i + 1] - 1;
   const rb = bench.c[i + h] / bench.o[i + 1] - 1;
   const rs = spy.c[i + h] / spy.o[i + 1] - 1;
@@ -90,6 +91,7 @@ export function scanTicker(ctx: ScanContext, input: ScanInput): ScanOut | null {
   for (const s of STRATEGIES) {
     if (!s.fire) continue;
     for (let i = from; i < D; i++) {
+      if (!(a.v[i] > 0)) continue;
       const d = s.fire(f, i);
       if (!d || !s.sides.includes(d)) continue;
       const rt = roundTripCost(f.dv20[i]);

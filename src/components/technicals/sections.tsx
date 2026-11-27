@@ -791,6 +791,35 @@ function ChartEvents({ T, count }: { T: Technicals; count: number }) {
   );
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function SeasonalTable({ T }: { T: Technicals }) {
+  const now = Number(T.asOf.slice(5, 7)) - 1;
+  const month = T.seasonality?.[now];
+  if (!month || !T.seasonality.some((r) => r.n)) return null;
+  return (
+    <details className="border-t">
+      <summary className="cursor-pointer px-3 py-2 text-[13px] font-medium">
+        Calendar seasonality <span className="ml-2 font-normal text-muted-foreground">{MONTHS[now]} · {month.n} completed observations{month.median != null ? ` · median ${pp(month.median, 1)}` : ""}</span>
+      </summary>
+      <TableWrap>
+        <table className="w-full text-[13px]">
+          <thead><tr><th className={S.th}>Month</th><th className={S.thNum}>Years</th><th className={S.thNum}>Median return</th><th className={S.thNum}>Positive</th>
+            {month.excess.map((b) => <th key={b.symbol} className={S.thNum}>Median vs {b.symbol} · n</th>)}</tr></thead>
+          <tbody>{T.seasonality.map((r, i) => (
+            <tr key={i} className={cn(S.row, i === now && "bg-secondary/40")}>
+              <th scope="row" className={cn(S.td, "text-left font-medium")}>{MONTHS[i]}</th><td className={S.num}>{r.n}</td>
+              <td className={cn(S.num, signTone(r.median))}>{pp(r.median, 1)}</td><td className={S.num}>{pc(r.positive, 0)}</td>
+              {r.excess.map((b) => <td key={b.symbol} className={S.num}>{pp(b.median, 1)} <span className="text-muted-foreground">· {b.n}</span></td>)}
+            </tr>
+          ))}</tbody>
+        </table>
+      </TableWrap>
+      <Note>Adjusted month-end returns through {fmtDate(T.asOf)}. Excess is the median of the stock-minus-benchmark returns across matched months, in percentage points. Counts show the available years.</Note>
+    </details>
+  );
+}
+
 export function EventsPanel({ symbol, T, loading }: { symbol: string; T: Technicals | null; loading: boolean }) {
   const R = T?.reactions ?? null;
   return (
@@ -815,6 +844,7 @@ export function EventsPanel({ symbol, T, loading }: { symbol: string; T: Technic
       ) : (
         <ChartEvents T={T} count={16} />
       )}
+      {T && <SeasonalTable T={T} />}
     </TechPanel>
   );
 }

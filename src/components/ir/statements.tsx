@@ -246,7 +246,11 @@ function sectionView(
   if (o.dim !== "all" && secFilter && secFilter !== o.dim) return null;
   const dimOk = (s: PayloadSeries) =>
     !!secFilter || inDimension({ cat: s.cat, met: s.met } as PayloadGroup, o.dim);
-  const match = o.q ? (s: PayloadSeries) => s.label.toLowerCase().includes(o.q) : undefined;
+  const inTitle = !!o.q && sec.title.toLowerCase().includes(o.q);
+  const match = o.q && !inTitle
+    ? (s: PayloadSeries, row: Extract<StatementRow, { kind: "line" }>) =>
+        s.label.toLowerCase().includes(o.q) || rowLabel(row, byKey).toLowerCase().includes(o.q)
+    : undefined;
   const { rows, hidden } = visibleRows(sec, byKey, {
     cut: o.cut,
     has: (s) => (printedYtd ? hasYtd(s) : printsIn(s, o.all, o.freq)) && dimOk(s),
@@ -397,7 +401,7 @@ function sectionView(
       blank: cols.map((e, j) => !cells[j] && isBlank(r.at, e, printed)),
       label,
       note,
-      match: !!match?.(s),
+      match: !!match?.(s, r),
       cells,
     };
   });
@@ -439,13 +443,13 @@ function Lazy({
   const [on, setOn] = useState(eager);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (on || !ref.current) return;
+    if (on || eager || !ref.current) return;
     const io = new IntersectionObserver((es) => es.some((x) => x.isIntersecting) && setOn(true), {
       rootMargin: MOUNT_MARGIN,
     });
     io.observe(ref.current);
     return () => io.disconnect();
-  }, [on]);
+  }, [on, eager]);
   useEffect(() => {
     const show = (e: Event) => (e as CustomEvent<string>).detail === id && setOn(true);
     window.addEventListener("ir-statement-show", show);
@@ -457,7 +461,7 @@ function Lazy({
       data-statement-slot={id}
       className="min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px))]"
     >
-      {on ? (
+      {on || eager ? (
         children
       ) : (
         <div
@@ -626,6 +630,17 @@ export function IrStatements({
     }
     onFocusDone?.();
   }, [focus, byKey, payload, sections, open, ticker, onFocusDone]);
+
+  const downloadHistory = async () => {
+    if (!gate("exports")) return;
+    try {
+      const { getIrHistoryDownload } = await import("@/lib/ir.functions");
+      const url = await getIrHistoryDownload({ data: { ticker } });
+      window.location.assign(url);
+    } catch {
+      toast.error("Could not download the history. Please try again.");
+    }
+  };
 
   const changeFreq = (f: Freq) => {
     setFreq(f);
@@ -813,7 +828,7 @@ export function IrStatements({
       section="IR statements"
       tour="ir-breakdowns"
       title="Statements"
-      subtitle="The company's tables as its documents print them, each over its whole history. Click any figure to open the stored document at that cell."
+      subtitle="Figures open the cell in the company’s original filing or supplement."
       actions={
         <>
           <Segmented
@@ -884,12 +899,17 @@ export function IrStatements({
               >
                 <ChevronsDown className="mt-0.5" />
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium">Complete history</span>
+                  <span className="block text-sm font-medium">{payload.preview ? "All sections in this view" : "Complete history"}</span>
                   <span className="block text-xs text-muted-foreground">
                     All {sections.length} sections, quarterly and annual
                   </span>
                 </span>
               </DropdownMenuItem>
+              {payload.preview && (
+                <DropdownMenuItem onSelect={() => void downloadHistory()}>
+                  <ChevronsDown /> Download historical dataset (JSON)
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </>
@@ -908,6 +928,9 @@ export function IrStatements({
               IR.caption,
             )}
           >
+            {payload.preview && (
+              <span>{payload.preview.basis === "latest-filing" ? "Latest financial supplement" : "Recent statements"} · {payload.preview.basis === "latest-filing" ? payload.docs[0]?.filed : payload.quarters.at(-1)}</span>
+            )}
             <span className="num">
               {front.length.toLocaleString()} section{front.length === 1 ? "" : "s"}
               {more.length ? ` and ${more.length.toLocaleString()} more` : ""} ·{" "}
@@ -1047,7 +1070,7 @@ export function IrStatements({
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Find a line, e.g. card income"
+                    placeholder="Find a line or statement"
                     className="h-10 pl-7 text-xs sm:h-8"
                     aria-label="Find a line"
                   />

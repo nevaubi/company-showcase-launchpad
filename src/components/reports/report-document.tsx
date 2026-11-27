@@ -4,6 +4,7 @@ import { ExternalLink, Info, ShieldCheck } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import { BrandedCover, BRAND_FONT } from "@/components/firm/branded-cover";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { reportSources, sourceMark, type ReportSources } from "@/lib/reports/source-register";
 import { citationOrder } from "@/lib/reports/vet";
 import { compressRefs, readableDates, refCaption, refTarget } from "@/lib/reports/present";
 import { KINDS } from "@/lib/reports/kinds";
@@ -71,7 +72,7 @@ function MemberList({ members, ticker }: { members: Fact[]; ticker: string }) {
   );
 }
 
-function Glance({ items, facts, ticker }: { items: GlanceItem[]; facts: Map<string, Fact>; ticker: string }) {
+function Glance({ items, facts, ticker, index }: { index: ReportSources; items: GlanceItem[]; facts: Map<string, Fact>; ticker: string }) {
   const { open } = useSource();
   return (
     <div className="report-glance grid grid-cols-2 border-b sm:grid-cols-4" data-print-keep>
@@ -81,7 +82,7 @@ function Glance({ items, facts, ticker }: { items: GlanceItem[]; facts: Map<stri
         const body = (
           <>
             <span className="block text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{g.label}</span>
-            <span className="num mt-0.5 block text-[17px] font-semibold leading-tight tracking-tight">{readableDates(g.value)}</span>
+            <span className="num mt-0.5 block text-[17px] font-semibold leading-tight tracking-tight">{readableDates(g.value)}<sup className="hidden pl-0.5 text-[8px] print:inline">{sourceMark(index.forRef(f?.ref))}</sup></span>
             {g.sub && <span className={cn("mt-0.5 block truncate text-[10.5px] text-muted-foreground", g.tone === "positive" && "text-positive", g.tone === "negative" && "text-negative")}>{readableDates(g.sub)}</span>}
           </>
         );
@@ -117,23 +118,23 @@ function CellView({ cell, ticker, label }: { cell: TableCell | null; ticker: str
   return <button type="button" onClick={() => open(t)} className={cn("cell-link hover:underline", cls)} title={refCaption(cell.ref!)}>{cell.text}</button>;
 }
 
-export function ReportTableView({ table, ticker }: { table: ReportTable; ticker: string }) {
+export function ReportTableView({ table, ticker, index }: { index: ReportSources; table: ReportTable; ticker: string }) {
   return (
     <figure className="report-table my-3 break-inside-avoid">
       <figcaption className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--brand-accent-ink,var(--color-muted-foreground))]">{table.title}</figcaption>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[420px] border-collapse text-[12px]">
           <thead>
-            <tr className="border-b-2 border-[color:var(--brand,currentColor)]">
-              <th className="py-1 pr-3 text-left font-medium text-muted-foreground" />
-              {table.columns.map((c) => <th key={c} className="num whitespace-nowrap py-1 pl-3 text-right font-medium text-muted-foreground">{c}</th>)}
+            <tr className="border-b-2 border-[color:var(--brand,currentColor)] bg-secondary/55">
+              <th scope="col" className="px-2 py-1.5 text-left font-medium text-muted-foreground">Measure</th>
+              {table.columns.map((c) => <th scope="col" key={c} className={cn("num whitespace-nowrap px-2 py-1.5 font-medium text-muted-foreground", c === "Basis" ? "text-left" : "text-right")}>{c}</th>)}
             </tr>
           </thead>
           <tbody>
             {table.rows.map((r) => (
-              <tr key={r.label} className="border-b border-border/70">
-                <td className={cn("py-1 pr-3 text-left", r.bold && "font-semibold")}>{r.label}</td>
-                {r.cells.map((c, i) => <td key={i} className={cn("num whitespace-nowrap py-1 pl-3 text-right", r.bold && "font-semibold")}><CellView cell={c} ticker={ticker} label={`${r.label} · ${table.columns[i]}`} /></td>)}
+              <tr key={r.label} className={cn("border-b border-border/60", r.bold && "border-t bg-secondary/40")}>
+                <th scope="row" className={cn("px-2 py-1.5 text-left font-normal", r.bold && "font-semibold")}>{r.label}</th>
+                {r.cells.map((c, i) => <td key={i} className={cn("num px-2 py-1.5", table.columns[i] === "Basis" ? "text-left" : "whitespace-nowrap text-right", r.bold && "font-semibold")}><CellView cell={c} ticker={ticker} label={`${r.label} · ${table.columns[i]}`} /><sup className="hidden pl-0.5 text-[8px] print:inline">{sourceMark(index.forRef(c?.ref))}</sup></td>)}
               </tr>
             ))}
           </tbody>
@@ -148,6 +149,7 @@ export interface ReportBrand { branding: FirmBranding | null; logo: string | nul
 
 /** The report as a document: branded cover, cited sections, tables and a numbered source list. */
 export function ReportDocument({ content, brand, className }: { content: ReportContent; brand: ReportBrand; className?: string }) {
+  const index = useMemo(() => reportSources(content), [content]);
   const facts = useMemo(() => new Map(content.facts.map((f) => [f.id, f])), [content]);
   const order = useMemo(() => citationOrder(content.sections), [content]);
   const tables = new Map(content.tables.map((t) => [t.id, t]));
@@ -157,7 +159,7 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
   const def = KINDS[content.kind];
   const sources = [...order.entries()].sort((a, b) => a[1] - b[1]).map(([id, n]) => ({ n, f: facts.get(id)! })).filter((x) => x.f);
   const { open } = useSource();
-  const verified = content.qa.numbers ? `${content.qa.verifiedNumbers} of ${content.qa.numbers} figures matched to their sources` : "Every statement cites its sources";
+  const verified = content.qa.numbers ? `${content.qa.verifiedNumbers} of ${content.qa.numbers} narrative figures matched to cited facts` : `${content.qa.citedClaims} of ${content.qa.claims} draft claims had citations`;
 
   return (
     <article className={cn("report-doc bg-card text-card-foreground shadow-paper", className)} style={{ fontFamily: BRAND_FONT[b.font], ["--brand" as string]: strong, ["--brand-accent-ink" as string]: strong }}>
@@ -188,7 +190,7 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
         )}
       </div>
 
-      {content.glance && content.glance.length > 0 && <Glance items={content.glance} facts={facts} ticker={content.ticker} />}
+      {content.glance && content.glance.length > 0 && <Glance index={index} items={content.glance} facts={facts} ticker={content.ticker} />}
       {content.peers && content.peers.length > 0 && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-7 py-1.5 text-[11px] text-muted-foreground">Peer set: {content.peers.map((p) => <TickerMark key={p.ticker} ticker={p.ticker} name={p.name} size="xs" />)}</p>
       )}
@@ -205,10 +207,10 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
             )}
             {(s.charts ?? []).some((id) => charts.has(id)) && (
               <div className="report-charts my-4 grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2">
-                {(s.charts ?? []).map((id) => charts.get(id) && <ReportChartView key={id} chart={charts.get(id)!} facts={facts} ticker={content.ticker} />)}
+                {(s.charts ?? []).map((id) => charts.get(id) && <ReportChartView printSources={sourceMark(index.chartSources.get(id))} key={id} chart={charts.get(id)!} facts={facts} ticker={content.ticker} />)}
               </div>
             )}
-            {s.tables.map((id) => tables.get(id) && <ReportTableView key={id} table={tables.get(id)!} ticker={content.ticker} />)}
+            {s.tables.map((id) => tables.get(id) && <ReportTableView index={index} key={id} table={tables.get(id)!} ticker={content.ticker} />)}
           </section>
         ))}
 
@@ -222,13 +224,22 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
                   <span className="num text-right text-muted-foreground">{n}.</span>
                   <span>
                     <span>{readableDates(f.text.length > 220 ? `${f.text.slice(0, 218)}…` : f.text)}</span>{" "}
-                    <span className="text-muted-foreground">· {refCaption(f.ref)}</span>
+                    <span className="text-muted-foreground">· {refCaption(f.ref)}</span><sup className="hidden pl-0.5 text-[8px] print:inline">{sourceMark(index.forRef(f.ref))}</sup>
                     {t && <button type="button" onClick={() => open(t)} className="ml-1 inline-flex items-center gap-0.5 text-[color:var(--color-primary)] hover:underline" data-print-hide>open <ExternalLink className="size-3" /></button>}
                   </span>
                 </li>
               );
             })}
           </ol>
+          {index.documents.length > 0 && <div className="mt-4 hidden print:block">
+            <h4 className="mb-2 font-semibold">Source documents and datasets</h4>
+            <ul className="space-y-1 text-[10px]">
+              {index.documents.map((source, i) => <li key={i} className="flex gap-2">
+                <b className="num">D{i + 1}</b>
+                {source.url ? <a href={source.url} className="underline">{source.label}</a> : <span>{source.label}</span>}
+              </li>)}
+            </ul>
+          </div>}
         </section>
       </div>
       <footer className="space-y-1 border-t px-7 py-3 text-[10px] leading-snug text-muted-foreground">

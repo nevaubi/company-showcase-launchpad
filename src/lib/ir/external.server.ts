@@ -30,9 +30,10 @@ async function rest<T>(path: string, range?: [number, number]): Promise<T[]> {
 
 /** Pages through a query 1,000 rows at a time, a few pages in flight. */
 async function all<T>(path: string, max = 400_000): Promise<T[]> {
-  const out: T[] = [];
+  const out = await rest<T>(path, [0, 999]);
+  if (out.length < 1000) return out;
   const PAR = 6;
-  for (let from = 0; from < max; from += 1000 * PAR) {
+  for (let from = 1000; from < max; from += 1000 * PAR) {
     const pages = await Promise.all(Array.from({ length: PAR }, (_, i) => rest<T>(path, [from + i * 1000, from + i * 1000 + 999])));
     for (const p of pages) out.push(...p);
     if (pages.some((p) => p.length < 1000)) break;
@@ -40,13 +41,19 @@ async function all<T>(path: string, max = 400_000): Promise<T[]> {
   return out;
 }
 
-export async function loadExternalPayload(ticker: string): Promise<IrPayload | null> {
+export async function loadExternalPayload(ticker: string, minimumSeries = 0): Promise<IrPayload | null> {
   const t = encodeURIComponent(ticker);
-  const [defs, values] = await Promise.all([
-    all<ExtDef>(`kpi_definitions?ticker=eq.${t}&select=kpi_id,name,category,unit,parent_id,sums_to_parent,sort&order=kpi_id`),
-    all<ExtValue>(`kpi_values?ticker=eq.${t}&select=kpi_id,period_kind,period_end,fiscal_label,value,source_id,anchor,derived&order=kpi_id,period_kind,period_end`),
-  ]);
+  const defs = await all<ExtDef>(`kpi_definitions?ticker=eq.${t}&select=kpi_id,name,category,unit,parent_id,sums_to_parent,sort&order=kpi_id`);
+  // A definition can yield at most a flow and an instant; skip the potentially large values
+  // and documents reads when this source therefore cannot win the coverage comparison.
+  if (!defs.length || defs.length * 2 < minimumSeries) return null;
+  const values = await all<ExtValue>(`kpi_values?ticker=eq.${t}&select=kpi_id,period_kind,period_end,fiscal_label,value,source_kind,source_id,anchor,derived&order=kpi_id,period_kind,period_end,source_kind,source_id`);
   if (!values.length) return null;
+  if (minimumSeries > 0) {
+    const series = new Set(values.filter((v) => v.period_kind === "I" || v.period_kind === "A" || v.period_kind === "Q")
+      .map((v) => `${v.period_kind === "I" ? "instant" : "flow"}|${v.kpi_id}`));
+    if (series.size < minimumSeries) return null;
+  }
   const docs = await all<ExtDoc>(`ir_documents?ticker=eq.${t}&select=id,url,title,doc_type,published&order=id`);
   return buildExternalPayload(ticker, defs, values, docs);
 }

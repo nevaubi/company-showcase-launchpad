@@ -26,6 +26,9 @@ export interface PayloadPart {
   /** page (1-based) or worksheet of the stored document that prints the line in `x` */
   p?: number;
   sh?: string;
+  sheetCell?: string;
+  ixConcept?: string;
+  ixId?: string;
   s?: string;
   e: string;
   m: number;
@@ -40,6 +43,9 @@ export interface PayloadCell {
   /** page (1-based) or worksheet of the stored document that prints the line in `x` */
   p?: number;
   sh?: string;
+  sheetCell?: string;
+  ixConcept?: string;
+  ixId?: string;
   s?: string;
   e?: string;
   m?: number;
@@ -266,6 +272,8 @@ export interface IrPayload {
   v: 2;
   ticker: string;
   builtAt: string;
+  /** A bounded statement view with the precomputed history available separately. */
+  preview?: { basis: "latest-filing" | "recent-statements"; archivePath: string };
   quarters: string[];
   years: string[];
   /** month-ends that carry monthly data (see `mo` on each series) */

@@ -52,6 +52,12 @@ describe("reference quarter", () => {
     const full = { ...file, agg: { ...file.agg, rev_growth: { ...file.agg.rev_growth, n: [52, 53, 54, 55, 55, 30] } } } as GroupFile;
     expect(refQuarter(full)).toEqual({ i: 5, q: "2026Q4", n: 30, early: null });
   });
+  it("uses earnings coverage when fewer banks have matched revenue facts", () => {
+    const d = { quarters: ["2026Q2", "2026Q3"], agg: {
+      rev_growth: { n: [60, 14] }, ni_growth: { n: [120, 122] }
+    } } as unknown as GroupFile;
+    expect(refQuarter(d)).toEqual({ i: 1, q: "2026Q3", n: 122, early: null });
+  });
   it("reads every figure at the reference quarter, falling back only to an earlier one", () => {
     const ref = refQuarter(file);
     expect(figAt(file, "rev_growth", ref)).toEqual({ v: 0.077, med: 0.08, q: "2026Q3", n: 55, i: 4 });

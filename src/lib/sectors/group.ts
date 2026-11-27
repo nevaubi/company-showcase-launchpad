@@ -204,7 +204,7 @@ export function lastFullIndex(ns: readonly (number | null | undefined)[]): numbe
 export interface RefQuarter {
   i: number;
   q: string;
-  /** Companies with revenue or earnings growth reported for it. */
+  /** Larger of the revenue and earnings matched-pair counts (a lower bound on unique reporters). */
   n: number;
   /** A newer quarter some companies have reported, too few to be the headline yet. */
   early: { q: string; n: number } | null;
@@ -214,7 +214,7 @@ export interface RefQuarter {
 export function refQuarter(d: Pick<GroupFile, "quarters" | "agg">): RefQuarter | null {
   const a = d.agg.rev_growth?.n ?? [];
   const b = d.agg.ni_growth?.n ?? [];
-  const ns = d.quarters.map((_, i) => a[i] || b[i] || 0);
+  const ns = d.quarters.map((_, i) => Math.max(a[i] ?? 0, b[i] ?? 0));
   const i = lastFullIndex(ns);
   if (i == null) return null;
   let last = -1;

@@ -50,7 +50,7 @@ export interface CountryRow {
 }
 
 /** Every stated tie to each country across links (regions) and verified signals (facility / policy / other). */
-export function countryExposure(links: ProLink[], signals: SignalLite[], revenue: Record<string, number | undefined>): CountryRow[] {
+export function countryExposure(links: ProLink[], signals: SignalLite[], revenue: Record<string, number | undefined>, focus?: { ticker: string; names: Record<string, string> }): CountryRow[] {
   const m = new Map<string, CountryRow & { _c: Set<string> }>();
   const row = (c: string) => {
     let r = m.get(c);
@@ -62,14 +62,17 @@ export function countryExposure(links: ProLink[], signals: SignalLite[], revenue
     const sole = copies(l).some((c) => !!c.single_source);
     // a U.S. state counts toward the United States; a supranational region ("Europe") is not a country row
     const ev = evidenceOf(l);
-    for (const raw of new Set(statedRegions(l).map((r) => countryOf(r, ev)).filter(Boolean) as string[])) {
+    const countries = new Set(statedRegions(l).map((r) => countryOf(r, ev)).filter(Boolean) as string[]);
+    for (const raw of countries) {
       const r = row(raw);
       r.links++; r._c.add(l.ticker);
       if (sole) r.singleSource++;
       r.dollars += linkDollars(l, revenue) ?? 0;
     }
-    const hq = l.relation !== "competitor" ? counterpartyCountry(l.counterparty) : null;
-    if (hq) { const r = row(hq); r.hq++; r._c.add(l.ticker); if (sole) r.singleSource++; }
+    // On a reverse disclosure the outside company is the filer, not the selected company's own office.
+    const outside = focus && l.counterparty_ticker === focus.ticker ? focus.names[l.ticker] ?? "" : l.counterparty;
+    const hq = l.relation !== "competitor" ? counterpartyCountry(outside) : null;
+    if (hq) { const r = row(hq); r.hq++; r._c.add(l.ticker); if (sole && !countries.has(hq)) r.singleSource++; }
   }
   for (const s of signals) {
     const c = countryOf(s.country, s.title);
@@ -108,6 +111,7 @@ export interface RegionHit {
 export function regionShock(country: string, links: ProLink[], signals: SignalLite[], revenue: Record<string, number | undefined>): RegionHit[] {
   const c = canonCountry(country)!;
   const by = new Map<string, RegionHit>();
+  const ordinaryStated = new Map<string, number>();
   const hit = (t: string) => {
     let h = by.get(t);
     if (!h) { h = { ticker: t, links: 0, singleSource: 0, facilities: 0, policy: 0, hq: 0, dollars: 0, score: 0, severity: "low", examples: [] }; by.set(t, h); }
@@ -122,13 +126,14 @@ export function regionShock(country: string, links: ProLink[], signals: SignalLi
       const h = hit(l.ticker);
       h.hq++;
       if (sole) h.singleSource++;
-      h.dollars += linkDollars(l, revenue) ?? 0;
+      // A head office locates the company, not its production or sales. Only a stated regional link contributes dollars.
       if (h.examples.length < 3) h.examples.push(`${l.relation}: ${l.counterparty}`);
       continue;
     }
     const h = hit(l.ticker);
     h.links++;
     if (sole) h.singleSource++;
+    else ordinaryStated.set(l.ticker, (ordinaryStated.get(l.ticker) ?? 0) + 1);
     h.dollars += linkDollars(l, revenue) ?? 0;
     if (h.examples.length < 3) h.examples.push(`${l.relation}: ${l.counterparty}`);
   }
@@ -142,7 +147,7 @@ export function regionShock(country: string, links: ProLink[], signals: SignalLi
   for (const h of by.values()) {
     const rev = revenue[h.ticker];
     const dollarPts = rev && h.dollars ? Math.min(40, (h.dollars / rev) * 200) : 0;
-    const other = Math.max(0, h.links - h.singleSource);
+    const other = ordinaryStated.get(h.ticker) ?? 0;
     h.score = Math.round(Math.min(100, h.singleSource * 25 + dollarPts + h.facilities * 8 + other * 4 + h.hq * 6 + h.policy * 3));
     h.severity = h.score >= 50 ? "high" : h.score >= 20 ? "medium" : "low";
   }

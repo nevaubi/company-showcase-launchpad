@@ -1,23 +1,17 @@
 import { useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { IrPanel } from "@/components/ir/panel";
-import { DASH, IR } from "@/components/ir/typography";
+import { IR } from "@/components/ir/typography";
 import { Segmented } from "@/components/app/segmented";
 import { useSource } from "@/components/source/source-context";
 import { openIrCell } from "@/components/ir/breakdowns";
 import { useUnitScale } from "@/hooks/use-preference";
 import { fmtIr, shownLabel, unitCaption } from "@/lib/ir/display";
-import { biggestMoves, keyLines, type KeyLine } from "@/lib/ir/highlights";
+import { formatKpiChange, biggestMoves, keyLines, type KeyLine } from "@/lib/ir/highlights";
 import type { IrPayload } from "@/lib/ir/payload";
 import { fiscalCalendar, fiscalLabel, periodGrids } from "@/lib/ir/periods";
 import { cn } from "@/lib/utils";
 
-const fmtChange = (v: number | null, unit: string) => {
-  if (v == null) return DASH;
-  const pts = unit === "pct" || unit === "bps";
-  const s = `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v) >= 100 && !pts ? Math.round(Math.abs(v)).toLocaleString() : Math.abs(v).toFixed(1)}`;
-  return pts ? `${s} pts` : `${s}%`;
-};
 
 /** Costs and credit losses improve when they fall. */
 const inverted = (l: KeyLine) => l.s.cat === "cost" || l.s.met === "cost" || l.s.met === "expense" || /charge-?off|provision|non-?performing|delinquen|efficiency ratio/i.test(l.s.label);
@@ -103,8 +97,8 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
                       </div>
                     </th>
                     <td className="whitespace-nowrap px-2 py-1.5 text-right">{value(l)}</td>
-                    <td className={cn("num whitespace-nowrap px-2 py-1.5 text-right tabular-nums", toneOf(l.qoq, l))}>{fmtChange(l.qoq, l.s.unit)}</td>
-                    <td className={cn("num whitespace-nowrap px-2 py-1.5 text-right font-medium tabular-nums", toneOf(l.yoy, l))}>{fmtChange(l.yoy, l.s.unit)}</td>
+                    <td className={cn("num whitespace-nowrap px-2 py-1.5 text-right tabular-nums", toneOf(l.qoq, l))}>{formatKpiChange(l.qoq, l.s.unit)}</td>
+                    <td className={cn("num whitespace-nowrap px-2 py-1.5 text-right font-medium tabular-nums", toneOf(l.yoy, l))}>{formatKpiChange(l.yoy, l.s.unit)}</td>
                     <td className="px-4 py-1.5">
                       <div className="flex justify-end">
                         <TrendBars values={l.trend} />
@@ -134,7 +128,7 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
                           <div className={cn("truncate", IR.caption)}>{l.groupTitle} · {unitOf(l)}</div>
                         </div>
                         {value(l)}
-                        <span className={cn("num w-16 text-right font-medium tabular-nums", toneOf(l.yoy, l))}>{fmtChange(l.yoy, l.s.unit)}</span>
+                        <span className={cn("num w-16 text-right font-medium tabular-nums", toneOf(l.yoy, l))}>{formatKpiChange(l.yoy, l.s.unit)}</span>
                       </li>
                     ))}
                   </ul>

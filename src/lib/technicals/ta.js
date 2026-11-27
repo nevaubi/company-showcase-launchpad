@@ -3,6 +3,8 @@
 // Ported unchanged from the Filed Under site (public/pages/technicals-lib.js); etl/technicals_calc.py mirrors
 // the signal definitions for the cross-company statistics in tech/signals.json, so keep the two in step.
 // Pure functions over plain arrays; outputs are aligned to the input and null before each indicator's warm-up.
+import { monthEndReturns } from "./seasonality";
+
 const TA = (function () {
   "use strict";
   const N = a => a == null || !isFinite(a);
@@ -396,11 +398,10 @@ const TA = (function () {
   }
   // Average return by calendar month (month-end to month-end) and by weekday (close to close), from a total-return index.
   function seasonality(days, tr) {
-    const months = Array.from({ length: 12 }, () => []), dows = Array.from({ length: 5 }, () => []), monthRows = [];
-    let prevEnd = null;
+    const months = Array.from({ length: 12 }, () => []), dows = Array.from({ length: 5 }, () => []), monthRows = monthEndReturns(days, tr);
+    for (const [month, ret] of monthRows) months[Number(month.slice(5)) - 1].push(ret);
     for (let i = 0; i < days.length; i++) {
-      const d = days[i], next = days[i + 1];
-      if (!next || next.slice(0, 7) !== d.slice(0, 7)) { if (prevEnd != null) { const r = tr[i] / tr[prevEnd] - 1; months[+d.slice(5, 7) - 1].push(r); monthRows.push([d.slice(0, 7), r]); } prevEnd = i; }
+      const d = days[i];
       if (i) { const wd = new Date(d + "T00:00:00Z").getUTCDay(); if (wd >= 1 && wd <= 5) dows[wd - 1].push(tr[i] / tr[i - 1] - 1); }
     }
     const sum = a => ({ n: a.length, mean: meanOf(a), median: a.length ? median(a) : null, hit: a.length ? a.filter(x => x > 0).length / a.length : null, sd: sdOf(a) });

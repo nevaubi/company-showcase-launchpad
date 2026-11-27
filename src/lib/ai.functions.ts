@@ -192,18 +192,21 @@ export const getMacroBrief = createServerFn({ method: "POST" })
         asOf: z.string().max(30),
         readings: z
           .array(z.object({ id: z.string().max(30), title: z.string().max(140), latest: z.string().max(40), date: z.string().max(12), change: z.string().max(160) }))
-          .max(160),
+          .min(1).max(160),
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
     const { cached, structured } = await import("@/lib/ai.server");
-    return cached(`macro:${data.asOf}`, 6 * 3600_000, async () =>
+    const readings = [...data.readings].sort((a, b) => a.id.localeCompare(b.id));
+    const encoded = new TextEncoder().encode(JSON.stringify(readings));
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", encoded)), (v) => v.toString(16).padStart(2, "0")).join("");
+    return cached(`macro:v2:${data.asOf}:${digest}`, 30 * 86400_000, async () =>
       structured<{ headline: string; regime: string; sections: { title: string; body: string; seriesIds: string[] }[] }>({
         name: "macro_brief",
         instructions:
-          "You are a macro strategist writing a morning brief for equity investors. Use only the U.S. government and Federal Reserve readings provided (latest value, date, change, year-ago value and where the reading sits in its 10-year range). Cover rates & curve, inflation, labor, growth & the consumer, liquidity & credit, fiscal and energy, and what it implies for US equities and sectors. Plain, specific sentences with numbers. Cite the series ids you used in each section.",
-        input: `Readings as of ${data.asOf}:\n${data.readings.map((r) => `${r.id} — ${r.title}: ${r.latest} (${r.date}); ${r.change}`).join("\n")}`,
+          "You are a macro strategist writing a morning brief for equity investors. Use only the U.S. government and Federal Reserve readings provided (latest value, date, change, year-ago value and where the reading sits in its 10-year range). Cover rates & curve, inflation, labor, growth & the consumer, liquidity & credit, fiscal and energy, and what it implies for US equities and sectors. Separate the observation from the transmission mechanism. Compare rates to credit spreads, inflation to real demand, and payrolls to other labor indicators when available. Identify one conflicting reading where supported. Treat monthly and daily prints by their own dates. Use concise sentences; cite only the supplied series ids.",
+        input: `Readings as of ${data.asOf}:\n${readings.map((r) => `${r.id} — ${r.title}: ${r.latest} (${r.date}); ${r.change}`).join("\n")}`,
         effort: "medium",
         schema: {
           type: "object",
@@ -218,7 +221,7 @@ export const getMacroBrief = createServerFn({ method: "POST" })
                 type: "object",
                 additionalProperties: false,
                 required: ["title", "body", "seriesIds"],
-                properties: { title: { type: "string" }, body: { type: "string" }, seriesIds: { type: "array", items: { type: "string" } } },
+                properties: { title: { type: "string" }, body: { type: "string" }, seriesIds: { type: "array", minItems: 1, items: { type: "string", enum: [...new Set(readings.map((r) => r.id))] } } },
               },
             },
           },

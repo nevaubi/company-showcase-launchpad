@@ -35,20 +35,20 @@ export function fundRisk(series: readonly { symbol: string; closes: Closes }[], 
   const empty: FundRisk = { symbols, from: null, to: null, sessions: 0, vol: symbols.map(() => null), beta: symbols.map(() => null), corr: symbols.map(() => symbols.map(() => null)) };
   if (!series.length) return empty;
   const maps = series.map((s) => new Map(s.closes.filter(([, v]) => v > 0).map(([d, v]) => [d, v])));
-  const shared = [...maps[0].keys()].filter((d) => maps.every((m) => m.has(d))).sort();
-  const dates = shared.slice(-(sessions + 1));
-  if (dates.length < 21) return empty;
-  const rets = maps.map((m) => {
-    const out: number[] = [];
-    for (let i = 1; i < dates.length; i++) out.push(m.get(dates[i])! / m.get(dates[i - 1])! - 1);
-    return out;
-  });
   const bi = symbols.indexOf(bench);
+  // Keep consecutive endpoints on the benchmark's calendar. A missing ETF
+  // close invalidates two daily returns, even if both surrounding closes exist.
+  const calendar = [...maps[bi >= 0 ? bi : 0].keys()].sort();
+  const pairs = calendar.slice(1).map((to, i) => [calendar[i], to])
+    .slice(-sessions)
+    .filter(([from, to]) => maps.every((m) => m.has(from) && m.has(to)));
+  if (pairs.length < 20) return empty;
+  const rets = maps.map((m) => pairs.map(([from, to]) => m.get(to)! / m.get(from)! - 1));
   return {
     symbols,
-    from: dates[1],
-    to: dates[dates.length - 1],
-    sessions: dates.length - 1,
+    from: pairs[0][1],
+    to: pairs[pairs.length - 1][1],
+    sessions: pairs.length,
     vol: rets.map((r) => {
       const s = sd(r);
       return s == null ? null : s * Math.sqrt(252);

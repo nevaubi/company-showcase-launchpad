@@ -17,7 +17,8 @@ import { durationDays } from "@/lib/financials/build";
 import { assessCurrency } from "@/lib/financials/currency";
 import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { runSandbox } from "@/lib/research/sandbox";
-import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
+import { disclosureQuery, supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
+import { disclosureEvidence } from "@/lib/supply/disclosures";
 import { supabase } from "@/integrations/supabase/client";
 import { altLeadersQuery, fmtAlt, leaderStats, readAlt, type AltRow } from "@/lib/alt/query";
 import { focusGraph, simulateShock, type RiskLink } from "@/lib/supply/core";
@@ -56,6 +57,9 @@ import { earningsReactions } from "@/lib/markets/core";
 import { nextEarnings } from "@/lib/company/catalysts";
 import { detailText, type DetailSection } from "@/lib/xbrl/text";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
+import { industryMethod } from "@/lib/research/industry-method";
+import { industryWorkup } from "@/lib/research/group-context";
+import { overviewQuery as sectorOverviewQuery } from "@/lib/sectors/groups";
 import { runOfficialSourceTool } from "@/lib/sources/research-reader";
 
 const MAX = 9000;
@@ -403,6 +407,10 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const reads = readAuctions(a.auctions).filter((r) => !args.term || r.term === args.term).slice(0, 25);
       return { output: clip(reads.map((r) => `${r.date} ${r.term} ${r.type} ${r.cusip} yield ${r.rate}% btc ${r.btc} (avg ${r.avgBtc?.toFixed(2)}) indirect ${r.indirect}% (avg ${r.avgIndirect?.toFixed(1)}) dealers ${r.dealer}% (avg ${r.avgDealer?.toFixed(1)}) → ${r.verdict ?? "n/a"} ${r.score?.toFixed(1) ?? ""}`).join("\n") + `\nSource: ${a.sourceUrl}`), summary: `${reads.length} auctions` };
     }
+    case "get_industry_workup": {
+      const overview = await qc.fetchQuery(sectorOverviewQuery);
+      return { output: industryWorkup(String(args.target), overview, COVERAGE), summary: "Industry evidence and analyst checks" };
+    }
     case "get_company_dossier": {
       const t = String(args.ticker).toUpperCase();
       const since = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
@@ -441,7 +449,9 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const myIdeas = (ideas?.setups ?? []).filter((i) => i.ticker === t);
       if (myIdeas.length) out.push(`RULE-BASED SETUPS (as of ${ideas!.asOf}):`, ...myIdeas.map((i) => JSON.stringify(i).slice(0, 400)));
       // Computed layer first in the output so truncation never drops it.
-      if (computed.length) out.splice(1, 0, ...computed);
+      const company = coverageOf(t);
+      if (company) out.splice(1, 0, `INDUSTRY CHECKS (research questions): ${industryMethod(company.sector, company.group, company.industry)}`);
+      if (computed.length) out.splice(2, 0, ...computed);
       return { output: clip(out.join("\n")), summary: `dossier for ${t}`, refs: d.filings.slice(0, 3).map((f) => ({ ticker: t, accn: f.accn, doc: f.doc, label: f.form })) };
     }
     case "get_kpis": {
@@ -529,7 +539,9 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     }
     case "get_supply_chain": {
       const t = String(args.ticker).toUpperCase();
-      const [links, u] = await Promise.all([qc.fetchQuery(supplyLinksQuery), qc.fetchQuery(universeQuery)]);
+      const includeDisclosures = (!args.flow || args.flow === "all") && args.relation !== "partner" && args.relation !== "competitor";
+      const [links, u, disclosures] = await Promise.all([qc.fetchQuery(supplyLinksQuery), qc.fetchQuery(universeQuery),
+        includeDisclosures ? qc.fetchQuery(disclosureQuery(t)).catch(() => null) : Promise.resolve(null)]);
       const names = Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName]));
       const revenue = Object.fromEntries(u.companies.map((c) => [c.ticker, c.revenueTTM ?? undefined]));
       const g = focusGraph(t, links, names).filter((n) => !args.relation || n.relation === args.relation);
@@ -540,7 +552,9 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const flow = (["making", "selling", "tech"].includes(String(args.flow)) ? args.flow : "all") as ChainFlow;
       const product = typeof args.product === "string" ? args.product : "";
       const chain = args.relation === "partner" || args.relation === "competitor" ? null : buildChain(t, links, tagged, names, revenue, { depth: args.depth === 3 ? 3 : args.depth === 1 ? 1 : 2, flow, product });
-      const body = [`Open in the app: ${supplyHref({ t })} (each line ends with the address that selects that name)`, lines.join("\n") || `No named links for ${t}.`, chain && chain.edges.length ? chainText(chain) : ""].filter(Boolean).join("\n\n");
+      const releases = disclosures ? disclosureEvidence(t, disclosures, args.relation, product, args.depth)
+        : includeDisclosures ? "Issuer disclosures are temporarily unavailable." : "";
+      const body = [`Open in the app: ${supplyHref({ t })}`, releases, lines.join("\n") || `No named filing links for ${t}.`, chain && chain.edges.length ? chainText(chain) : ""].filter(Boolean).join("\n\n");
       return { output: clip(body), summary: `${g.length} links for ${t}${chain ? ` · ${chain.nodes.length - 1} in the chain` : ""}`, refs: g.slice(0, 5).map((n) => ({ ticker: n.links[0].ticker, accn: n.links[0].accn, label: n.name })) };
     }
     case "simulate_supply_shock": {

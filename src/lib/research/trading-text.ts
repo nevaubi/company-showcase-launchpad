@@ -6,7 +6,7 @@ import type { BotStats } from "@/lib/signals/bots";
 import type { EvidenceBook } from "@/lib/signals/evidence";
 import { emptyListLine, evidenceLine, liveLine, verdictLine } from "@/lib/signals/explain";
 import { rankSetups, type LiveSignal, type RankedSetup } from "@/lib/signals/rank";
-import type { SetupsFile } from "@/lib/signals/setups";
+import { EXECUTION_VERSION, type SetupsFile } from "@/lib/signals/setups";
 import { FAMILY_LABEL, STRATEGY, type Family } from "@/lib/signals/strategies";
 
 const MAX = 9000;
@@ -25,6 +25,8 @@ export interface SetupsArgs {
 export type SetupsInput = SetupsFile & { book?: EvidenceBook; live?: LiveSignal[] };
 
 export function setupsText(f: SetupsInput, a: SetupsArgs = {}): string {
+  if (f.executionVersion !== EXECUTION_VERSION)
+    return `Closing prices ${f.asOf}; market regime ${f.regime}. Historical strategy results are awaiting replay with observed entry and exit prices. No verified rankings or expected returns are available from this snapshot.`;
   const m = f.market;
   const book = f.book ?? null;
   const out = [

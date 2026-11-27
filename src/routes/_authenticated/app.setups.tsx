@@ -12,13 +12,14 @@ import { FilterSelect, SECTION_OFFSET, SectionJump } from "@/components/signals/
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { EXECUTION_VERSION } from "@/lib/signals/setups";
 import { EVIDENCE } from "@/lib/signals/evidence";
 import { emptyListLine, luckLines, verdictLine } from "@/lib/signals/explain";
 import { count, dayLong, num, pct } from "@/lib/signals/format";
 import { cn } from "@/lib/utils";
 import { barClosesQuery, setupsQuery, sparksQuery, type SetupsData } from "@/lib/signals/queries";
 import { DEFAULT_FILTERS, LIQUIDITY_FLOORS, RANK_LIMITS, rankSetups, type HoldFilter, type RankedSetup, type RankFilters, type SideFilter } from "@/lib/signals/rank";
-import { FAMILY_LABEL, type Family } from "@/lib/signals/strategies";
+import { FAMILY_LABEL, STRATEGY, type StrategyId, type Family } from "@/lib/signals/strategies";
 import { defaultView, filtersActive, filtersOf, searchOf, SETUP_FAMILIES, setupsSearch, type SetupsSearch, type SetupView } from "@/lib/signals/url-state";
 
 export const Route = createFileRoute("/_authenticated/app/setups")({
@@ -57,6 +58,32 @@ function SetupsPage() {
         <Skeleton className="h-64" />
       </div>
     );
+  if (data.executionVersion !== EXECUTION_VERSION) {
+    const seen = new Set<string>();
+    const observed = [...data.live]
+      .filter((r) => !r.ticker.includes("/"))
+      .sort((a, b) => b.firedAt.localeCompare(a.firedAt) || a.ticker.localeCompare(b.ticker))
+      .filter((r) => {
+        if (seen.has(r.ticker)) return false;
+        seen.add(r.ticker);
+        return true;
+      }).slice(0, 12);
+    return (
+      <div className="space-y-4">
+        <PageHeader eyebrow="Signals" title="Short-term setups" description={`Closing prices ${dayLong(data.asOf)}. Historical rankings resume after the nightly replay verifies executable entries and exits.`} />
+        <Panel title="Recent observations" subtitle="Latest firing per company, by date and ticker. These observations have no historical rank." collapse={false}>
+          <div className="divide-y">
+            {observed.map((r) => <div key={r.ticker} className="grid grid-cols-[5rem_1fr_auto] items-baseline gap-3 px-3 py-2 text-[13px]">
+              <Link className="font-medium text-link" to="/app/companies/$ticker" params={{ticker:r.ticker}}>{r.ticker}</Link>
+              <span>{STRATEGY[r.variant.split(":")[0] as StrategyId]?.label ?? r.detail}</span>
+              <span className="num text-muted-foreground">{dayLong(r.firedAt)}</span>
+            </div>)}
+            {!observed.length && <p className="px-3 py-2 text-sm text-muted-foreground">{data.liveError ? "The session’s signal records could not be loaded." : "No dated signal records for this session."}</p>}
+          </div>
+        </Panel>
+      </div>
+    );
+  }
   return (
     <div className="space-y-5">
       <PageHeader

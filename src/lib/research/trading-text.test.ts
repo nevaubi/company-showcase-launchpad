@@ -19,6 +19,7 @@ const file = {
   setups: [
     { ticker: "BJ", name: "BJ's Wholesale", sector: "Consumer Staples", key: "pre_earnings:L:5", strategy: "pre_earnings", family: "events", side: 1, horizon: 5, firedAt: "2026-11-13", detail: "Results expected in about 5 trading days", strength: 1, price: 111.88, stop: 105.69, target: 124.27, atr: 2, edge: 0.0056, proven: false, spark: [] },
   ],
+  executionVersion: 2,
   pairsProven: false,
   pairs: [],
   market: { vix: 22.9, vix3m: 20.6, vixRatio: 1.11, breadth200: 0.55, nearHighs: 0.1, shortRatio: 0.55 },

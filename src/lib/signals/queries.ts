@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { buildEvidence, type EvidenceBook } from "./evidence";
 import { liveDays, sameLiveTrades, type LiveTrade } from "./live";
 import { rankSetups, toSetup, type LiveSignal } from "./rank";
-import type { SetupsFile } from "./setups";
+import { currentEvidence, EXECUTION_VERSION, type SetupsFile } from "./setups";
 import type { EquityRow, Position } from "./bots";
 
 /** The published run plus the session's live signals, as the pages and the assistant read it. */
@@ -91,6 +91,7 @@ export async function fetchLiveTrades(since: string): Promise<LiveTrade[]> {
       .from("setup_signals")
       .select("ticker, variant, fired_at, first_seen, outcome_net")
       .gte("fired_at", since)
+      .eq("outcome_version", EXECUTION_VERSION)
       .not("outcome_net", "is", null)
       .order("variant")
       .order("fired_at")
@@ -116,10 +117,10 @@ async function fetchSetupsFile(): Promise<SetupsFile> {
 }
 
 export const setupsQuery = queryOptions({
-  queryKey: ["setups", "latest"],
+  queryKey: ["setups", "latest", EXECUTION_VERSION],
   staleTime: 10 * 60_000,
   queryFn: async (): Promise<SetupsData> => {
-    const file = await fetchSetupsFile();
+    const file = currentEvidence(await fetchSetupsFile());
     let live: LiveSignal[] = [];
     let liveError: string | null = null;
     try {

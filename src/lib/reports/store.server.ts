@@ -7,7 +7,8 @@ import { dataVersionOf } from "./facts";
 import { normalizeOptions, variantKey } from "./kinds";
 import type { ReportInputs, ReportKind, ReportOptions, ReportScope } from "./types";
 
-export const STALE_LOCK_MS = 4 * 60_000;
+import { STALE_LOCK_MS } from "./refresh";
+export { STALE_LOCK_MS } from "./refresh";
 /** Per-user generations in 24 h: standard (shared) versions and customized ones. */
 export const LIMITS = { shared: 60, custom: 25 } as const;
 /** All generations across the app in 24 h — a spend ceiling. */
@@ -105,21 +106,34 @@ export async function ensureReport(admin: Admin, a: EnsureArgs, loadInputs: () =
   const { data: run } = await admin.from("report_runs")
     .insert({ report_id: rowId, user_id: a.userId, ticker: a.ticker, kind: a.kind, scope: a.scope, source: a.source })
     .select("id").single();
+  let update: Database["public"]["Tables"]["reports"]["Update"];
+  let errorMessage: string | null = null;
   try {
     const { generateReportContent } = await import("./generate.server");
     const content = await generateReportContent(a.kind, options, inputs, a.firmName);
-    const { data: done } = await admin.from("reports").update({
+    update = {
       status: "ready", content: content as unknown as Json, data_version: content.dataVersion, title: content.title,
       options: options as unknown as Json, error: null, updated_at: new Date().toISOString(),
-    }).eq("id", rowId).select(META).single();
-    if (run) await admin.from("report_runs").update({ status: "ready", ms: Date.now() - t0 }).eq("id", run.id);
-    return done as unknown as ReportMetaRow;
+    };
   } catch (e) {
-    const message = (e as Error).message || "Report generation failed";
-    const { data: failed } = await admin.from("reports").update({
-      status: ex?.status === "ready" || ex?.title ? "ready" : "failed", error: message, updated_at: new Date().toISOString(),
-    }).eq("id", rowId).select(META).single();
-    if (run) await admin.from("report_runs").update({ status: "failed", ms: Date.now() - t0, error: message.slice(0, 500) }).eq("id", run.id);
-    return failed as unknown as ReportMetaRow;
+    errorMessage = (e as Error).message || "Report generation failed";
+    const readable = ex?.status === "ready" || !!ex?.title;
+    update = {
+      status: readable ? "ready" : "failed", error: errorMessage, updated_at: new Date().toISOString(),
+      ...(readable ? {} : { data_version: version }),
+    };
   }
+
+  // A stalled writer can finish after the slot has been reclaimed. Only its claimant may publish.
+  const { data: finished, error: finishError } = await admin.from("reports").update(update)
+    .eq("id", rowId).eq("status", "generating").eq("started_at", now).select(META).maybeSingle();
+  if (!finished) errorMessage = finishError?.message ?? "A newer writer claimed this report";
+  if (run) await admin.from("report_runs").update({
+    status: errorMessage ? "failed" : "ready", ms: Date.now() - t0, error: errorMessage?.slice(0, 500) ?? null,
+  }).eq("id", run.id);
+  if (finishError) throw finishError;
+  if (finished) return finished as unknown as ReportMetaRow;
+  const { data: latest, error: latestError } = await admin.from("reports").select(META).eq("id", rowId).single();
+  if (latestError) throw latestError;
+  return latest as unknown as ReportMetaRow;
 }

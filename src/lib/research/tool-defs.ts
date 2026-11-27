@@ -14,6 +14,11 @@ const nullable = (schema: Record<string, unknown>) => ({ ...schema, type: [schem
 export const TOOL_DEFS = [
   ...OFFICIAL_SOURCE_TOOL_DEFS,
   {
+    type: "function", name: "get_industry_workup",
+    description: "Dated industry and sector evidence for a covered ticker, exact group name or slug. Includes cap- and equal-weighted returns, excess return vs SPY, operating trends with sample counts, concentration and industry-specific questions to test.",
+    parameters: obj({ target: str("Covered ticker or exact sector/industry name or slug") }, ["target"]), strict: true,
+  },
+  {
     type: "function",
     name: "get_coverage",
     description: "List the companies with full SEC datasets, with TTM revenue, net income, FCF, margins, growth and latest filing.",
@@ -865,6 +870,7 @@ export const TOOL_LABELS: Record<string, string> = {
   get_alerts: "Read watchlist alerts",
   get_estimates: "Read analyst estimates",
   get_filing_changes: "Compared filings",
+  get_industry_workup: "Read industry evidence",
   get_company_dossier: "Built company dossier",
   simulate_supply_shock: "Simulated shock",
   navigate_to: "Opened page",
@@ -945,6 +951,7 @@ export const TOOL_RUNNING: Record<string, string> = {
   get_alerts: "Reading watchlist alerts",
   get_estimates: "Reading analyst estimates",
   get_filing_changes: "Comparing filings",
+  get_industry_workup: "Reading industry evidence",
   get_company_dossier: "Building company dossier",
   simulate_supply_shock: "Simulating shock",
   navigate_to: "Opening page",

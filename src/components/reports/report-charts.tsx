@@ -488,7 +488,7 @@ function Range({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "range" 
   );
 }
 
-export function ReportChartView({ chart, facts, ticker }: { chart: ReportChart; facts: Map<string, Fact>; ticker: string }) {
+export function ReportChartView({ chart, facts, ticker, printSources }: { printSources?: string; chart: ReportChart; facts: Map<string, Fact>; ticker: string }) {
   const [ref, w] = useWidth();
   const { picked, setPicked, onPick } = useChartSource(facts, ticker);
   const ctx: Ctx = { facts, ticker, onPick };
@@ -507,6 +507,7 @@ export function ReportChartView({ chart, facts, ticker }: { chart: ReportChart; 
           : chart.type === "band" ? <Band chart={chart} ctx={ctx} w={w} />
           : <Range chart={chart} ctx={ctx} w={w} />}
       </div>
+      {printSources && <p className="mt-1 hidden text-[9px] text-muted-foreground print:block">Source documents · {printSources}</p>}
     </Frame>
   );
 }

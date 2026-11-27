@@ -9,6 +9,7 @@
 // the published figure.
 import { queryOptions } from "@tanstack/react-query";
 import { partnerFile } from "@/lib/data";
+import { ordinal } from "@/lib/format";
 import { MISSING, mult, pct, usd } from "./format";
 import { getSectorBreadth } from "./breadth.functions";
 import { tapeIndex, type TapeFile } from "./breadth";
@@ -118,8 +119,8 @@ export interface GroupFile {
     id: string;
     name: string;
     unit: string;
-    d: { corr: number; beta: number; n: number; from: string; to: string } | null;
-    m?: { corr: number; n: number } | null;
+    d?: { corr: number | null; beta?: number | null; n: number; from?: string | null; to?: string | null } | null;
+    m?: { corr: number | null; beta?: number | null; n: number; from?: string | null; to?: string | null } | null;
   }[];
   factors?: { id: string; name: string; source: string; url: string; latest: [string, number] }[];
   kpis?: {
@@ -132,6 +133,7 @@ export interface GroupFile {
     agg: (number | null)[];
     n?: number[];
     industry?: string;
+    members_total?: number;
   }[];
   constituents: Constituent[];
   segments?: {
@@ -164,7 +166,27 @@ export interface GroupFile {
     items?: string;
   }[];
 }
+export interface BankRevenuePeriod {
+  start: string;
+  end: string;
+  filed: string;
+  accession: string;
+  form: string;
+  filing_url: string;
+  InterestIncomeExpenseNet: number;
+  NoninterestIncome: number;
+  net_revenue: number;
+  reconciled_to: string[];
+}
+interface BankRevenueTrailing {
+  annual: BankRevenuePeriod;
+  current_ytd?: BankRevenuePeriod;
+  prior_ytd?: BankRevenuePeriod;
+  net_revenue: number;
+}
 export interface CompFile {
+  bank_revenue?: Record<string, Record<string, BankRevenuePeriod>>;
+  bank_revenue_ttm?: Record<string, Record<string, BankRevenueTrailing>>;
   fields: string[];
   quarters: string[];
   data: Record<string, ((string | number | null)[] | null)[]>;
@@ -257,8 +279,11 @@ export const SECTOR_ETF: Record<string, string> = {
 export function fmtMetric(v: number | null | undefined, unit: string | undefined, digits = 1) {
   if (v == null || !Number.isFinite(v)) return MISSING;
   if (unit === "pct") return pct(v, { digits });
+  if (unit === "pctile") return ordinal(Math.round(v * 100));
   if (unit === "x") return digits === 1 ? mult(v) : `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}×`;
   if (unit === "usd" || unit === "USD") return usd(v);
+  if (unit === "USD_per_share") return `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`;
+  if (unit === "ASM" || unit === "boe/d") return `${v.toLocaleString("en-US", { maximumFractionDigits: 0 })} ${unit}`;
   if (unit === "days") return `${v.toFixed(0)} d`;
   if (unit === "%") return `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}%`;
   return `${v < 0 ? "−" : ""}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -459,10 +484,36 @@ export function breakdown(g: GroupFile, c: CompFile, metric: string, q: string):
   return { metric, q, value, numL: spec.numL, denL: spec.denL, rows };
 }
 
+/** Trace only the periods and companies that entered this particular ratio. */
+export function bankRevenueEvidence(file: CompFile, result: Breakdown) {
+  const trailing = ["gm", "om", "nm", "fcfm", "ps"].includes(result.metric);
+  if (!trailing && result.metric !== "rev_growth") return [];
+  const year = Number(result.q.slice(0, 4));
+  const quarterIndex = year * 4 + Number(result.q.slice(5)) - 1;
+  const offsets = trailing ? [0, 1, 2, 3] : [0, 4];
+  return result.rows.flatMap(({ tk }) => {
+    const direct = trailing ? file.bank_revenue_ttm?.[tk]?.[result.q] : undefined;
+    if (direct) {
+      const parts = [{ label: "Fiscal year", point: direct.annual }];
+      if (direct.current_ytd && direct.prior_ytd) {
+        parts.push({ label: "Add current YTD", point: direct.current_ytd }, { label: "Subtract prior YTD", point: direct.prior_ytd });
+      }
+      return [{ ticker: tk, parts, trailing: direct.net_revenue as number | null }];
+    }
+    const parts = offsets.flatMap((back) => {
+      const index = quarterIndex - back;
+      const q = Math.floor(index / 4) + "Q" + ((index % 4) + 1);
+      const point = file.bank_revenue?.[tk]?.[q];
+      return point ? [{ label: qLabel(q), point }] : [];
+    });
+    return parts.length ? [{ ticker: tk, parts, trailing: null as number | null }] : [];
+  });
+}
+
 /** Fill a weekly note's {{id}} placeholders with its stored facts. */
 export function noteParts(n: Note): (string | { id: string; text: string; label: string })[] {
   const out: (string | { id: string; text: string; label: string })[] = [];
-  const re = /\{\{(\w+)\}\}/g;
+  const re = /\{\{\s*(\w+)\s*\}\}/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(n.text))) {

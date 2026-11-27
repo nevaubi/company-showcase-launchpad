@@ -2,7 +2,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
 import { buildPayload, type IrPayload } from "@/lib/ir/payload";
-import { budgetPayload } from "@/lib/ir/payload-budget";
+import { BUDGET_BYTES, budgetPayload } from "@/lib/ir/payload-budget";
 import { planDocuments, type DocPlan, type PlanDocRow } from "@/lib/ir/doc-plan";
 import { fixPrintedSigns } from "@/lib/ir/sign-fix";
 import { guardedDocIds, hasGuardedSources, withoutGuardedFacts } from "@/lib/ir/source-guard";
@@ -419,8 +419,21 @@ export async function rebuildCompany(
   const prev = run?.waiting ? await storedFillStats(ticker).catch(() => null) : null;
   const pass = run?.waiting ? (prev?.waiting ? (prev.pass ?? 1) : 0) + 1 : 0;
   // The page's budget: at most BUDGET_BYTES serialized, steps recorded; over it the payload is not stored.
-  const bounded = budgetPayload(payload);
+  // Keep the untouched history when the final fallback is needed. It is private and
+  // downloaded explicitly, never inflated by an ordinary page view.
+  const fullHistory = payload;
+  // Reserve space for the quality record and archive reference, added below.
+  const reserve = new Blob([JSON.stringify({ quality, plan: plan.counts })]).size + 2048;
+  let bounded = budgetPayload(payload, { cap: BUDGET_BYTES - reserve });
+  const needsShorterHistory = !bounded.budget.ok;
+  if (needsShorterHistory) {
+    // Preserve every visible section; shorter history is the last resort for a dense bank.
+    bounded = budgetPayload(payload, { cap: BUDGET_BYTES - reserve, quarters: 20 });
+  }
+  const archived = needsShorterHistory || bounded.budget.steps.some((step) => step.step === "displayed");
+  const archivePath = archived ? `series/${ticker}/${crypto.randomUUID()}.json.gz` : null;
   payload = bounded.payload;
+  if (archivePath) payload = { ...payload, preview: { basis: "recent-statements", archivePath } };
   // Signs corrected before the fill count with the ones the fill corrected from the document.
   payload = {
     ...payload,
@@ -446,7 +459,16 @@ export async function rebuildCompany(
   if (!opts.dry) {
     // Payloads for banks run to several MB: keep them in storage, with stats in the table.
     const body = JSON.stringify(payload);
-    const path = `series/${ticker}.json`;
+    const bytes = new Blob([body]).size;
+    if (bytes > BUDGET_BYTES) throw new Error(`Serialized payload exceeds the page budget: ${bytes} bytes`);
+    const path = archivePath ? `series/${ticker}/${crypto.randomUUID()}.json` : `series/${ticker}.json`;
+    if (archivePath) {
+      const stream = new Blob([JSON.stringify(fullHistory)]).stream().pipeThrough(new CompressionStream("gzip"));
+      const archive = await new Response(stream).blob();
+      const { error } = await supabaseAdmin.storage.from("ir-documents")
+        .upload(archivePath, archive, { contentType: "application/gzip" });
+      if (error) throw new Error(error.message);
+    }
     const up = await Promise.race([
       supabaseAdmin.storage
         .from("ir-documents")
@@ -466,9 +488,9 @@ export async function rebuildCompany(
           ticker,
           payload: null,
           payload_path: path,
-          payload_bytes: body.length,
+          payload_bytes: bytes,
           // The build format rides in stats so the worker's stale-payload lane reads it without the payload.
-          stats: { ...payload.stats, build: payload.build } as never,
+          stats: { ...payload.stats, build: payload.build, ...(payload.preview ? { preview: payload.preview } : {}) } as never,
           built_at: payload.builtAt,
         })
         .abortSignal(AbortSignal.timeout(60_000)),

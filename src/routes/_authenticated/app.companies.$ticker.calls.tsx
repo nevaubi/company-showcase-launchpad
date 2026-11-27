@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo } from "react";
 import { z } from "zod";
 import { ExternalLink, Mic, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,12 +9,11 @@ import { CallReader } from "@/components/earnings/call-reader";
 import { coverageOf } from "@/lib/coverage";
 import { fmtDate } from "@/lib/format";
 import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
-import { SHARE_CLASS_TICKERS, transcriptMatches } from "@/lib/transcripts/parse";
 import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 const pageSearch = z.object({
-  call: z.string().url().max(300).optional(),
+  call: z.string().url().max(2048).optional(),
   section: z.enum(["all", "prepared", "qa"]).default("all"),
   speaker: z.string().max(80).optional(),
 });
@@ -56,18 +54,14 @@ function Calls() {
   const listFn = useServerFn(listEarningsCalls);
   const getFn = useServerFn(getEarningsTranscript);
   const calls = useQuery({ queryKey: ["earnings-calls", ticker], queryFn: () => listFn({ data: { ticker } }), staleTime: 6 * 3600_000 });
-  // The search can return another company whose name starts with the same word; keep this company's calls only.
-  const list = useMemo(
-    () => (calls.data?.calls ?? []).filter((c) => transcriptMatches(c.url, ticker, co?.shortName ?? ticker, SHARE_CLASS_TICKERS[ticker] ?? [])),
-    [calls.data, ticker, co],
-  );
+  const list = calls.data?.calls ?? [];
   const idx = Math.max(0, s.call ? list.findIndex((c) => c.url === s.call) : 0);
   const url = list[idx]?.url;
   const prevUrl = list[idx + 1]?.url;
-  const tr = useQuery({ queryKey: ["transcript", url], queryFn: () => getFn({ data: { ticker, url: url! } }), enabled: !!url, staleTime: Infinity, retry: 1 });
+  const tr = useQuery({ queryKey: ["transcript", ticker, url], queryFn: () => getFn({ data: { ticker, url: url! } }), enabled: !!url, staleTime: Infinity, retry: 1 });
   // The previous call, for topics rising or fading; loaded after the current one.
   const prevTr = useQuery({
-    queryKey: ["transcript", prevUrl],
+    queryKey: ["transcript", ticker, prevUrl],
     queryFn: () => getFn({ data: { ticker, url: prevUrl! } }),
     enabled: !!prevUrl && !!tr.data?.transcript,
     staleTime: Infinity,
@@ -87,7 +81,7 @@ function Calls() {
     return (
       <section data-section="Earnings calls" className="flex flex-col items-center gap-3 border-y bg-card/40 py-12 text-center">
         <Mic className="size-6 text-muted-foreground" />
-        <p className="text-[13px] font-medium">No earnings call transcripts found for {co?.shortName ?? ticker}</p>
+        <p className="text-[13px] font-medium">No archived earnings calls for {co?.shortName ?? ticker}</p>
         <p className="max-w-md text-[11px] text-muted-foreground">{calls.data?.error ?? calls.error?.message ?? "Try again in a moment."}</p>
         <Button size="sm" variant="outline" onClick={() => calls.refetch()}>
           <RefreshCw /> Try again
@@ -118,7 +112,7 @@ function Calls() {
         </div>
         {url && (
           <a href={url} target="_blank" rel="noreferrer" className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline">
-            Transcript via The Motley Fool <ExternalLink className="size-3" />
+            {list[idx]?.archiveKind ? "Company source" : "The Motley Fool"} <ExternalLink className="size-3" />
           </a>
         )}
       </div>
