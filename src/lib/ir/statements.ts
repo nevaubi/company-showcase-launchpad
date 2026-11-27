@@ -101,7 +101,18 @@ export interface Statement {
   /** what kind of statement it is for the company's sector, and the tab filter it belongs to (sector-order.ts) */
   kind?: SectionKind;
   filter?: "revenue" | "profit" | "cost" | "kpi" | "balance";
+  /**
+   * "ytd" when the anchor table prints year-to-date columns (six or nine months) and no three-month column: the
+   * section's figures are `series.ytd` cells under their printed length and end, never quarter heads
+   * (`ytdBasis`). Quarters in `q` derived from two of them stay calculated, with their formula.
+   */
+  basis?: "ytd";
 }
+
+/** Year-to-date figures as printed (build format 6): "<months>:<period end>" → cell. Read optionally. */
+type YtdCells = { ytd?: Record<string, PayloadCell> };
+/** Printed figure columns of a table (build format 6): [grid column, months (0 balances), end, printed head]. */
+type PrintedCols = { cols?: [number, number, string, string][] };
 
 interface Table {
   id: string;
@@ -148,12 +159,13 @@ function* endsOf(s: PayloadSeries): Generator<[string, PayloadCell]> {
     ["q", s.held?.q ?? {}],
     ["y", s.held?.y ?? {}],
     ["m", s.held?.mo ?? {}],
+    ["ytd", (s as YtdCells).ytd ?? {}],
   ] as const)
     for (const [e, c] of Object.entries(m)) yield [`${kind}:${e}`, c];
 }
 
 function* cellsOf(s: PayloadSeries): Generator<PayloadCell> {
-  for (const m of [s.q, s.y, s.mo ?? {}, s.held?.q ?? {}, s.held?.y ?? {}, s.held?.mo ?? {}])
+  for (const m of [s.q, s.y, s.mo ?? {}, s.held?.q ?? {}, s.held?.y ?? {}, s.held?.mo ?? {}, (s as YtdCells).ytd ?? {}])
     for (const c of Object.values(m)) yield c;
 }
 
@@ -264,6 +276,11 @@ function drafts(p: IrPayload): Draft[] {
         const theirs = s.anchor.ends.get(`${k}|${a}`);
         if (!mine?.size || !theirs?.size) continue;
         if ([...mine].some((e) => theirs.has(e))) return false;
+        // A year-to-date table is not the quarter or year table printed again (Coca-Cola's statement of income
+        // for the quarter and for the nine months); quarters and fiscal years of one table do join (Cisco).
+        const lengths = (xs: Set<string>) =>
+          [...new Set([...xs].map((e) => (e.startsWith("ytd:") ? e.slice(0, e.lastIndexOf(":")) : "")))].sort().join();
+        if (lengths(mine) !== lengths(theirs)) return false;
         known++;
       }
       return known >= 2;
@@ -708,24 +725,26 @@ function nameTwins(rows: StatementRow[], byKey: Map<string, PayloadSeries>) {
       const n = nameCore(printedName(r, byKey));
       names.set(n, [...(names.get(n) ?? []), r]);
     }
-    for (const same of names.values()) {
-      if (same.length < 2) continue;
-      const basisWord = (r: LineRow) => {
-        const bd = (byKey.get(r.k)!.bd ?? "").toLowerCase();
-        return /non[- ]?gaap/.test(bd) ? "non-GAAP" : /\bgaap\b/.test(bd) ? "GAAP" : (basisOf(bd) ?? "");
-      };
-      const tries = [
-        (r: LineRow) => measureWord(byKey.get(r.k)!),
-        (r: LineRow) => (basisWord(r) ? `${basisWord(r)} ${measureWord(byKey.get(r.k)!)}` : ""),
-        (r: LineRow) => byKey.get(r.k)!.bd ?? "",
-      ];
-      for (const q of tries) {
-        const words = same.map(q);
-        if (words.every(Boolean) && new Set(words.map((w) => w.toLowerCase())).size === same.length) {
-          same.forEach((r, i) => (r.twin = words[i]));
-          break;
-        }
-      }
+    for (const same of names.values()) if (same.length > 1) twinNames(same, byKey);
+  }
+}
+
+/** Lines under one printed name, told apart by what they measure, else by basis and measure, else table name. */
+function twinNames(same: LineRow[], byKey: Map<string, PayloadSeries>) {
+  const basisWord = (r: LineRow) => {
+    const bd = (byKey.get(r.k)!.bd ?? "").toLowerCase();
+    return /non[- ]?gaap/.test(bd) ? "non-GAAP" : /\bgaap\b/.test(bd) ? "GAAP" : (basisOf(bd) ?? "");
+  };
+  const tries = [
+    (r: LineRow) => measureWord(byKey.get(r.k)!),
+    (r: LineRow) => (basisWord(r) ? `${basisWord(r)} ${measureWord(byKey.get(r.k)!)}` : ""),
+    (r: LineRow) => byKey.get(r.k)!.bd ?? "",
+  ];
+  for (const q of tries) {
+    const words = same.map(q);
+    if (words.every(Boolean) && new Set(words.map((w) => w.toLowerCase())).size === same.length) {
+      same.forEach((r, i) => (r.twin = words[i]));
+      break;
     }
   }
 }
@@ -919,6 +938,7 @@ function assembleSections(p: IrPayload): Statement[] {
     }
     // The table's printed layout (build format 3): the row's printed name, bold and rule marks.
     const printedRows = new Map(((cap as PrintedLayout | undefined)?.rows ?? []).map(([r, l, f, n]) => [r, { l, f, n }]));
+    const lostHeads = new Map<StatementRow, StatementRow>();
     for (const r of rows) {
       const pr = r.kind === "line" ? (r.at ? printedRows.get(r.at[2]) : undefined) : r.kind === "head" && r.r != null ? printedRows.get(r.r) : undefined;
       if (!pr) continue;
@@ -932,10 +952,29 @@ function assembleSections(p: IrPayload): Statement[] {
         let n = pr.n?.trim() ?? "";
         const above = printedRows.get(r.at![2] - 1)?.n?.trim();
         if (above && n.startsWith(`${above} `) && COLUMN_HEAD.test(above)) n = n.slice(above.length).trim();
+        // A heading taken for the first line of a wrapped name (Apple's "(1) Net sales by category:" over
+        // "iPhone", whose lower-case start read as a continuation): when what follows the row above is the
+        // line's whole stored name, the row reads that name and the row above is drawn as its heading.
+        else if (
+          above &&
+          n.startsWith(`${above} `) &&
+          one &&
+          !/\d/.test(above) &&
+          nameCore(n.slice(above.length)) === nameCore(lineLabel(byKey.get(r.k)!)) &&
+          !rows.some((x) => x.kind === "head" && x.r === r.at![2] - 1)
+        ) {
+          n = n.slice(above.length).trim();
+          lostHeads.set(r, { kind: "head", text: headText(above, keep), depth: Math.max(0, r.depth - 1), r: r.at![2] - 1 });
+        }
         if (n && one && !MONTH_YEAR.test(n)) r.name = n;
         if (pr.f & 1) r.bold = true;
         if (pr.f & 2) r.rule = "single";
       } else if (r.kind === "head" && pr.f & 1) r.bold = true;
+    }
+    for (const [line, h] of lostHeads) {
+      const i = rows.indexOf(line);
+      if (i < 0) continue;
+      rows.splice(i, 0, ...(rows[i - 1]?.kind === "line" ? [{ kind: "gap" } as StatementRow, h] : [h]));
     }
     nameTwins(rows, byKey);
     let head = "";
@@ -973,10 +1012,21 @@ function assembleSections(p: IrPayload): Statement[] {
     const earlier = gone.filter(older);
     if (earlier.length) {
       rows.push({ kind: "gap" }, { kind: "head", text: "Printed only in earlier periods", depth: 0 });
+      const olds: LineRow[] = [];
       for (const g of earlier) {
-        rows.push({ kind: "line", k: g[0], ks: g, depth: 0, total: false, old: true });
+        const row: LineRow = { kind: "line", k: g[0], ks: g, depth: 0, total: false, old: true };
+        rows.push(row);
+        olds.push(row);
         keys.push(g[0]);
       }
+      // Older lines under one printed name are told apart as the table's own rows are (Coca-Cola's older
+      // segment tables: "EMEA" revenue, operating income and income before taxes).
+      const names = new Map<string, LineRow[]>();
+      for (const r of olds) {
+        const n = nameCore(printedName(r, byKey));
+        names.set(n, [...(names.get(n) ?? []), r]);
+      }
+      for (const same of names.values()) if (same.length > 1) twinNames(same, byKey);
     }
     gone = gone.filter((g) => !older(g));
     const lines = keys.map((k) => byKey.get(k)!);
@@ -1013,6 +1063,7 @@ function assembleSections(p: IrPayload): Statement[] {
       first: lines.reduce((m, s) => (firstEnd(s) < m ? firstEnd(s) : m), "9999"),
       cat,
       doc: dr.anchor.d,
+      ...(onTable && ytdBasis(cap, keys, byKey, dr.anchor.d, Number(dr.anchor.t)) ? { basis: "ytd" as const } : {}),
     };
     sections.push(sec);
     if (gone.length) {
@@ -1089,7 +1140,7 @@ export function arrange(p: IrPayload, sections: Statement[], retired: Statement[
   const lastOf = new Map<number, string>();
   for (const s of p.series)
     for (const [key, c] of endsOf(s)) {
-      const e = key.slice(2);
+      const e = key.slice(key.lastIndexOf(":") + 1);
       if (c.d != null && e > (lastOf.get(c.d) ?? "")) lastOf.set(c.d, e);
     }
   for (const s of sections) if (s.last > (lastOf.get(s.doc) ?? "")) lastOf.set(s.doc, s.last);
@@ -1188,6 +1239,61 @@ function ownScale(ks: string[], byKey: Map<string, PayloadSeries>, at?: [number,
   return { ownDivs, ownOf };
 }
 
+/**
+ * The scale a table prints its money and count figures at: the most common printed scale of the cells located
+ * in it, over every line of the payload (one pass per series map, kept beside it).
+ */
+const tableDivCache = new WeakMap<Map<string, PayloadSeries>, Map<string, number>>();
+function tableDiv(byKey: Map<string, PayloadSeries>, d: number, t: number): number | undefined {
+  let m = tableDivCache.get(byKey);
+  if (!m) {
+    const seen = new Map<string, number[]>();
+    for (const s of byKey.values()) {
+      if (s.unit !== "usd" && s.unit !== "count") continue;
+      for (const c of cellsOf(s)) {
+        if (c.d == null || !Array.isArray(c.l) || typeof c.l[0] !== "number") continue;
+        const x = printedDiv(c);
+        if (x == null) continue;
+        const key = `${c.d}:${c.l[0]}`;
+        const xs = seen.get(key);
+        if (xs) xs.push(x);
+        else seen.set(key, [x]);
+      }
+    }
+    m = new Map([...seen].map(([k, xs]) => [k, mode(xs)!]));
+    tableDivCache.set(byKey, m);
+  }
+  return m.get(`${d}:${t}`);
+}
+
+/**
+ * Whether a table prints year-to-date columns only (six or nine months, no three-month column): by its printed
+ * columns (`PayloadTable.cols`, build format 6), else by the figures located in it (year-to-date cells and no
+ * quarter cell). Such a section is shown under its printed lengths and ends, never under quarter heads.
+ */
+export function ytdBasis(
+  cap: PayloadTable | undefined,
+  keys: string[],
+  byKey: Map<string, PayloadSeries>,
+  d: number,
+  t: number,
+): boolean {
+  const cols = (cap as PrintedCols | undefined)?.cols;
+  if (cols?.length) {
+    const months = cols.map((c) => c[1]).filter((m) => m > 0);
+    return months.some((m) => m === 6 || m === 9) && !months.includes(3);
+  }
+  const here = (c: PayloadCell) => c.d === d && Array.isArray(c.l) && c.l[0] === t;
+  let ytd = 0;
+  for (const k of keys) {
+    const s = byKey.get(k);
+    if (!s) continue;
+    if ([...Object.values(s.q), ...Object.values(s.held?.q ?? {})].some(here)) return false;
+    ytd += Object.values((s as YtdCells).ytd ?? {}).filter(here).length;
+  }
+  return ytd > 0;
+}
+
 /** Whether the table at `at` prints two different figures of line s for one period on that one row. */
 function twoGroups(s: PayloadSeries | undefined, freq: IrPeriodKind, at: [number, number, number]) {
   if (!s) return false;
@@ -1226,6 +1332,28 @@ export function rowCells(
   // The row's printed scale: its own table's printing where it has one (Netflix prints regional revenue in
   // thousands in one table and in millions in another; one series holds both), else the lead line's.
   const { ownDivs, ownOf } = ownScale(ks, byKey, at);
+  // A row of a table with no figure stored at its own position takes the scale the rest of its table prints
+  // (Wells Fargo's balance sheet "Total equity" held only the capital table's rounded billions): figures
+  // printed at another scale are not this row's printing and stay out.
+  const tableScale =
+    at && !ownDivs.length && lead && (lead.unit === "usd" || lead.unit === "count")
+      ? tableDiv(byKey, at[0], at[1])
+      : undefined;
+  if (tableScale != null) ownDivs.push(tableScale);
+  // A row with no table position of its own (a slide's line, a line only older copies print) keeps the scale of
+  // its newest printed figure: Walmart's segment sales printed $125.2 billion on a slide and 124,969 million in a
+  // table never share one row.
+  if (!ownDivs.length && lead && (lead.unit === "usd" || lead.unit === "count") && (!at || tableScale == null)) {
+    let newest: PayloadCell | undefined;
+    for (const k of ks) {
+      const s = byKey.get(k);
+      if (!s) continue;
+      for (const [e, c] of Object.entries(cellsFor(s, freq)))
+        if (printedDiv(c) != null && (!newest || e > (newest.e ?? ""))) newest = { ...c, e: c.e ?? e };
+    }
+    const d = newest ? printedDiv(newest) : null;
+    if (d != null) ownDivs.push(d);
+  }
   const rowDiv = mode(ownDivs) ?? (lead ? knownDiv(lead) : null);
   const fits = (c: PayloadCell) => {
     if (rowDiv == null) return true;

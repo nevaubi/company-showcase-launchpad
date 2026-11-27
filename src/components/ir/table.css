@@ -221,3 +221,310 @@
     transform: translateY(-50%);
   }
 }
+
+/*
+ * The statements grid of the IR tab (round 8, style3): one spreadsheet-like geometry for every section.
+ * Sizes live in variables (table-style.ts GRID is the same table in TypeScript, for heights computed from
+ * the data). Every rule and line is drawn with inset shadows or backgrounds, never borders, so no cell
+ * changes size for a tick, a rule, a highlight or a hover. No transitions on rows.
+ */
+.irg {
+  --irt-fc: 320px;
+  --irt-colbase: 104px;
+  --irt-row: 28px;
+  --irt-gap: 8px;
+  --irt-title: 48px;
+  --irt-head: 36px;
+  /* the controls bar and the head row with its scroll track: one sticky layer of a constant height */
+  --irg-bar: 48px;
+  --irg-track: 8px;
+  --ir-bar: calc(var(--irg-bar) + var(--irt-head) + var(--irg-track));
+  --irg-line: color-mix(in oklab, var(--foreground) 9%, var(--card));
+  --irg-title-band: color-mix(in oklab, var(--foreground) 6.5%, var(--card));
+  --irg-group-band: color-mix(in oklab, var(--foreground) 3%, var(--card));
+  --irg-head-fill: color-mix(in oklab, var(--foreground) 4.5%, var(--card));
+  --irg-hover: color-mix(in oklab, var(--foreground) 3.5%, var(--card));
+  --irg-rule: color-mix(in oklab, var(--foreground) 42%, var(--card));
+  --irg-rule-strong: color-mix(in oklab, var(--foreground) 78%, var(--card));
+  --irg-edge: color-mix(in oklab, black 22%, transparent);
+}
+.dark .irg {
+  --irg-line: color-mix(in oklab, var(--foreground) 11%, var(--card));
+  --irg-title-band: color-mix(in oklab, var(--foreground) 9%, var(--card));
+  --irg-group-band: color-mix(in oklab, var(--foreground) 4.5%, var(--card));
+  --irg-head-fill: color-mix(in oklab, var(--foreground) 6.5%, var(--card));
+  --irg-hover: color-mix(in oklab, var(--foreground) 5%, var(--card));
+  --irg-rule: color-mix(in oklab, var(--foreground) 40%, var(--card));
+  --irg-rule-strong: color-mix(in oklab, var(--foreground) 72%, var(--card));
+  --irg-edge: color-mix(in oklab, black 60%, transparent);
+}
+@media (max-width: 639.98px) {
+  .irg {
+    --irt-fc: 168px;
+    --irt-colbase: 88px;
+    --irt-row: 32px;
+    --irg-bar: 92px;
+  }
+}
+
+/* Sticky layer: the controls bar and the head row, each of a fixed height. */
+.irg-bar {
+  height: var(--irg-bar);
+  overflow: hidden;
+}
+.irg-headstrip {
+  height: calc(var(--irt-head) + var(--irg-track));
+  background: var(--card);
+  box-shadow: inset 0 -1px 0 var(--irg-line);
+}
+
+/* Tables: fixed layout, no spacing, no borders; one line per cell. */
+.irg-table {
+  --bg: var(--card);
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+@media (max-width: 639.98px) {
+  .irg-table {
+    font-size: 12.5px;
+  }
+}
+.irg-table th,
+.irg-table td {
+  box-sizing: border-box;
+  height: var(--irt-row);
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 20px;
+  background-color: var(--bg);
+  /* hairline grid: right and bottom edge of every cell */
+  box-shadow:
+    inset -1px 0 0 var(--irg-line),
+    inset 0 -1px 0 var(--irg-line);
+}
+
+/* Head cells: period over date on a filled band, right-aligned over the figures. */
+.irg-head th {
+  height: var(--irt-head);
+  --bg: var(--irg-head-fill);
+  vertical-align: middle;
+  line-height: 14px;
+  font-size: 11px;
+  font-weight: 400;
+  text-align: right;
+}
+.irg-head th.irg-hcell {
+  /* the figure's right padding, a closing parenthesis' room, the mark and flag slots */
+  padding-right: calc(var(--irg-markw) + var(--irg-flagw) + 7px);
+}
+.irg-period,
+.irg-date {
+  display: block;
+}
+.irg-period {
+  font-weight: 500;
+  color: var(--foreground);
+}
+.irg-date {
+  color: var(--muted-foreground);
+}
+.irg-head th.irg-latest .irg-period,
+.irg-head th.irg-latest .irg-date {
+  font-weight: 700;
+}
+.irg-head th.irg-hlabel {
+  text-align: left;
+  padding-left: 12px;
+  color: var(--muted-foreground);
+}
+.irg-ownhead th {
+  box-shadow:
+    inset -1px 0 0 var(--irg-line),
+    inset 0 -1px 0 var(--irg-rule);
+}
+
+/* Section title band: one full-width row, title over its caption, controls on the right. */
+.irg-title {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--irt-title);
+  padding: 0 12px;
+  overflow: hidden;
+  background: var(--irg-title-band);
+  box-shadow:
+    inset 0 1px 0 var(--irg-rule),
+    inset 0 -1px 0 var(--irg-line);
+}
+.irg-title-text {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.irg-caption {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Frozen label column. */
+.irg-fc {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-right: 8px !important;
+}
+.irg-head .irg-fc {
+  z-index: 2;
+}
+.irg[data-scrolled] .irg-fc {
+  box-shadow:
+    inset -1px 0 0 var(--irg-line),
+    inset 0 -1px 0 var(--irg-line),
+    6px 0 6px -6px var(--irg-edge);
+}
+.irg-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.irg-note {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+/* Figures: right-aligned on the decimal. A closing parenthesis (or its room), the unit mark and the
+   check mark each have a fixed slot, so digits line up down a column whatever is beside them. */
+.irg {
+  --irg-markw: 16px;
+  --irg-flagw: 12px;
+}
+.irg-num {
+  text-align: right;
+}
+.irg-fig {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+  padding: 0 2px 0 6px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.irg-cell {
+  cursor: pointer;
+}
+.irg-cell:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.irg-paren::after {
+  content: ")";
+  visibility: hidden;
+}
+.irg-paren.irg-paren-off::after {
+  content: none;
+}
+.irg-mark {
+  display: inline-block;
+  width: var(--irg-markw);
+  flex: none;
+  font-size: 10.5px;
+  text-align: left;
+  color: var(--muted-foreground);
+}
+.irg-flag {
+  display: inline-flex;
+  width: var(--irg-flagw);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Rows. */
+.irg-body > tr.irt-gap > td {
+  height: var(--irt-gap);
+  font-size: 0;
+  line-height: 0;
+  box-shadow: inset 0 -1px 0 var(--irg-line);
+}
+.irg-body > tr.irt-group > th {
+  /* not a scroll container: its name sticks to the frame's left edge, not to the cell's */
+  overflow: visible;
+  --bg: var(--irg-group-band);
+  font-weight: 600;
+  font-size: 12px;
+}
+.irg-sticky-label {
+  position: sticky;
+  left: 0;
+  display: inline-block;
+  max-width: var(--irt-fc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+@media (hover: hover) {
+  .irg-body > tr.irt-line:hover {
+    --bg: var(--irg-hover);
+  }
+}
+.irg-body > tr.irt-match > th {
+  --bg: var(--highlight-soft);
+}
+.irg-body > tr.irt-l2 > th,
+.irg-body > tr.irt-l3 > th {
+  color: color-mix(in oklab, var(--foreground) 86%, var(--card));
+}
+.irg-body > tr.irt-ratio:not(.irt-sub):not(.irt-grand) > td {
+  color: color-mix(in oklab, var(--foreground) 86%, var(--card));
+}
+.irg-body > tr.irt-old > th,
+.irg-body > tr.irt-old > td {
+  color: color-mix(in oklab, var(--foreground) 68%, var(--card));
+}
+.irg-body > tr > td.irt-missing {
+  color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+  font-weight: 400 !important;
+}
+
+/* Totals: bold; a subtotal under a single rule, a grand total under a single rule and over a double rule.
+   The rules run over the figures only, as printed. */
+.irg-body > tr.irt-sub > th,
+.irg-body > tr.irt-sub > td,
+.irg-body > tr.irt-grand > th,
+.irg-body > tr.irt-grand > td {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.irg-body > tr.irt-sub > td {
+  box-shadow:
+    inset 0 1px 0 var(--irg-rule),
+    inset -1px 0 0 var(--irg-line),
+    inset 0 -1px 0 var(--irg-line);
+}
+.irg-body > tr.irt-grand > th,
+.irg-body > tr.irt-grand > td {
+  font-weight: 700;
+}
+.irg-body > tr.irt-grand > td {
+  box-shadow:
+    inset 0 1px 0 var(--irg-rule-strong),
+    inset 0 -1px 0 var(--irg-rule-strong),
+    inset 0 -3px 0 var(--bg),
+    inset 0 -4px 0 var(--irg-rule-strong),
+    inset -1px 0 0 var(--irg-line);
+}

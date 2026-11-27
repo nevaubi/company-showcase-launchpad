@@ -173,3 +173,79 @@ export function notePrinted(tables: Map<string, Set<string>>, d: number | undefi
   if (!set) tables.set(key, (set = new Set()));
   set.add(end);
 }
+
+/**
+ * The statements grid (round 8, style3: "like an Excel file, very aligned, stable when scrolling").
+ * One geometry for every section of the tab, so figures line up from the first table to the last:
+ * - the label column and every period column have one fixed width each, the same in every section; the
+ *   period columns widen together (never per section) only when the tab's widest figure needs it;
+ * - every row is one line of a fixed height, long names cut with an ellipsis and shown in full on hover
+ *   and on tap; a printed spacer is a fixed short row;
+ * - a section is its title band, an optional printed column head row (a year-to-date section prints its
+ *   own heads), then its rows: its height is known from its data before it paints (`sectionHeight`), and a
+ *   section not yet mounted reserves exactly that height, so nothing moves while the page scrolls;
+ * - one sticky layer holds the controls and the one column head row, both of a constant height.
+ * Sizes in px; `phone` below the `sm` breakpoint (640 px).
+ */
+export interface GridSize {
+  /** label column */
+  label: number;
+  /** narrowest period column */
+  col: number;
+  /** a line or a heading row */
+  row: number;
+  /** a printed spacer row */
+  gap: number;
+  /** a section's title band */
+  title: number;
+  /** a column head row (period over date) */
+  head: number;
+}
+export const GRID: { desktop: GridSize; phone: GridSize } = {
+  desktop: { label: 320, col: 104, row: 28, gap: 8, title: 48, head: 36 },
+  phone: { label: 168, col: 88, row: 32, gap: 8, title: 48, head: 36 },
+};
+/** Indent step per printed level and the label's left gutter in the grid, px. */
+export const GRID_INDENT = 12;
+export const GRID_GUTTER = 12;
+/** Room beside a figure: the unit mark or tie slot and the cell's padding, px (the column fits the figure plus this). */
+export const FIGURE_ROOM = 42;
+
+/** What a section is made of, for its height: rows of figures or headings, spacers, printed head rows. */
+export interface SectionBox {
+  rows: number;
+  gaps: number;
+  heads: number;
+}
+
+/** A section's height in px: title band, its own printed head rows, rows and spacers at fixed heights. */
+export const sectionHeight = (b: SectionBox, g: GridSize) =>
+  g.title + b.heads * g.head + b.rows * g.row + b.gaps * g.gap;
+
+/** The same height as CSS, from the grid's variables, so a placeholder matches the section at any width. */
+export const sectionHeightCss = (b: SectionBox) =>
+  `calc(var(--irt-title) + ${b.heads} * var(--irt-head) + ${b.rows} * var(--irt-row) + ${b.gaps} * var(--irt-gap))`;
+
+/** Width of the period columns for the tab's widest figure (`chars` characters): never under the grid's own. */
+export const gridColWidth = (chars: number) =>
+  `max(var(--irt-colbase), calc(${Math.max(chars, 1)}ch + ${FIGURE_ROOM}px))`;
+
+/** Label padding for a printed level: a fixed gutter and 12 px per level, nothing else moves. */
+export const gridLabelPad = (depth: number) => GRID_GUTTER + Math.max(0, Math.round(depth)) * GRID_INDENT;
+
+/** Longest figure the grid's shared column width is set for, in characters ("(4,002,814)"). */
+export const FIGURE_CAP = 11;
+
+/**
+ * A figure for the grid: as printed, or, when it is longer than `FIGURE_CAP` characters (a line whose
+ * figures are stated in full units inside a table in millions), in short form ("1.8T", "(658M)") so one
+ * figure never widens every column of the tab; the cell's title keeps the full figure.
+ */
+export function gridFigure(text: string, value: number, div: number, mark: string): string {
+  const body = mark && text.endsWith(mark) ? text.slice(0, -mark.length) : text;
+  if (body.length <= FIGURE_CAP) return text;
+  const short = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(
+    Math.abs(value / (div || 1)),
+  );
+  return `${value < 0 ? `(${short})` : short}${body === text ? "" : mark}`;
+}

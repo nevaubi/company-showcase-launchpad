@@ -3,7 +3,17 @@
 // Controls: current or all series, quarterly or annual, 8Q / 20Q / all, a category filter, line search,
 // a jump list, Excel and per-section downloads. Sections render as they come near the screen, so a bank's
 // page lays out quickly; nothing scrolls inside the page except a wide table sideways.
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   Check,
   ChevronDown,
@@ -21,14 +31,30 @@ import { Segmented } from "@/components/app/segmented";
 import { IrPanel } from "@/components/ir/panel";
 import { CheckDot } from "@/components/ir/marks";
 import {
+  GridCols,
+  HeadCells,
   StatementSection,
+  gridWidth,
   type SectionView,
   type ShownCell,
   type ShownRow,
 } from "@/components/ir/statement-section";
 import { IR } from "@/components/ir/typography";
+import { ScrollGroupContext, scrollGroup } from "@/components/ir/scroll-group";
 import { filterOptions, missingNote, sectionFilter } from "@/components/ir/statement-nav";
-import { basisTag, isBlank, isRatioLine, notePrinted, stripes, totalKinds } from "@/components/ir/table-style";
+import {
+  basisTag,
+  isBlank,
+  splitMark,
+  isRatioLine,
+  notePrinted,
+  gridColWidth,
+  FIGURE_CAP,
+  gridFigure,
+  sectionHeightCss,
+  totalKinds,
+  type SectionBox,
+} from "@/components/ir/table-style";
 import type { VizLine } from "@/components/ir/viz-slots";
 import { useSource } from "@/components/source/source-context";
 import { Button } from "@/components/ui/button";
@@ -83,6 +109,16 @@ import {
   type StatementRow,
 } from "@/lib/ir/statements";
 import { openIrCell, type IrFocus } from "@/components/ir/breakdowns";
+import {
+  hasYtd,
+  isYtdSection,
+  parseYtdKey,
+  sortYtd,
+  ytdHead,
+  ytdInSpan,
+  ytdLong,
+  ytdRowCells,
+} from "@/components/ir/ytd";
 import { cn } from "@/lib/utils";
 
 type Freq = "q" | "y";
@@ -100,11 +136,12 @@ const SPANS: Record<Freq, { v: string; l: string }[]> = {
 };
 const DEFAULT_SPAN: Record<Freq, string> = { q: "8", y: "5" };
 const FREQ_FILE: Record<Freq, string> = { q: "quarterly", y: "annual" };
+/** The label cell of the tab's column head row. */
+const FREQ_HEAD: Record<Freq, string> = { q: "Quarter", y: "Fiscal year" };
 /** Sections laid out on first paint; the rest mount as they come within about one screen. */
 const EAGER = 1;
 /** How far below the screen a section starts to mount. */
 const MOUNT_MARGIN = "600px 0px";
-const ROW_PX = 28;
 
 const KIND_NAME: Record<string, string> = {
   "press-release": "earnings release",
@@ -152,12 +189,15 @@ function cellTitle(
   freq: Freq,
   chk: PayloadCheck | undefined,
   held: boolean,
+  /** the figure in full, when the grid shows it in short form */
+  full?: string,
 ) {
   const doc = c.d != null ? p.docs[c.d] : undefined;
   const kind = KIND_NAME[doc?.kind ?? ""] ?? "document";
   return [
-    `${lineLabel(s)}, ${periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m)}`,
+    `${lineLabel(s)}, ${parseYtdKey(e) ? ytdLong(e) : periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m)}`,
     held ? `Held back: ${c.why ?? "its unit is contradicted by the documents"}` : null,
+    full && full.length > FIGURE_CAP ? `In full: ${full}` : null,
     c.f ? `Calculated: ${c.f.formula}` : c.x ? `Printed as “${c.x}”` : null,
     !c.f && c.how === "printed" ? "Read from the document's own table" : null,
     doc ? `In the ${kind}${doc.filed ? ` filed ${doc.filed}` : ""}` : null,
@@ -192,8 +232,13 @@ function sectionView(
     dim: string;
     q: string;
     fy: ReturnType<typeof fiscalCalendar>;
+    /** a year-to-date section (`isYtdSection`) under the quarterly switch: its columns as printed, or the
+     *  quarters (printed first quarters, the others calculated from the year-to-date figures) */
+    ytd?: "printed" | "quarters";
   },
 ): SectionView | null {
+  const ytd = o.freq === "q" && isYtdSection(sec) ? (o.ytd ?? "printed") : undefined;
+  const printedYtd = ytd === "printed";
   // A chip selects whole printed tables by their kind; a section without one (the text figures) by its lines.
   const secFilter = sectionFilter(sec);
   if (o.dim !== "all" && secFilter && secFilter !== o.dim) return null;
@@ -202,21 +247,35 @@ function sectionView(
   const match = o.q ? (s: PayloadSeries) => s.label.toLowerCase().includes(o.q) : undefined;
   const { rows, hidden } = visibleRows(sec, byKey, {
     cut: o.cut,
-    has: (s) => printsIn(s, o.all, o.freq) && dimOk(s),
+    has: (s) => (printedYtd ? hasYtd(s) : printsIn(s, o.all, o.freq)) && dimOk(s),
     match,
   });
   const lineRows = rows.filter(
     (r): r is Extract<StatementRow, { kind: "line" }> => r.kind === "line",
   );
   if (!lineRows.length) return null;
-  const merged = new Map(lineRows.map((r) => [r, rowCells(r.ks, byKey, o.freq, r.at)]));
+  const merged = new Map(
+    lineRows.map((r) => [
+      r,
+      printedYtd ? ytdRowCells(r.ks, byKey) : rowCells(r.ks, byKey, o.freq, r.at),
+    ]),
+  );
   const present = new Set<string>();
   for (const m of merged.values())
     for (const e of [...Object.keys(m.cells), ...Object.keys(m.held)]) present.add(e);
-  const inGrid = o.all.filter((e) => present.has(e));
-  const cols = o.span === "all" ? inGrid : inGrid.slice(-Number(o.span));
-  if (!cols.length) return null;
-  const headMap = uniqueHeads(cols, o.freq, o.fy);
+  // A year-to-date section lays out its printed columns in time order; a period chip keeps those that end
+  // within the quarters it covers.
+  const cols = printedYtd
+    ? ytdInSpan(sortYtd(present), o.all, o.span)
+    : o.span === "all"
+      ? o.all
+      : o.all.slice(-Number(o.span));
+  // The grid's columns follow the period chips, never the section's content: a section with no figure in
+  // them is not in view.
+  if (!cols.some((e) => present.has(e))) return null;
+  const headMap = printedYtd
+    ? new Map(cols.map((k) => [k, ytdHead(k)]))
+    : uniqueHeads(cols, o.freq, o.fy);
   const tableChecks = sectionChecks(sec, byKey, checks);
   let tieOk = 0;
   let tieN = 0;
@@ -242,13 +301,15 @@ function sectionView(
             // printed marks of the anchor table (build format 3)
             bold: r.bold,
             rule: r.rule,
-            up: r.up != null && rows.includes(sec.rows[r.up]) ? rows.indexOf(sec.rows[r.up]) : undefined,
+            up:
+              r.up != null && rows.includes(sec.rows[r.up])
+                ? rows.indexOf(sec.rows[r.up])
+                : undefined,
             old: r.old,
           }
         : { kind: r.kind },
     ),
   );
-  const bands = stripes(rows);
   const shown: ShownRow[] = rows.map((r, i) => {
     if (r.kind === "gap") return { kind: "gap", id: `g${i}` };
     if (r.kind === "head") return { kind: "head", id: `h${i}`, text: r.text, depth: r.depth };
@@ -264,7 +325,7 @@ function sectionView(
       const isHeld = !m.cells[e];
       const owner = byKey.get(m.from[e]) ?? s;
       // Only a total the section prints with its parts carries the tie-out mark, checked against those parts.
-      const chk = r.total ? tableChecks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
+      const chk = r.total && !printedYtd ? tableChecks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
       if (chk && !chk.partial) {
         tieN++;
         if (chk.ok) tieOk++;
@@ -275,18 +336,30 @@ function sectionView(
       return {
         c,
         s: owner,
-        text: printedFigure(c.v, shownDiv, dec, suffix),
+        text: gridFigure(printedFigure(c.v, shownDiv, dec, suffix), c.v, shownDiv, suffix),
         held: isHeld,
         check: chk,
-        title: cellTitle(p, owner, c, e, o.freq, chk, isHeld),
+        title: cellTitle(
+          p,
+          owner,
+          c,
+          e,
+          o.freq,
+          chk,
+          isHeld,
+          printedFigure(c.v, shownDiv, dec, suffix),
+        ),
+        ...(printedYtd ? { e: c.e ?? parseYtdKey(e)?.e ?? e } : {}),
       };
     });
-    lines.push({
-      s,
-      depth: r.depth,
-      total: r.total,
-      cells: cells.map((x) => (x && !x.held ? x.c : null)),
-    });
+    // The charts plot quarters and years; printed year-to-date columns of different lengths are not a series.
+    if (!printedYtd)
+      lines.push({
+        s,
+        depth: r.depth,
+        total: r.total,
+        cells: cells.map((x) => (x && !x.held ? x.c : null)),
+      });
     const note = sec.id === "text" ? (s.unit === "usd" ? "" : "") : scaleNote(div, s, sec.div);
     const label = rowLabel(r, byKey);
     return {
@@ -296,7 +369,6 @@ function sectionView(
       depth: r.depth,
       total: r.total,
       tk: kinds[i],
-      stripe: bands[i],
       mark: suffix,
       // a money line printed in dollars inside a table in millions is a per-share line
       ratio: isRatioLine(s.unit, s.unit === "usd" && div === 1 && sec.div > 1),
@@ -318,6 +390,13 @@ function sectionView(
     sec,
     cols,
     heads: cols.map((e) => headMap.get(e)!),
+    titles: printedYtd ? cols.map(ytdLong) : undefined,
+    ytd,
+    box: {
+      rows: shown.filter((r) => r.kind !== "gap").length,
+      gaps: shown.filter((r) => r.kind === "gap").length,
+      heads: printedYtd ? 1 : 0,
+    },
     rows: shown,
     tieOk,
     tieN,
@@ -332,12 +411,13 @@ function sectionView(
 /** Mounts its section when it comes within about two screens; until then a block of about its height holds the place. */
 function Lazy({
   eager,
-  estimate,
+  box,
   id,
   children,
 }: {
   eager: boolean;
-  estimate: number;
+  /** the section's make-up: the placeholder is exactly its height (`sectionHeightCss`) */
+  box: SectionBox;
   id: string;
   children: ReactNode;
 }) {
@@ -360,9 +440,17 @@ function Lazy({
     <div
       ref={ref}
       data-statement-slot={id}
-      className="min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px)+0.5rem)] border-t first:border-t-0"
+      className="min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px))]"
     >
-      {on ? children : <div aria-hidden style={{ height: estimate }} />}
+      {on ? (
+        children
+      ) : (
+        <div
+          aria-hidden
+          data-statement-hold
+          style={{ "--hold": sectionHeightCss(box), height: "var(--hold)" } as CSSProperties}
+        />
+      )}
     </div>
   );
 }
@@ -371,29 +459,6 @@ export interface StatementsSummary {
   tieOk: number;
   tieN: number;
   sections: number;
-}
-
-/**
- * The statements' control bar (line type, Go to a section, Find a line) sticks under the page header, so the
- * jump is always in reach; its height (one row, or two on a phone) is published as `--ir-bar` on the panel
- * body so section head strips and jump targets sit under it. A CSS variable, not a held height.
- */
-function useStickyBar() {
-  const [el, setEl] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const host = el?.parentElement;
-    if (!el || !host) return;
-    const set = () => host.style.setProperty("--ir-bar", `${el.offsetHeight}px`);
-    set();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(set);
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      host.style.removeProperty("--ir-bar");
-    };
-  }, [el]);
-  return setEl;
 }
 
 export function IrStatements({
@@ -413,7 +478,10 @@ export function IrStatements({
   /** the tie-out count of what is in view, for the badge at the top of the tab */
   onSummary?: (s: StatementsSummary) => void;
 }) {
-  const barRef = useStickyBar();
+  const gridRoot = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
+  // One sideways position for the head row and every section (scroll-group.ts).
+  const group = useMemo(() => scrollGroup(() => gridRoot.current), []);
   const [freq, setFreq] = useState<Freq>("q");
   const [span, setSpan] = useState(DEFAULT_SPAN.q);
   const [show, setShow] = useState<"cur" | "all">("cur");
@@ -422,6 +490,12 @@ export function IrStatements({
   const [exporting, setExporting] = useState<string | null>(null);
   // Tables of older documents and lines only other copies print: collapsed, opened by the reader, a search or a jump.
   const [moreOpen, setMoreOpen] = useState(false);
+  // Year-to-date sections the reader switched to quarters (by section id); printed columns otherwise.
+  const [ytdMode, setYtdMode] = useState<Record<string, "printed" | "quarters">>({});
+  const onYtd = useCallback(
+    (id: string, v: "printed" | "quarters") => setYtdMode((m) => ({ ...m, [id]: v })),
+    [],
+  );
   const [scale] = useUnitScale();
   const { open } = useSource();
   const company = useCompany(ticker);
@@ -436,7 +510,9 @@ export function IrStatements({
   const cov = coverageOf(ticker);
   const prof = company.data?.profile;
   const sectorText = cov?.sector ?? prof?.sector ?? "";
-  const industryText = [cov?.industry ?? prof?.industry, prof?.sicDescription].filter(Boolean).join(" ");
+  const industryText = [cov?.industry ?? prof?.industry, prof?.sicDescription]
+    .filter(Boolean)
+    .join(" ");
   const sector = useMemo(() => sectorOf(sectorText, industryText), [sectorText, industryText]);
   const sections = useMemo(() => {
     const secs = assembleStatements(payload, { sector: sectorText, industry: industryText });
@@ -450,10 +526,7 @@ export function IrStatements({
   }, [chips, dim]);
   const absent = useMemo(
     () =>
-      missingNote(
-        missingStatements(sections, sector),
-        missingHeadlines(payload, sections, sector),
-      ),
+      missingNote(missingStatements(sections, sector), missingHeadlines(payload, sections, sector)),
     [sections, sector, payload],
   );
   const grids = useMemo(() => periodGrids(payload), [payload]);
@@ -467,7 +540,18 @@ export function IrStatements({
     let hiddenSecs = 0;
     let hiddenLines = 0;
     for (const sec of sections) {
-      const v = sectionView(payload, sec, byKey, checks, { freq, all, span, cut, dim, q, fy });
+      const base = { freq, all, span, cut, dim, q, fy };
+      let v = sectionView(payload, sec, byKey, checks, { ...base, ytd: ytdMode[sec.id] });
+      // A year-to-date section offers its quarters beside its printed columns when both have figures; a
+      // choice with nothing behind it falls back to the other.
+      if (freq === "q" && isYtdSection(sec)) {
+        const other = sectionView(payload, sec, byKey, checks, {
+          ...base,
+          ytd: v?.ytd === "quarters" ? "printed" : "quarters",
+        });
+        if (!v) v = other;
+        else if (other) v = { ...v, ytdChoice: true };
+      }
       if (v) {
         out.push(v);
         hiddenLines += v.hidden;
@@ -481,7 +565,7 @@ export function IrStatements({
       }
     }
     return { out, hiddenSecs, hiddenLines };
-  }, [sections, payload, byKey, checks, freq, all, span, cut, dim, q, fy]);
+  }, [sections, payload, byKey, checks, freq, all, span, cut, dim, q, fy, ytdMode]);
 
   const tieOk = views.out.reduce((n, v) => n + v.tieOk, 0);
   const tieN = views.out.reduce((n, v) => n + v.tieN, 0);
@@ -625,11 +709,15 @@ export function IrStatements({
     (sec: Statement, cols: string[]) => {
       if (!gate("exports")) return;
       const esc = (x: string) => (/[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
+      // A year-to-date section's printed columns ("9:2026-09-30") export under their length and end.
+      const ytd = cols.length > 0 && cols.every((c) => parseYtdKey(c));
       const out = [
         [
           "Line",
           "Unit",
-          ...cols.map((c) => (freq === "y" ? `Year ending ${c}` : `Quarter ending ${c}`)),
+          ...cols.map((c) =>
+            ytd ? esc(ytdLong(c)) : freq === "y" ? `Year ending ${c}` : `Quarter ending ${c}`,
+          ),
         ].join(","),
       ];
       for (const r of sec.rows) {
@@ -637,7 +725,7 @@ export function IrStatements({
         if (r.kind !== "line") continue;
         const s = byKey.get(r.k);
         if (!s) continue;
-        const m = rowCells(r.ks, byKey, freq, r.at);
+        const m = ytd ? ytdRowCells(r.ks, byKey) : rowCells(r.ks, byKey, freq, r.at);
         out.push(
           [
             esc(`${"  ".repeat(r.depth)}${rowLabel(r, byKey)}`),
@@ -648,13 +736,35 @@ export function IrStatements({
       }
       downloadBlob(
         new Blob([out.join("\n")], { type: "text/csv;charset=utf-8" }),
-        `${ticker}-${slug(sec.title)}-${FREQ_FILE[freq]}.csv`,
+        `${ticker}-${slug(sec.title)}-${ytd ? "year-to-date" : FREQ_FILE[freq]}.csv`,
       );
     },
     [byKey, freq, gate, ticker],
   );
 
   const lines = views.out.reduce((n, v) => n + v.rows.filter((r) => r.kind === "line").length, 0);
+  // The grid's columns: the period chips over the tab's period grid, the same for every section.
+  const gridCols = useMemo(() => (span === "all" ? all : all.slice(-Number(span))), [all, span]);
+  const gridHeads = useMemo(() => uniqueHeads(gridCols, freq, fy), [gridCols, freq, fy]);
+  // One column width for the whole tab: the grid's own, wider only when the tab's widest figure needs it.
+  const widest = useMemo(() => {
+    let w = 0;
+    for (const v of views.out)
+      for (const r of v.rows)
+        if (r.kind === "line")
+          for (const x of r.cells) {
+            if (!x) continue;
+            const [fig] = splitMark(x.text, r.mark);
+            w = Math.max(w, fig.replace(/\)$/, "").length);
+          }
+    return w;
+  }, [views.out]);
+  // A period chip or the period type opens the grid at its newest columns again.
+  useLayoutEffect(() => {
+    const h = headRef.current;
+    return h ? group.add(h) : undefined;
+  }, [group]);
+  useLayoutEffect(() => group.reset(), [group, freq, span, gridCols.length]);
   const front = views.out.filter((v) => v.sec.group !== "more");
   const more = views.out.filter((v) => v.sec.group === "more");
   // A search shows its matches wherever they are.
@@ -664,7 +774,7 @@ export function IrStatements({
     jumpTo(id);
   };
   const slot = (v: SectionView, i: number) => (
-    <Lazy key={v.sec.id} id={v.sec.id} eager={i < EAGER} estimate={88 + v.rows.length * ROW_PX}>
+    <Lazy key={v.sec.id} id={v.sec.id} eager={i < EAGER} box={v.box}>
       <StatementSection
         view={v}
         ticker={ticker}
@@ -676,6 +786,7 @@ export function IrStatements({
         onCsv={onCsv}
         onChecks={onChecks}
         openCell={openCell}
+        onYtd={onYtd}
       />
     </Lazy>
   );
@@ -767,195 +878,240 @@ export function IrStatements({
         </>
       }
     >
-      <div
-        ref={barRef}
-        data-agent-controls
-        data-statements-bar
-        className="sticky top-[var(--sticky-top,3.5rem)] z-30 flex flex-wrap items-center gap-2 border-b bg-card px-4 py-2"
-      >
-        {/* One line on a phone too (it scrolls sideways), so the sticky bar stays two rows at most. */}
-        <div className="no-scrollbar min-w-0 max-w-full overflow-x-auto max-sm:py-1">
-          <Segmented
-            label="Line type"
-            size="xs"
-            className="irt-hits max-w-none flex-nowrap"
-            value={dim}
-            onChange={setDim}
-            options={chips.map((d) => ({
-              v: d.v,
-              l: d.l,
-              title: d.v === "all" ? undefined : `${d.n} table${d.n === 1 ? "" : "s"}`,
-            }))}
-          />
-        </div>
-        <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
-          <Select value="" onValueChange={jump}>
-            <SelectTrigger className="h-10 w-full text-xs sm:h-8 sm:w-56" aria-label="Go to a section">
-              <SelectValue placeholder="Go to a section" />
-            </SelectTrigger>
-            <SelectContent className="max-h-80">
-              {jumpGroups(
-                front.map((v) => v.sec),
-                sector,
-              ).map((g) => (
-                <SelectGroup key={g.kind}>
-                  <SelectLabel className="text-[11px]">{g.label}</SelectLabel>
-                  {g.sections.map((sec) => (
-                    <SelectItem key={sec.id} value={sec.id} className="text-xs">
-                      {sec.title}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ))}
-              {more.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel className="text-[11px]">More tables</SelectLabel>
-                  {more.map((v) => (
-                    <SelectItem key={v.sec.id} value={v.sec.id} className="text-xs">
-                      {v.sec.title}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-            </SelectContent>
-          </Select>
-          <div className="relative w-full sm:w-56">
-            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Find a line, e.g. card income"
-              className="h-10 pl-7 text-xs sm:h-8"
-              aria-label="Find a line"
-            />
-          </div>
-        </div>
-      </div>
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-1.5",
-          IR.caption,
-        )}
-      >
-        <span className="num">
-          {front.length.toLocaleString()} section{front.length === 1 ? "" : "s"}
-          {more.length ? ` and ${more.length.toLocaleString()} more` : ""} ·{" "}
-          {lines.toLocaleString()} lines
-        </span>
-        {tieN > 0 && (
-          <button
-            type="button"
-            onClick={() => onChecks()}
-            className="inline-flex items-center gap-1.5 rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      <ScrollGroupContext.Provider value={group}>
+        <div
+          ref={gridRoot}
+          data-statements-grid
+          className="irg"
+          style={{ "--col": gridColWidth(widest) } as CSSProperties}
+        >
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-1.5",
+              IR.caption,
+            )}
           >
-            {tieOk === tieN ? <Check aria-hidden className="size-3 text-positive" /> : <CheckDot />}
             <span className="num">
-              {tieOk.toLocaleString()} of {tieN.toLocaleString()}
+              {front.length.toLocaleString()} section{front.length === 1 ? "" : "s"}
+              {more.length ? ` and ${more.length.toLocaleString()} more` : ""} ·{" "}
+              {lines.toLocaleString()} lines
             </span>
-            period totals in view tie out
-          </button>
-        )}
-        {show === "cur" && views.hiddenLines > 0 && (
-          <span>
-            {views.hiddenLines.toLocaleString()} discontinued or older-basis line
-            {views.hiddenLines === 1 ? "" : "s"}
-            {views.hiddenSecs
-              ? ` (${views.hiddenSecs} whole section${views.hiddenSecs === 1 ? "" : "s"})`
-              : ""}{" "}
-            hidden.{" "}
-            <button
-              type="button"
-              onClick={() => setShow("all")}
-              className="rounded-sm text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Show all series
-            </button>
-          </span>
-        )}
-        <Tooltip>
-          <TooltipTrigger className="ml-auto inline-flex items-center gap-1 hover:text-foreground">
-            <Info className="size-3.5" /> How to read
-          </TooltipTrigger>
-          <TooltipContent align="end" className="max-w-sm space-y-1.5 text-xs">
-            <p>
-              Each section is one table as the company's newest document prints it, with the same
-              table of earlier documents joined on, so its lines run over every period stored.
-              Figures are in the scale the table prints, stated under its title; parentheses are
-              negatives.
-            </p>
-            <p>
-              Rows, their names, indents and bold totals are read from the document's own tables,
-              figure by figure, so every printed figure opens the cell it came from.
-            </p>
-            <p>
-              A small tick marks a total whose printed parts add up to it. An amber dot marks a
-              figure that fails a check, a hollow ring one held back or printed differently
-              elsewhere; the checks panel lists them with the numbers.
-            </p>
-            <p>
-              Values with a dotted underline are calculated (
-              {freq === "q"
-                ? "fourth quarter = full year less the first three quarters"
-                : "full year = four quarters"}
-              ); hover one for the formula.
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
-      {absent && (
-        <p data-statements-absent className={cn("border-b px-4 py-1.5", IR.caption)}>
-          {absent}
-        </p>
-      )}
-      {!views.out.length ? (
-        <p className="p-4 text-[13px] text-muted-foreground">
-          {q ? `No lines match “${query}”.` : "Nothing in this view for the selected periods."}
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 pb-4">
-          {front.map((v, i) => (
-            <Fragment key={v.sec.id}>
-              {v.sec.group === "other" && front[i - 1]?.sec.group !== "other" && (
-                <p
-                  data-statement-group="other"
-                  className={cn("border-t bg-secondary/40 px-4 py-1.5", IR.caption)}
-                >
-                  Tables only other documents of this release print
-                </p>
-              )}
-              {slot(v, i)}
-            </Fragment>
-          ))}
-          {more.length > 0 && (
-            <div
-              data-statement-group="more"
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2.5"
-            >
+            {tieN > 0 && (
               <button
                 type="button"
-                aria-expanded={moreShown}
-                onClick={() => setMoreOpen((o) => !o)}
-                disabled={!!q}
-                className="inline-flex h-10 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors sm:h-7 duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                onClick={() => onChecks()}
+                className="inline-flex items-center gap-1.5 rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <ChevronDown
-                  aria-hidden
-                  className={cn(
-                    "size-3.5 transition-transform duration-150 motion-reduce:transition-none",
-                    moreShown && "rotate-180",
-                  )}
-                />
-                {moreShown ? "Hide" : "Show"} {more.length.toLocaleString()} more table
-                {more.length === 1 ? "" : "s"}
+                {tieOk === tieN ? (
+                  <Check aria-hidden className="size-3 text-positive" />
+                ) : (
+                  <CheckDot />
+                )}
+                <span className="num">
+                  {tieOk.toLocaleString()} of {tieN.toLocaleString()}
+                </span>
+                period totals in view tie out
               </button>
-              <span className={IR.caption}>
-                Tables of older documents and lines only other copies of a table print
+            )}
+            {show === "cur" && views.hiddenLines > 0 && (
+              <span>
+                {views.hiddenLines.toLocaleString()} discontinued or older-basis line
+                {views.hiddenLines === 1 ? "" : "s"}
+                {views.hiddenSecs
+                  ? ` (${views.hiddenSecs} whole section${views.hiddenSecs === 1 ? "" : "s"})`
+                  : ""}{" "}
+                hidden.{" "}
+                <button
+                  type="button"
+                  onClick={() => setShow("all")}
+                  className="rounded-sm text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Show all series
+                </button>
               </span>
+            )}
+            <Tooltip>
+              <TooltipTrigger className="ml-auto inline-flex items-center gap-1 hover:text-foreground">
+                <Info className="size-3.5" /> How to read
+              </TooltipTrigger>
+              <TooltipContent align="end" className="max-w-sm space-y-1.5 text-xs">
+                <p>
+                  Each section is one table as the company's newest document prints it, with the
+                  same table of earlier documents joined on, so its lines run over every period
+                  stored. Figures are in the scale the table prints, stated under its title;
+                  parentheses are negatives.
+                </p>
+                <p>
+                  Rows, their names, indents and bold totals are read from the document's own
+                  tables, figure by figure, so every printed figure opens the cell it came from.
+                </p>
+                <p>
+                  A small tick marks a total whose printed parts add up to it. An amber dot marks a
+                  figure that fails a check, a hollow ring one held back or printed differently
+                  elsewhere; the checks panel lists them with the numbers.
+                </p>
+                <p>
+                  Values with a dotted underline are calculated (
+                  {freq === "q"
+                    ? "fourth quarter = full year less the first three quarters"
+                    : "full year = four quarters"}
+                  ); hover one for the formula.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          {absent && (
+            <p data-statements-absent className={cn("border-b px-4 py-1.5", IR.caption)}>
+              {absent}
+            </p>
+          )}
+          {/* One sticky layer of a constant height: the controls, then the grid's one column head row,
+          which scrolls sideways with every section. */}
+          <div
+            data-statements-sticky
+            className="irg-sticky sticky top-[var(--sticky-top,3.5rem)] z-30"
+          >
+            <div
+              data-agent-controls
+              data-statements-bar
+              className="irg-bar flex items-center gap-2 border-b bg-card px-4 max-sm:flex-col max-sm:items-stretch max-sm:justify-center max-sm:gap-1"
+            >
+              {/* One line on a phone too (it scrolls sideways): the bar keeps its fixed height. */}
+              <div className="no-scrollbar flex h-10 min-w-0 flex-1 items-center overflow-x-auto sm:h-8">
+                <Segmented
+                  label="Line type"
+                  size="xs"
+                  className="irt-hits max-w-none flex-nowrap"
+                  value={dim}
+                  onChange={setDim}
+                  options={chips.map((d) => ({
+                    v: d.v,
+                    l: d.l,
+                    title: d.v === "all" ? undefined : `${d.n} table${d.n === 1 ? "" : "s"}`,
+                  }))}
+                />
+              </div>
+              <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+                <Select value="" onValueChange={jump}>
+                  <SelectTrigger
+                    className="h-10 w-full text-xs sm:h-8 sm:w-56"
+                    aria-label="Go to a section"
+                  >
+                    <SelectValue placeholder="Go to a section" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-80">
+                    {jumpGroups(
+                      front.map((v) => v.sec),
+                      sector,
+                    ).map((g) => (
+                      <SelectGroup key={g.kind}>
+                        <SelectLabel className="text-[11px]">{g.label}</SelectLabel>
+                        {g.sections.map((sec) => (
+                          <SelectItem key={sec.id} value={sec.id} className="text-xs">
+                            {sec.title}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                    {more.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel className="text-[11px]">More tables</SelectLabel>
+                        {more.map((v) => (
+                          <SelectItem key={v.sec.id} value={v.sec.id} className="text-xs">
+                            {v.sec.title}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                  </SelectContent>
+                </Select>
+                <div className="relative w-full sm:w-56">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Find a line, e.g. card income"
+                    className="h-10 pl-7 text-xs sm:h-8"
+                    aria-label="Find a line"
+                  />
+                </div>
+              </div>
+            </div>
+            <div
+              ref={headRef}
+              data-head-strip
+              onScroll={(e) => group.follow(e.currentTarget)}
+              className="irg-headstrip scrollbar-thin overflow-x-auto overflow-y-hidden"
+            >
+              <table
+                aria-hidden
+                className="irg-table irg-head"
+                style={{ width: gridWidth(gridCols.length) }}
+              >
+                <GridCols n={gridCols.length} />
+                <thead>
+                  <tr>
+                    <th className="irg-fc irg-hlabel">{FREQ_HEAD[freq]}</th>
+                    <HeadCells
+                      heads={gridCols.map((e) => gridHeads.get(e)!)}
+                      titles={gridCols.map((e) => periodLong(e, freq))}
+                    />
+                  </tr>
+                </thead>
+              </table>
+            </div>
+          </div>
+          {!views.out.length ? (
+            <p className="p-4 text-[13px] text-muted-foreground">
+              {q ? `No lines match “${query}”.` : "Nothing in this view for the selected periods."}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 pb-4">
+              {front.map((v, i) => (
+                <Fragment key={v.sec.id}>
+                  {v.sec.group === "other" && front[i - 1]?.sec.group !== "other" && (
+                    <p
+                      data-statement-group="other"
+                      className={cn("border-t bg-secondary/40 px-4 py-1.5", IR.caption)}
+                    >
+                      Tables only other documents of this release print
+                    </p>
+                  )}
+                  {slot(v, i)}
+                </Fragment>
+              ))}
+              {more.length > 0 && (
+                <div
+                  data-statement-group="more"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2.5"
+                >
+                  <button
+                    type="button"
+                    aria-expanded={moreShown}
+                    onClick={() => setMoreOpen((o) => !o)}
+                    disabled={!!q}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors sm:h-7 duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                  >
+                    <ChevronDown
+                      aria-hidden
+                      className={cn(
+                        "size-3.5 transition-transform duration-150 motion-reduce:transition-none",
+                        moreShown && "rotate-180",
+                      )}
+                    />
+                    {moreShown ? "Hide" : "Show"} {more.length.toLocaleString()} more table
+                    {more.length === 1 ? "" : "s"}
+                  </button>
+                  <span className={IR.caption}>
+                    Tables of older documents and lines only other copies of a table print
+                  </span>
+                </div>
+              )}
+              {moreShown && more.map((v, i) => slot(v, front.length + i))}
             </div>
           )}
-          {moreShown && more.map((v, i) => slot(v, front.length + i))}
         </div>
-      )}
+      </ScrollGroupContext.Provider>
     </IrPanel>
   );
 }

@@ -31,7 +31,11 @@ beforeAll(async () => {
       return [];
     }
   } as unknown as typeof IntersectionObserver;
-  const fx = jpm as unknown as { ticker: string; facts: IrFact[]; captions: Record<string, TableCaption[]> };
+  const fx = jpm as unknown as {
+    ticker: string;
+    facts: IrFact[];
+    captions: Record<string, TableCaption[]>;
+  };
   const p = buildPayload(fx.ticker, fx.facts);
   payload = await withCaptions(p, async (d) => fx.captions[p.docs[d].id]);
 });
@@ -55,7 +59,10 @@ describe("statement controls from the sections' kinds", () => {
   });
 
   it("groups JPM's jump list as a bank's, and the page keeps the supplement's order", () => {
-    const secs = assembleStatements(payload, { sector: "Financials", industry: "Diversified Banks" });
+    const secs = assembleStatements(payload, {
+      sector: "Financials",
+      industry: "Diversified Banks",
+    });
     expect(secs.every((s) => s.kind && s.filter)).toBe(true);
     const groups = jumpGroups(secs, sectorOf("Financials", "Diversified Banks"));
     expect(groups[0].label).toBe("Income statement");
@@ -74,7 +81,9 @@ describe("statement controls from the sections' kinds", () => {
     expect(screen.getByRole("heading", { name: "Consolidated statements of income" })).toBeTruthy();
     if (chips.includes("KPIs and ratios")) {
       fireEvent.click(within(bar).getByRole("radio", { name: "KPIs and ratios" }));
-      expect(screen.queryByRole("heading", { name: "Consolidated statements of income" })).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: "Consolidated statements of income" }),
+      ).toBeNull();
     }
   });
 
@@ -87,7 +96,9 @@ describe("statement controls from the sections' kinds", () => {
 
   it("sets a top-level total of totals as grand: JPM's total net revenue", () => {
     render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
-    const income = screen.getByRole("heading", { name: "Consolidated statements of income" }).closest("section")!;
+    const income = screen
+      .getByRole("heading", { name: "Consolidated statements of income" })
+      .closest("section")!;
     const tr = within(income).getByRole("rowheader", { name: "TOTAL NET REVENUE" }).closest("tr")!;
     expect(tr.className).toContain("irt-grand");
   });
@@ -112,14 +123,13 @@ describe("statement controls from the sections' kinds", () => {
   });
 });
 
-describe("phone fit of the label column", () => {
-  it("shows whole figure columns only, the labels taking the slack", async () => {
-    const { fitLabelWidth } = await import("./statement-section");
-    // 390 px phone: frame 328, labels 168, columns 92: two whole columns, labels 144.
-    expect(fitLabelWidth(328, 168, 92, 8)).toBe(144);
-    // Too narrow for two: one column, labels take the rest.
-    expect(fitLabelWidth(250, 168, 92, 8)).toBe(158);
-    // Desktop with a long history: labels 320, columns 92 in 1100: eight whole columns, labels 364.
-    expect(fitLabelWidth(1100, 320, 92, 20)).toBe(364);
+describe("grid geometry", () => {
+  it("knows a section's height from its rows: title band, printed heads, rows and spacers", async () => {
+    const { GRID, sectionHeight, gridLabelPad } = await import("./table-style");
+    expect(GRID.desktop).toMatchObject({ label: 320, col: 104, row: 28 });
+    expect(GRID.phone).toMatchObject({ label: 168, col: 88, row: 32 });
+    expect(sectionHeight({ rows: 10, gaps: 2, heads: 0 }, GRID.desktop)).toBe(48 + 280 + 16);
+    expect(sectionHeight({ rows: 10, gaps: 2, heads: 1 }, GRID.phone)).toBe(48 + 36 + 320 + 16);
+    expect([0, 1, 2, 3].map(gridLabelPad)).toEqual([12, 24, 36, 48]);
   });
 });

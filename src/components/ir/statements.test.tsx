@@ -1,4 +1,11 @@
-import { act, cleanup, fireEvent, render as baseRender, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as baseRender,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,7 +15,7 @@ import type { IrFact } from "@/lib/ir/kpis";
 import type { TableCaption } from "@/lib/ir/table-captions";
 import { withCaptions } from "@/lib/ir/statements";
 import { IrStatements } from "./statements";
-import { colWidth } from "./statement-section";
+import { gridColWidth } from "./table-style";
 
 const open = vi.fn();
 vi.mock("@/components/source/source-context", () => ({ useSource: () => ({ open }) }));
@@ -78,7 +85,9 @@ describe("IR statements", { timeout: 30_000 }, () => {
         .closest("tr")!.textContent,
     ).toContain("(658)");
     // Only the first section is laid out on first paint; the next mounts when it comes near (or on a jump).
-    expect(screen.queryByRole("heading", { name: "Segment & corporate results - managed basis" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Segment & corporate results - managed basis" }),
+    ).toBeNull();
     const slot = document.querySelector('[data-statement-slot="0:8"]');
     expect(slot).toBeTruthy();
     act(() => void window.dispatchEvent(new CustomEvent("ir-statement-show", { detail: "0:8" })));
@@ -86,27 +95,31 @@ describe("IR statements", { timeout: 30_000 }, () => {
     expect(onSummary).toHaveBeenLastCalledWith({ tieOk: 64, tieN: 64, sections: 2 });
   });
 
-  it("gives the tie-out mark its own gutter: figures stay right-aligned beside it, columns fit the widest figure", () => {
+  it("gives the tie-out mark its own slot: figures stay right-aligned beside it, one column width for the tab", () => {
     render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
     const income = section("Consolidated statements of income");
-    const total = within(income).getByRole("rowheader", { name: "TOTAL NET REVENUE" }).closest("tr")!;
+    const total = within(income)
+      .getByRole("rowheader", { name: "TOTAL NET REVENUE" })
+      .closest("tr")!;
     for (const b of within(total).getAllByRole("button")) {
-      const [figure, gutter] = [...b.children];
+      const [figure, paren, mark, gutter] = [...b.children];
       expect(figure.textContent).toMatch(/^[\d,()]+$/);
+      // the closing parenthesis, or its room on a positive figure, then the unit mark slot
+      expect(paren.className).toContain("irg-paren");
+      expect(mark.className).toContain("irg-mark");
       expect(gutter.hasAttribute("data-gutter")).toBe(true);
-      expect(gutter.className).toContain("w-3");
-      expect(gutter.className).not.toContain("absolute");
+      expect(gutter.className).toContain("irg-flag");
       // the drawn tick, not an icon
       expect(gutter.querySelector("svg")).toBeNull();
       expect(gutter.children).toHaveLength(1);
     }
-    const widest = Math.max(
-      ...within(income)
-        .getAllByRole("button")
-        .map((b) => b.children[0]?.textContent?.length ?? 0),
+    // One column width for every section, set once on the grid: no section sets its own.
+    const grid = income.closest("[data-statements-grid]") as HTMLElement;
+    expect(grid.style.getPropertyValue("--col")).toMatch(
+      /^max\(var\(--irt-colbase\), calc\(\d+ch \+ 42px\)\)$/,
     );
-    expect(income.style.getPropertyValue("--col")).toBe(colWidth(widest));
-    expect(colWidth(9)).toBe("max(5.75rem, calc(9ch + 1.75rem))");
+    expect(income.style.getPropertyValue("--col")).toBe("");
+    expect(gridColWidth(9)).toBe("max(var(--irt-colbase), calc(9ch + 42px))");
   });
 
   it("finds a line: the matching line and the totals it rolls into, in every section that prints it", () => {
@@ -162,20 +175,36 @@ describe("IR statements", { timeout: 30_000 }, () => {
     render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
     const bar = screen.getByLabelText("Go to a section").closest("[data-statements-bar]")!;
     expect(bar).toBeTruthy();
-    expect(bar.className).toContain("sticky");
+    expect(bar.closest("[data-statements-sticky]")!.className).toContain("sticky");
     expect(screen.getByLabelText("Find a line").closest("[data-statements-bar]")).toBe(bar);
     const income = section("Consolidated statements of income");
     const line = within(income).getByRole("rowheader", { name: "Card income" });
-    expect(line.className).toContain("py-0.5");
-    expect(line.className).not.toMatch(/\bpy-1\b/);
-    for (const b of within(line.closest("tr")!).getAllByRole("button")) expect(b.className).not.toMatch(/\bpy-1\b/);
+    // fixed-height grid rows: no cell or button pads itself taller
+    expect(line.className).toContain("irg-fc");
+    for (const b of within(line.closest("tr")!).getAllByRole("button"))
+      expect(b.className).not.toMatch(/\bpy-/);
     const head = income.querySelector("th[scope=rowgroup]") as HTMLTableCellElement;
     const cols = line.closest("tr")!.children.length;
     expect(head.colSpan).toBe(cols);
     expect(head.className).toContain("whitespace-nowrap");
     const gap = income.querySelector("tr[aria-hidden] td") as HTMLElement | null;
     if (gap) expect(gap.className).not.toContain("h-3");
-    // The section heads stick under the bar, not under the page header alone.
-    expect(income.querySelector("[data-head-strip]")!.className).toContain("var(--ir-bar");
+    // One column head row for the tab, in the same sticky layer as the bar; no section has its own.
+    expect(income.querySelector("[data-head-strip]")).toBeNull();
+    const layer = document.querySelector("[data-statements-sticky]")!;
+    expect(layer.className).toContain("sticky");
+    expect(layer.contains(bar)).toBe(true);
+    expect(layer.querySelector("[data-head-strip]")).toBeTruthy();
+  });
+  it("shows tables only: no Table and Chart toggle, no chart mounted, placeholders as tall as their sections", () => {
+    render(<IrStatements ticker="JPM" payload={payload} onChecks={() => undefined} />);
+    expect(screen.queryByRole("radiogroup", { name: "View" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Chart" })).toBeNull();
+    expect(document.querySelector("svg.recharts-surface, [data-ir-viz]")).toBeNull();
+    // A section not mounted yet holds exactly its own height, from its rows.
+    const hold = document.querySelector("[data-statement-hold]") as HTMLElement;
+    expect(hold.style.getPropertyValue("--hold")).toMatch(
+      /^calc\(var\(--irt-title\) \+ 0 \* var\(--irt-head\) \+ \d+ \* var\(--irt-row\) \+ \d+ \* var\(--irt-gap\)\)$/,
+    );
   });
 });

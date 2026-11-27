@@ -1,9 +1,11 @@
-// One statement section of the IR tab: a printed table of the company's documents over its whole
-// history, laid out as printed (headings, spacer bands, indented parts, totals under a rule), figures in
-// the printed scale, a quiet tick beside totals whose parts add up, and every figure opening its source.
-// The head row and the first column stay in view: the head is a second table in a sticky strip whose
-// horizontal scroll follows the body's, both with the same fixed column widths.
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+// One statement section of the IR tab, as one block of the tab's spreadsheet grid: a title band, then the
+// printed table's rows at one fixed height each, under the tab's one column head row (in the sticky layer
+// of `IrStatements`). Every section has the same label and period column widths, so figures line up from
+// the first table to the last, and its height is known from its data (`sectionHeight`, table-style.ts):
+// nothing moves while the page scrolls. Rows are laid out as printed (headings, spacers, indented parts,
+// totals under a rule), figures in the printed scale, a quiet tick beside totals whose parts add up, and
+// every figure opens its source.
+import { memo, useId, useLayoutEffect, useRef, useState } from "react";
 import { Check, Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
@@ -13,12 +15,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AltMark, CheckDot, HeldMark } from "@/components/ir/marks";
+import { useScrollGroup } from "@/components/ir/scroll-group";
 import { DASH, IR } from "@/components/ir/typography";
-import { BLANK, labelStyle, levelClass, splitMark, type TotalKind } from "@/components/ir/table-style";
+import {
+  BLANK,
+  gridLabelPad,
+  levelClass,
+  splitMark,
+  type SectionBox,
+  type TotalKind,
+} from "@/components/ir/table-style";
 import "@/components/ir/table.css";
-import { IrSectionViz, hasSectionViz, type VizLine } from "@/components/ir/viz-slots";
+import type { VizLine } from "@/components/ir/viz-slots";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadSeries } from "@/lib/ir/payload";
 import type { IrPeriodKind, PeriodHead } from "@/lib/ir/periods";
 import { periodLong } from "@/lib/ir/display";
@@ -38,8 +49,6 @@ export type ShownRow =
       total: boolean;
       /** subtotal or grand total as set (`totalKinds`) */
       tk: TotalKind;
-      /** a faint band on every other line of a block */
-      stripe: boolean;
       /** the unit mark printed after the figures (%, ×, bps), set muted */
       mark: string;
       /** a ratio, percentage, basis-point or per-share line */
@@ -65,12 +74,20 @@ export interface ShownCell {
   held: boolean;
   check?: PayloadCheck;
   title: string;
+  /** the period end the figure is for, where the column key is not one (a year-to-date column "9:2026-09-30") */
+  e?: string;
 }
 
 export interface SectionView {
   sec: Statement;
   cols: string[];
   heads: PeriodHead[];
+  /** the columns in full for hover titles, where the period kind does not say it (year-to-date columns) */
+  titles?: string[];
+  /** a year-to-date section under the quarterly switch: its printed columns, or quarters */
+  ytd?: "printed" | "quarters";
+  /** both ways of showing a year-to-date section have figures, so the section offers the choice */
+  ytdChoice?: boolean;
   rows: ShownRow[];
   /** checks of the totals in view: tie out / checked */
   tieOk: number;
@@ -81,30 +98,8 @@ export interface SectionView {
   /** printed lines hidden by "Current series" */
   hidden: number;
   lines: VizLine[];
-}
-
-const FIRST = "[--fc:10.5rem] sm:[--fc:17rem] lg:[--fc:20rem]";
-const COL = "5.75rem";
-/** The cell's figure, then a fixed gutter for its mark: the figure stays right-aligned beside the gutter. */
-const CELL_LAYOUT = "flex items-center justify-end pl-2 pr-1";
-const GUTTER = "ml-1 inline-flex w-3 shrink-0 items-center justify-center";
-/** Column width for a section whose longest figure has `chars` characters (figure, gutter and padding). */
-export const colWidth = (chars: number) => `max(${COL}, calc(${Math.max(chars, 1)}ch + 1.75rem))`;
-
-/** Narrowest the label column gets when it gives up room so one more whole figure column fits, px. */
-export const LABEL_MIN = 128;
-
-/**
- * Label column width when the figure columns overflow a frame `w` px wide: the frame shows whole figure
- * columns only, the label column takes what is left: at least its set width `fc`, or on a phone (fewer than
- * three whole columns) at least `LABEL_MIN` when that buys one more column.
- */
-export function fitLabelWidth(w: number, fc: number, cw: number, n: number): number {
-  let k = Math.max(1, Math.floor((w - fc) / cw));
-  // On a phone (fewer than three whole columns) one more column is worth narrower labels.
-  if (k < 3 && k + 1 <= n && w - (k + 1) * cw >= LABEL_MIN) k++;
-  k = Math.min(k, n);
-  return Math.max(Math.min(fc, LABEL_MIN), w - k * cw);
+  /** what the section is made of, for its height before it paints (`sectionHeight`) */
+  box: SectionBox;
 }
 
 /** A total whose parts add up: a small drawn tick (no icon element, so long tables stay light). */
@@ -114,17 +109,52 @@ function TieMark() {
   );
 }
 
+/** Column group of the grid: the label column and the period columns, all from the grid's variables. */
+export function GridCols({ n }: { n: number }) {
+  return (
+    <colgroup>
+      <col style={{ width: "var(--irt-fc)" }} />
+      {Array.from({ length: n }, (_, i) => (
+        <col key={i} style={{ width: "var(--col)" }} />
+      ))}
+    </colgroup>
+  );
+}
+
+/** Width of a grid table of `n` period columns: exactly its columns, the same in every section. */
+export const gridWidth = (n: number) => `calc(var(--irt-fc) + ${n} * var(--col))`;
+
+/** The column head cells: period over date; the newest column is marked by weight only. */
+export function HeadCells({ heads, titles }: { heads: PeriodHead[]; titles: string[] }) {
+  return (
+    <>
+      {heads.map((h, i) => (
+        <th
+          key={i}
+          scope="col"
+          title={titles[i]}
+          className={cn("irg-hcell", i === heads.length - 1 && "irg-latest")}
+        >
+          <span className="irg-period num">{h.main}</span>
+          <span className="irg-date num">{h.sub || BLANK}</span>
+        </th>
+      ))}
+    </>
+  );
+}
+
 export const StatementSection = memo(function StatementSection({
   view,
-  ticker,
-  payload,
+  ticker: _ticker,
+  payload: _payload,
   freq,
-  scale,
+  scale: _scale,
   exporting,
   onExcel,
   onCsv,
   onChecks,
   openCell,
+  onYtd,
 }: {
   view: SectionView;
   ticker: string;
@@ -136,118 +166,72 @@ export const StatementSection = memo(function StatementSection({
   onCsv: (sec: Statement, cols: string[]) => void;
   onChecks: (secId: string) => void;
   openCell: (s: PayloadSeries, end: string, c: PayloadCell) => void;
+  /** switch a year-to-date section between its printed columns and quarters */
+  onYtd?: (secId: string, v: "printed" | "quarters") => void;
 }) {
   const { sec, cols, heads, rows } = view;
-  const [mode, setMode] = useState<"table" | "chart">("table");
   const titleId = useId();
-  const head = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
-  const chartable = hasSectionViz(view.lines);
-  // The head strip follows the body's sideways scroll; long histories open at the newest columns.
-  const root = useRef<HTMLElement>(null);
-  const sync = useCallback(() => {
+  const group = useScrollGroup();
+  // The figure columns scroll sideways with the tab's head row and every other section.
+  useLayoutEffect(() => {
     const b = body.current;
-    if (!b) return;
-    if (head.current) head.current.scrollLeft = b.scrollLeft;
-    // The first column casts a soft edge while columns are hidden under it.
-    root.current?.toggleAttribute("data-scrolled", b.scrollLeft > 1);
-  }, []);
-  useEffect(() => {
-    const b = body.current;
-    const r = root.current;
-    if (!b) return;
-    // When the columns do not all fit (a phone, a long history), the label column takes the slack so the
-    // figure columns in view are whole: no figure is cut under the sticky labels.
-    const fit = () => {
-      if (!r) return;
-      r.style.removeProperty("--fc");
-      const fc = b.querySelector("tbody tr.irt-line > th")?.getBoundingClientRect().width ?? 0;
-      const cw = b.querySelector("tr.irt-line td")?.getBoundingClientRect().width ?? 0;
-      const w = b.clientWidth;
-      if (!fc || !cw || fc + cols.length * cw <= w + 1) return;
-      r.style.setProperty("--fc", `${fitLabelWidth(w, fc, cw, cols.length)}px`);
-    };
-    fit();
-    b.scrollLeft = b.scrollWidth;
-    sync();
-    if (typeof ResizeObserver === "undefined") return;
-    let last = b.clientWidth;
-    const ro = new ResizeObserver(() => {
-      if (Math.abs(b.clientWidth - last) < 1) return;
-      last = b.clientWidth;
-      fit();
-      b.scrollLeft = b.scrollWidth;
-      sync();
-    });
-    ro.observe(b);
-    return () => {
-      ro.disconnect();
-      r?.style.removeProperty("--fc");
-    };
-  }, [cols.length, mode, sync]);
-  // Columns fit the section's longest figure, with the mark gutter beside it, so nothing overlaps at any width.
-  const widest = useMemo(
-    () =>
-      rows.reduce(
-        (m, r) =>
-          r.kind === "line" ? r.cells.reduce((n, x) => Math.max(n, x?.text.length ?? 0), m) : m,
-        0,
-      ),
-    [rows],
-  );
-  const col = colWidth(widest);
-  const minWidth = `calc(var(--fc) + ${cols.length} * var(--col))`;
-  // A short history keeps its figures near their labels, as a printed page does: the label column grows by
-  // at most 12rem past its set width, and the table leaves the rest of the row empty.
-  const width = `min(100%, calc(var(--fc) + 12rem + ${cols.length} * var(--col)))`;
-  const colgroup = (
-    <colgroup>
-      <col style={{ width: "var(--fc)" }} />
-      {cols.map((e) => (
-        <col key={e} style={{ width: "var(--col)" }} />
-      ))}
-    </colgroup>
-  );
+    return b ? group.add(b) : undefined;
+  }, [group, cols.length]);
+  // A long name is cut to one line; a tap shows it in full.
+  const [tip, setTip] = useState<{ el: HTMLElement; text: string } | null>(null);
+  const tipRef = useRef<HTMLElement | null>(null);
+  tipRef.current = tip?.el ?? null;
+  const printedHeads = view.ytd === "printed";
+  const titles = cols.map((e, i) => view.titles?.[i] ?? periodLong(e, freq));
+  // A year-to-date head's short form already says "to": the range reads between the end dates.
+  const ends = printedHeads ? heads.map((h) => h.sub) : heads.map((h) => h.short);
   const span = cols.length
     ? cols.length === 1
       ? heads[0].short
-      : `${heads[0].short} to ${heads[heads.length - 1].short}`
+      : `${ends[0]} to ${ends[ends.length - 1]}`
     : "";
   const issues = view.failing + view.flagged + view.held;
+  const caption = [
+    sec.source ? `From the ${sec.source}` : "",
+    sec.unitLine,
+    view.ytd === "printed"
+      ? "Year-to-date columns as printed"
+      : view.ytd === "quarters"
+        ? "Quarters, calculated from the year-to-date figures where not printed"
+        : "",
+    span,
+    sec.docs > 1 ? `${sec.docs} documents` : "1 document",
+    view.hidden > 0 ? `${view.hidden} older line${view.hidden === 1 ? "" : "s"} hidden` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const n = cols.length;
+  const last = n - 1;
 
   return (
     <section
-      ref={root}
+      ref={undefined}
       aria-labelledby={titleId}
       data-statement={sec.id}
-      className={cn("irt-root min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px)+0.5rem)] pt-4", FIRST)}
-      style={{ "--col": col } as CSSProperties}
+      className="irg-sec min-w-0"
     >
-      <header className="irt-sec-head flex flex-col gap-x-3 gap-y-1.5 px-4 py-2 sm:flex-row sm:items-center">
+      <header className="irg-title">
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className={IR.group}>
+          <h3 id={titleId} className="irg-title-text" title={sec.title}>
             {sec.title}
           </h3>
-          <p className={IR.caption}>
-            {[
-              sec.source ? `From the ${sec.source}` : "",
-              sec.unitLine,
-              span,
-              sec.docs > 1 ? `${sec.docs} documents` : "1 document",
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            {view.hidden > 0 &&
-              ` · ${view.hidden} older line${view.hidden === 1 ? "" : "s"} hidden`}
+          <p className="irg-caption" title={caption}>
+            {caption}
           </p>
         </div>
-        <div data-agent-controls className="flex flex-wrap items-center gap-1.5">
+        <div data-agent-controls className="flex shrink-0 items-center gap-1.5">
           {view.tieN > 0 && (
             <button
               type="button"
               onClick={() => onChecks(sec.id)}
               className={cn(
-                "irt-hit inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "irt-hit inline-flex h-6 items-center gap-1 rounded-full border bg-card px-2 text-[11px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:hidden",
                 view.tieOk === view.tieN ? "text-muted-foreground" : "text-foreground",
               )}
               title="Periods in view whose parts add up to the printed total. Open the checks for this section."
@@ -267,21 +251,31 @@ export const StatementSection = memo(function StatementSection({
             <button
               type="button"
               onClick={() => onChecks(sec.id)}
-              className="irt-hit inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="irt-hit inline-flex h-6 items-center gap-1 rounded-full border bg-card px-2 text-[11px] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:hidden"
             >
               <CheckDot /> {issues} to review
             </button>
           )}
-          {chartable && (
+          {view.ytdChoice && onYtd && view.ytd && (
             <Segmented
-              label="View"
+              label="Columns"
               size="xs"
               className="irt-hits"
-              value={mode}
-              onChange={setMode}
+              value={view.ytd}
+              onChange={(v) => onYtd(sec.id, v)}
               options={[
-                { v: "table", l: "Table" },
-                { v: "chart", l: "Chart" },
+                {
+                  v: "printed",
+                  l: "Year to date",
+                  title:
+                    "The columns as the documents print them: three, six, nine and twelve months",
+                },
+                {
+                  v: "quarters",
+                  l: "Quarters",
+                  title:
+                    "Each quarter on its own: a quarter no document prints is the year-to-date figure less the one before it, marked as calculated",
+                },
               ]}
             />
           )}
@@ -332,188 +326,146 @@ export const StatementSection = memo(function StatementSection({
           </DropdownMenu>
         </div>
       </header>
-
-      {mode === "chart" && chartable ? (
-        <IrSectionViz
-          ticker={ticker}
-          payload={payload}
-          section={sec}
-          lines={view.lines}
-          cols={cols}
-          heads={heads.map((h) => h.short)}
-          freq={freq}
-          scale={scale}
-          openCell={openCell}
-        />
-      ) : (
-        <div className="relative">
-          <div
-            ref={head}
-            aria-hidden
-            data-head-strip
-            className="irt-colhead sticky top-[calc(var(--sticky-top,3.5rem)+var(--ir-bar,0px))] z-20 overflow-hidden"
-          >
-            <table
-              className={cn("table-fixed border-separate border-spacing-0", IR.row)}
-              style={{ minWidth, width }}
-            >
-              {colgroup}
-              <thead>
-                <tr>
-                  <th className="irt-fc sticky left-0 z-10 py-1 pl-4 pr-3 text-left align-bottom font-normal" />
-                  {heads.map((h, i) => (
+      <div
+        ref={body}
+        onScroll={(e) => group.follow(e.currentTarget)}
+        className="irg-scroll no-scrollbar overflow-x-auto overflow-y-hidden overscroll-x-contain"
+      >
+        <table aria-labelledby={titleId} className="irg-table" style={{ width: gridWidth(n) }}>
+          <GridCols n={n} />
+          {/* A year-to-date section prints its own column heads; any other uses the tab's head row. */}
+          <thead className={printedHeads ? "irg-head irg-ownhead" : "sr-only"}>
+            <tr>
+              <th scope="col" className="irg-fc irg-hlabel">
+                {printedHeads ? "As printed" : "Line"}
+              </th>
+              <HeadCells heads={heads} titles={titles} />
+            </tr>
+          </thead>
+          <tbody className="irg-body">
+            {rows.map((r) => {
+              if (r.kind === "gap")
+                return (
+                  <tr key={r.id} aria-hidden className="irt-gap">
+                    <td colSpan={n + 1} />
+                  </tr>
+                );
+              if (r.kind === "head")
+                return (
+                  <tr key={r.id} className="irt-group">
                     <th
-                      key={cols[i]}
-                      className={cn(
-                        "whitespace-nowrap py-1 pl-2 pr-5 text-right align-bottom font-normal",
-                        i === heads.length - 1 && "irt-latest",
-                      )}
-                      title={periodLong(cols[i], freq)}
+                      scope="rowgroup"
+                      colSpan={n + 1}
+                      className="whitespace-nowrap text-left"
+                      title={r.text}
                     >
-                      <span className="irt-period num block text-[11px]">{h.main}</span>
-                      {h.sub && <span className="irt-date num block text-[11px]">{h.sub}</span>}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-            </table>
-          </div>
-          <div
-            ref={body}
-            onScroll={sync}
-            className="relative overflow-x-auto overscroll-x-contain scrollbar-thin"
-          >
-            <table
-              aria-labelledby={titleId}
-              className={cn("table-fixed border-separate border-spacing-0", IR.row)}
-              style={{ minWidth, width }}
-            >
-              {colgroup}
-              <thead className="sr-only">
-                <tr>
-                  <th scope="col">Line</th>
-                  {heads.map((h, i) => (
-                    <th key={cols[i]} scope="col">
-                      {h.main} {h.sub}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="irt-body">
-                {rows.map((r) => {
-                  if (r.kind === "gap")
-                    return (
-                      <tr key={r.id} aria-hidden className="irt-gap">
-                        <td colSpan={cols.length + 1} className="h-1.5 p-0" />
-                      </tr>
-                    );
-                  if (r.kind === "head")
-                    return (
-                      <tr key={r.id} className="irt-group">
-                        <th
-                          scope="rowgroup"
-                          colSpan={cols.length + 1}
-                          className="whitespace-nowrap py-0.5 pr-3 text-left leading-5"
-                          style={labelStyle(r.depth)}
-                        >
-                          <span className="sticky left-4">{r.text}</span>
-                        </th>
-                      </tr>
-                    );
-                  const last = cols.length - 1;
-                  return (
-                    <tr
-                      key={r.id}
-                      className={cn(
-                        "irt-line",
-                        levelClass(r.depth),
-                        r.stripe && "irt-stripe",
-                        r.tk !== "none" && `irt-${r.tk}`,
-                        r.ratio && "irt-ratio",
-                        r.match && "irt-match",
-                        r.old && "irt-old",
-                      )}
-                    >
-                      <th
-                        scope="row"
-                        className="irt-fc sticky left-0 z-[1] py-0.5 pr-3 text-left font-normal sm:truncate"
-                        style={labelStyle(r.depth)}
-                        title={r.note ? `${r.label} (${r.note})` : r.label}
+                      <span
+                        className="irg-sticky-label"
+                        style={{ paddingLeft: gridLabelPad(r.depth) }}
                       >
-                        {/* A phone wraps a long name onto a second line instead of cutting it short. */}
-                        <span className="max-sm:line-clamp-2 max-sm:break-words max-sm:leading-[1.2] sm:contents">
-                          {r.label}
-                          {r.note && (
-                            <span className={cn("ml-1 font-normal", IR.caption)}>{r.note}</span>
+                        {r.text}
+                      </span>
+                    </th>
+                  </tr>
+                );
+              const full = r.note ? `${r.label} (${r.note})` : r.label;
+              return (
+                <tr
+                  key={r.id}
+                  className={cn(
+                    "irt-line",
+                    levelClass(r.depth),
+                    r.tk !== "none" && `irt-${r.tk}`,
+                    r.ratio && "irt-ratio",
+                    r.match && "irt-match",
+                    r.old && "irt-old",
+                  )}
+                >
+                  <th
+                    scope="row"
+                    className="irg-fc text-left font-normal"
+                    style={{ paddingLeft: gridLabelPad(r.depth) }}
+                    title={full}
+                    onClick={(e) => setTip({ el: e.currentTarget, text: full })}
+                  >
+                    <span className="irg-label">
+                      {r.label}
+                      {r.note && <span className="irg-note">{r.note}</span>}
+                      {r.tag && <span className="irt-tag">{r.tag}</span>}
+                    </span>
+                  </th>
+                  {r.cells.map((x, i) => {
+                    const e = cols[i];
+                    if (!x)
+                      return (
+                        <td
+                          key={e}
+                          className={cn("irg-num irt-missing", i === last && "irg-latest")}
+                          title={
+                            r.blank[i]
+                              ? "The table prints nothing here"
+                              : "No stored document prints this period"
+                          }
+                        >
+                          <span className="irg-fig">
+                            <span>{r.blank[i] ? BLANK : DASH}</span>
+                            <span aria-hidden className="irg-paren" />
+                            <span aria-hidden className="irg-mark" />
+                            <span aria-hidden className="irg-flag" />
+                          </span>
+                        </td>
+                      );
+                    const off = x.check && !x.check.ok && !x.check.partial;
+                    const tied = x.check?.ok && !x.check.partial;
+                    const [fig, mark] = splitMark(x.text, r.mark);
+                    const neg = fig.endsWith(")");
+                    return (
+                      <td key={e} className={cn("irg-num", i === last && "irg-latest")}>
+                        <button
+                          type="button"
+                          onClick={() => openCell(x.s, x.e ?? e, x.c)}
+                          title={x.title}
+                          className={cn("irg-fig irg-cell", x.held && "text-muted-foreground")}
+                        >
+                          <span className={cn(x.c.f && IR.derived)}>{fig}</span>
+                          {/* A positive figure keeps the room of a closing parenthesis: digits line up on the decimal. */}
+                          <span aria-hidden className={cn("irg-paren", neg && "irg-paren-off")} />
+                          <span className="irg-mark">{mark}</span>
+                          <span aria-hidden data-gutter className="irg-flag">
+                            {x.held ? (
+                              <HeldMark />
+                            ) : off || x.c.flags?.length ? (
+                              <CheckDot />
+                            ) : x.c.alt ? (
+                              <AltMark />
+                            ) : tied ? (
+                              <TieMark />
+                            ) : null}
+                          </span>
+                          {(off || x.held || x.c.flags?.length) && (
+                            <span className="sr-only"> (see the checks)</span>
                           )}
-                          {r.tag && <span className="irt-tag">{r.tag}</span>}
-                        </span>
-                      </th>
-                      {r.cells.map((x, i) => {
-                        const e = cols[i];
-                        if (!x)
-                          return (
-                            <td
-                              key={e}
-                              className={cn(
-                                "py-0.5 pl-2 pr-5",
-                                IR.num,
-                                "irt-missing",
-                                i === last && "irt-latest",
-                              )}
-                              title={r.blank[i] ? "The table prints nothing here" : "No stored document prints this period"}
-                            >
-                              {r.blank[i] ? BLANK : DASH}
-                            </td>
-                          );
-                        const off = x.check && !x.check.ok && !x.check.partial;
-                        const tied = x.check?.ok && !x.check.partial;
-                        const [fig, mark] = splitMark(x.text, r.mark);
-                        return (
-                          <td key={e} className={cn("p-0", i === last && "irt-latest")}>
-                            <button
-                              type="button"
-                              onClick={() => openCell(x.s, e, x.c)}
-                              title={x.title}
-                              className={cn(
-                                IR.cellButton,
-                                "py-0.5",
-                                IR.num,
-                                CELL_LAYOUT,
-                                x.held && "text-muted-foreground",
-                              )}
-                            >
-                              <span className={cn(x.c.f && IR.derived)}>
-                                {fig}
-                                {mark && <span className="irt-mark">{mark}</span>}
-                              </span>
-                              <span aria-hidden data-gutter className={GUTTER}>
-                                {x.held ? (
-                                  <HeldMark />
-                                ) : off || x.c.flags?.length ? (
-                                  <CheckDot />
-                                ) : x.c.alt ? (
-                                  <AltMark />
-                                ) : tied ? (
-                                  <TieMark />
-                                ) : null}
-                              </span>
-                              {(off || x.held || x.c.flags?.length) && (
-                                <span className="sr-only"> (see the checks)</span>
-                              )}
-                              {tied && <span className="sr-only"> (parts add up)</span>}
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                          {tied && <span className="sr-only"> (parts add up)</span>}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <Popover open={!!tip} onOpenChange={(o) => !o && setTip(null)}>
+        <PopoverAnchor virtualRef={tipRef as React.RefObject<HTMLElement>} />
+        <PopoverContent
+          align="start"
+          side="bottom"
+          className="w-auto max-w-80 px-3 py-2 text-[13px] leading-5"
+        >
+          {tip?.text}
+        </PopoverContent>
+      </Popover>
     </section>
   );
 });
