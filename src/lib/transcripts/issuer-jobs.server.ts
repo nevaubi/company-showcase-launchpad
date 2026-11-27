@@ -8,8 +8,9 @@ import {
 } from "@/lib/transcripts.server";
 import { analyzePromises } from "@/lib/earnings/promises.server";
 import { analyzeIssuerSlice, mirrorIssuerSlice } from "./issuer-mirror.server";
+import { issuerKeys } from "./issuer-archive.server";
 
-export async function nextTranscriptDemand(prefix: string, downloadLimit = 3, failRun = false) {
+export async function nextTranscriptDemand(prefix: string, downloadLimit = 3) {
   const now = new Date().toISOString();
   const { data, error } = await sb
     .from("job_state")
@@ -63,7 +64,7 @@ export async function nextTranscriptDemand(prefix: string, downloadLimit = 3, fa
       .eq("lease_until", until);
     if (failed.error) throw failed.error;
     console.error(job, message);
-    if (failRun) throw new Error(message);
+    throw new Error(message);
   }
   return true;
 }
@@ -114,13 +115,16 @@ export async function mirrorNext(limit = 5) {
   const i = claim.data.cursor % issuers.length;
   const ticker = issuers[i];
   let further = false,
+    copied = 0,
     failure: string | null = null;
   try {
     const co = coverageOf(ticker);
-    if (co)
-      further =
-        (await analyzeIssuerSlice(co, limit)) > 0 ||
-        (await mirrorIssuerSlice(co, limit)).remaining > 0;
+    if (co) {
+      const result = await mirrorIssuerSlice(co, limit);
+      further = result.remaining > 0;
+      copied = result.copied;
+      await analyzeIssuerSlice(co, 8);
+    }
   } catch (e) {
     failure = ticker + ": " + (e instanceof Error ? e.message : "source unavailable");
     console.error("Issuer call mirror", failure);
@@ -137,27 +141,74 @@ export async function mirrorNext(limit = 5) {
     .eq("job", job)
     .eq("lease_until", lease);
   if (updated.error) throw updated.error;
-  return { ticker, remaining: further, error: failure };
+  return { ticker, copied, remaining: further, error: failure };
 }
 
-/** One bounded issuer slice on the managed scheduler; also used by the standalone worker. */
+/** The managed HTTP caller closes after five seconds. Use only material already in Cloud,
+ * abort storage work at 2.7 s, and leave time for the cursor and job-run receipts. */
 export async function scheduledCallArchive() {
-  await inspectCoverage();
-  // Give both queues their own recurring slot so a deep issuer backlog cannot postpone them.
-  const slot = Math.floor(Date.now() / 120000) % 5;
-  if (
-    slot === 1 &&
-    process.env.TAVILY_API_KEY &&
-    process.env.FIRECRAWL_API_KEY &&
-    (await nextTranscriptDemand(DEMAND_PREFIX, 1, true))
-  )
-    return { ok: true, items: 1, detail: { queue: "transcript discovery" } };
-  if (slot === 3 && (await nextTranscriptDemand(PROMISE_PREFIX, 1, true)))
-    return { ok: true, items: 1, detail: { queue: "management commitments" } };
-  const mirror = await mirrorNext(1);
-  return {
-    ok: !mirror?.error,
-    items: mirror ? 1 : 0,
-    detail: mirror || { busy: true },
-  };
+  const job = "issuer-call-statistics";
+  const signal = AbortSignal.timeout(2700);
+  const now = new Date().toISOString();
+  const lease = new Date(Date.now() + 8000).toISOString();
+  let cursor = 0,
+    claimed = false,
+    visited = 0;
+  let ticker: string | undefined;
+  try {
+    const seed = await sb
+      .from("job_state")
+      .upsert({ job }, { ignoreDuplicates: true })
+      .abortSignal(signal);
+    if (seed.error) throw seed.error;
+    const claim = await sb
+      .from("job_state")
+      .update({ lease_until: lease, updated_at: now })
+      .eq("job", job)
+      .or(`lease_until.is.null,lease_until.lt.${now}`)
+      .select("cursor")
+      .abortSignal(signal)
+      .maybeSingle();
+    if (claim.error) throw claim.error;
+    if (!claim.data) return { ok: true, items: 0, detail: { busy: true } };
+    claimed = true;
+    cursor = claim.data.cursor;
+    const keys = await issuerKeys("issuer-index:v1:", signal);
+    const native = [...keys].map((k) => k.slice("issuer-index:v1:".length));
+    const names = [
+      ...new Set([...priority.filter((t) => keys.has("issuer-index:v1:" + t)), ...native]),
+    ];
+    if (!names.length) return { ok: true, items: 0, detail: { issuers: 0 } };
+    ticker = names[cursor % names.length];
+    // Advance on the next tick even after an oversized issuer, so shorter names still get served.
+    visited = names.length;
+    const result = await analyzeIssuerSlice(
+      { ticker, shortName: coverageOf(ticker)?.shortName || ticker },
+      1,
+      signal,
+    );
+    return { ok: true, items: result.processed, detail: { ticker, remaining: result.remaining } };
+  } catch (error) {
+    if (signal.aborted)
+      return {
+        ok: true,
+        items: 0,
+        detail: { ticker, cut: true, reason: "local database time budget spent" },
+      };
+    throw error;
+  } finally {
+    if (claimed) {
+      const release = await sb
+        .from("job_state")
+        .update({
+          cursor: visited ? (cursor + 1) % visited : cursor,
+          lease_until: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("job", job)
+        .eq("lease_until", lease)
+        .abortSignal(AbortSignal.timeout(400));
+      if (release.error && !signal.aborted) throw release.error;
+    }
+  }
 }

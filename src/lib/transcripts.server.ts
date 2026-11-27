@@ -148,15 +148,16 @@ export async function loadTranscript(
 async function findCalls(
   ticker: string,
   name: string,
+  signal?: AbortSignal,
 ): Promise<{ calls: TranscriptRef[]; error?: string }> {
   const { tavilySearch } = await import("@/lib/web.server");
   const q = `${name} ${ticker} earnings call transcript`;
   const settled = await Promise.allSettled([
-    tavilySearch(q, { topic: "news", days: 200, maxResults: 12, domains: ["fool.com"] }),
-    tavilySearch(q, { maxResults: 15, domains: ["fool.com"] }),
+    tavilySearch(q, { topic: "news", days: 200, maxResults: 12, domains: ["fool.com"], signal }),
+    tavilySearch(q, { maxResults: 15, domains: ["fool.com"], signal }),
     tavilySearch(
       `${name} ${ticker} quarterly earnings conference call transcript ${new Date().getUTCFullYear()}`,
-      { maxResults: 10, domains: ["fool.com"] },
+      { maxResults: 10, domains: ["fool.com"], signal },
     ),
   ]);
   const results = settled.flatMap((s) => (s.status === "fulfilled" ? s.value.results : []));
@@ -180,10 +181,10 @@ async function findCalls(
 }
 
 /** Background-only acquisition. Publish a reference only after its verified source text is durable. */
-async function downloadWebTranscript(co: Co, url: string): Promise<boolean> {
+async function downloadWebTranscript(co: Co, url: string, signal?: AbortSignal): Promise<boolean> {
   if (!webUrl(co, url)) return false;
   const { firecrawlScrape } = await import("@/lib/web.server");
-  const page = await firecrawlScrape(url);
+  const page = await firecrawlScrape(url, signal);
   if (page.url && (!webUrl(co, page.url.replace(/\/$/, "")) || webKey(page.url) !== webKey(url)))
     return false;
   const parsed = parseTranscript(page.markdown);
@@ -209,6 +210,7 @@ async function downloadWebTranscript(co: Co, url: string): Promise<boolean> {
 
 /** Run only from the background worker. Publish the index after the downloads have succeeded. */
 export async function refreshWebCalls(co: Co, limit = 3) {
+  const signal = AbortSignal.timeout(180_000);
   type WebIndex = { calls: TranscriptRef[]; remaining?: TranscriptRef[]; checked: string };
   const key = `call-web-ready:v1:${co.ticker}`;
   const previous = await stored<WebIndex>(key);
@@ -217,7 +219,7 @@ export async function refreshWebCalls(co: Co, limit = 3) {
     !!previous?.remaining?.length && Date.now() - Date.parse(previous.checked) < 7 * DAY;
   const found = resuming
     ? { calls: previous!.remaining! }
-    : await findCalls(co.ticker, co.shortName);
+    : await findCalls(co.ticker, co.shortName, signal);
   if (
     "error" in found &&
     found.error &&
@@ -242,7 +244,7 @@ export async function refreshWebCalls(co: Co, limit = 3) {
         continue;
       }
       attempted++;
-      if (await downloadWebTranscript(co, ref.url)) transcript = await storedWeb(co, ref.url);
+      if (await downloadWebTranscript(co, ref.url, signal)) transcript = await storedWeb(co, ref.url);
     }
     if (transcript)
       calls.push({

@@ -78,6 +78,29 @@ def aggregate(rows, metric):
                 cw=six(divide(sum(v*mc for v, mc in weighted),sum(mc for _, mc in weighted))))
 
 
+def filing_notes(overview, as_of):
+    notes = []
+    for group in overview["groups"]:
+        q = group.get("q")
+        if group["kind"] != "sector" or not q:
+            continue
+        facts, clauses = {}, []
+        for k, label in (("rev_growth","Revenue growth"), ("ni_growth","Earnings growth"), ("nm","Trailing net margin")):
+            point = group["latest"].get(k)
+            if not point or point[0] != q or point[1] is None or not point[2]:
+                continue
+            _, value, count = point
+            facts[k] = {"label":f"{group['name']} · {label} · {q} · {count} of {group['n']} constituents",
+                        "value":value, "unit":"pct", "text":f"{value*100:.2f}% ({count} of {group['n']})",
+                        "ref":{"type":"agg","metric":k,"q":q}}
+            clauses.append(label + " was {{" + k + "}}.")
+        if facts:
+            notes.append({"slug":group["slug"],"sector":group["name"], "week":as_of,"generated_at":as_of,
+                          "model":"verified-sector-release","title":f"{group['name']} · Q{q[-1]} {q[:4]} filings",
+                          "text":" ".join(clauses),"facts":facts})
+    return {"as_of":as_of,"notes":notes}
+
+
 def pack(value):
     return json.dumps(value, sort_keys=True, separators=(",",":"), allow_nan=False).encode()
 
@@ -110,9 +133,13 @@ def main():
         end=end_of(period)
         source=receipts[tk]
         fact=source["reported_inputs"].get(end)
-        if fact and fact["concept"].split(":")[-1] not in FEE_ONLY:
-            return float(fact["value"]), None
         calculated=source["periods"].get(end)
+        tag=fact["concept"].split(":")[-1] if fact else None
+        excluded=(calculated or {}).get("excluded_subtotals",{}).get(tag)
+        is_subtotal=(fact and calculated and excluded and fact["accession"]==calculated["accession"]
+                     and float(fact["value"])==excluded["value"])
+        if fact and tag not in FEE_ONLY and not is_subtotal:
+            return float(fact["value"]), None
         return (calculated["net_revenue"], calculated) if calculated else (None,None)
 
     overview=json.loads((args.base/"sectors.json").read_bytes())
@@ -193,6 +220,7 @@ def main():
         summary["val_now"]["ps"]=val["ps"]
         release[path+".json"]=group
         release[path+".comp.json"]=comp
+    overview["filing_notes"]=filing_notes(overview,asof)
     manifest={}
     for path, file in release.items():
         if args.write_docs:

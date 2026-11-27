@@ -15,50 +15,57 @@ export const issuerIndexKey = (ticker: string) => `issuer-index:v1:${ticker}`;
 export const issuerTurnKey = (ticker: string, id: string, hash: string) =>
   `issuer-turns:v1:${ticker}:${id}:${hash}`;
 
-export async function issuerRecord<T>(key: string): Promise<T | null> {
-  const { data, error } = await supabaseAdmin
-    .from("ai_cache")
-    .select("payload")
-    .eq("key", key)
-    .maybeSingle();
+export async function issuerRecord<T>(key: string, signal?: AbortSignal): Promise<T | null> {
+  const q = supabaseAdmin.from("ai_cache").select("payload").eq("key", key);
+  const { data, error } = await (signal ? q.abortSignal(signal) : q).maybeSingle();
   if (error) throw new Error(error.message);
   return (data?.payload as T) ?? null;
 }
 export const issuerStatisticsKey = (ticker: string, id: string, hash: string) =>
   `issuer-statistics:v1:${ticker}:${id}:${hash}`;
-export const presentIssuerTurns = (ticker: string) => issuerKeys("issuer-turns:v1:" + ticker + ":");
-export async function issuerKeys(prefix: string) {
+export const presentIssuerTurns = (ticker: string, signal?: AbortSignal) =>
+  issuerKeys("issuer-turns:v1:" + ticker + ":", signal);
+export async function issuerKeys(prefix: string, signal?: AbortSignal) {
   const keys = new Set<string>();
   // Range the prefix, including share classes literally; PostgREST instances may impose a row cap.
   for (let from = 0; ; from += 500) {
-    const { data, error } = await supabaseAdmin
+    const q = supabaseAdmin
       .from("ai_cache")
       .select("key")
       .like("key", prefix + "%")
       .order("key")
       .range(from, from + 499);
+    const { data, error } = await (signal ? q.abortSignal(signal) : q);
     if (error) throw new Error(error.message);
     for (const r of data || []) keys.add(r.key);
     if ((data || []).length < 500) return keys;
   }
 }
-export async function archiveIndex(ticker: string): Promise<{ entries: ArchiveEntry[] }> {
+export async function archiveIndex(
+  ticker: string,
+  signal?: AbortSignal,
+): Promise<{ entries: ArchiveEntry[] }> {
   const [staged, current] = await Promise.all([
-    issuerRecord<StoredIssuerIndex>("issuer-stage:v1:" + ticker),
-    issuerRecord<StoredIssuerIndex>(issuerIndexKey(ticker)),
+    issuerRecord<StoredIssuerIndex>("issuer-stage:v1:" + ticker, signal),
+    issuerRecord<StoredIssuerIndex>(issuerIndexKey(ticker), signal),
   ]);
   const entries = [staged, current].flatMap((doc) =>
     doc ? archivedCalls(doc.bundle, ticker) : [],
   );
   if (!entries.length) return { entries: [] };
-  const present = await presentIssuerTurns(ticker);
+  const present = await presentIssuerTurns(ticker, signal);
   return {
     entries: entries.filter((e) => present.has(issuerTurnKey(ticker, e.archiveId, e.textHash))),
   };
 }
-export async function issuerTurns(ticker: string, entry: ArchiveEntry): Promise<TurnFile | null> {
+export async function issuerTurns(
+  ticker: string,
+  entry: ArchiveEntry,
+  signal?: AbortSignal,
+): Promise<TurnFile | null> {
   const record = await issuerRecord<StoredIssuerTurns>(
     issuerTurnKey(ticker, entry.archiveId, entry.textHash),
+    signal,
   );
   if (
     !record ||

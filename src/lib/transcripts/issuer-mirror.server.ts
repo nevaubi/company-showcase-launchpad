@@ -39,10 +39,11 @@ async function sourceFile<T>(path: string): Promise<SourceFile<T> | null> {
     sha256: createHash("sha256").update(bytes).digest("hex"),
   };
 }
-async function put(key: string, payload: unknown) {
-  const { error } = await supabaseAdmin
+async function put(key: string, payload: unknown, signal?: AbortSignal) {
+  const q = supabaseAdmin
     .from("ai_cache")
     .upsert({ key, payload: payload as never, created_at: new Date().toISOString() });
+  const { error } = await (signal ? q.abortSignal(signal) : q);
   if (error) throw error;
 }
 export function verifiedIssuerCall(c: ArchiveCall, b: CallBundle) {
@@ -175,20 +176,28 @@ export async function mirrorIssuerSlice(
 export async function analyzeIssuerSlice(
   co: Pick<CoverageCompany, "ticker" | "shortName">,
   limit = 8,
+  signal?: AbortSignal,
 ) {
-  const { entries } = await archiveIndex(co.ticker);
-  if (!entries.length) return 0;
-  const measured = await issuerKeys("issuer-statistics:v1:" + co.ticker + ":");
-  const pending = entries.filter(
-    (e) => !measured.has(issuerStatisticsKey(co.ticker, e.archiveId, e.textHash)),
-  );
-  for (const entry of pending.slice(0, limit)) {
-    const file = await issuerTurns(co.ticker, entry);
+  const [archive, measured] = await Promise.all([
+    archiveIndex(co.ticker, signal),
+    issuerKeys("issuer-statistics:v1:" + co.ticker + ":", signal),
+  ]);
+  const pending = new Map<string, (typeof archive.entries)[number]>();
+  for (const entry of archive.entries) {
+    const key = issuerStatisticsKey(co.ticker, entry.archiveId, entry.textHash);
+    if (!measured.has(key) && !pending.has(key)) pending.set(key, entry);
+  }
+  let processed = 0;
+  for (const [key, entry] of pending) {
+    if (processed >= limit) break;
+    signal?.throwIfAborted();
+    const file = await issuerTurns(co.ticker, entry, signal);
     const transcript = file && fromArchive(co.ticker, co.shortName, entry, file);
     if (!transcript) throw new Error("Incomplete native transcript " + entry.archiveId);
-    await put(issuerStatisticsKey(co.ticker, entry.archiveId, entry.textHash), {
-      statistics: transcriptStatistics(transcript),
-    });
+    const statistics = transcriptStatistics(transcript);
+    signal?.throwIfAborted();
+    await put(key, { statistics }, signal);
+    processed++;
   }
-  return Math.max(0, pending.length - limit);
+  return { processed, remaining: pending.size - processed };
 }

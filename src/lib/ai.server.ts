@@ -20,12 +20,13 @@ export async function structured<T>(opts: {
   effort?: "low" | "medium" | "high";
   /** Hosted tools, e.g. [{ type: "web_search" }] */
   tools?: object[];
+  signal?: AbortSignal;
 }): Promise<T> {
   // IR worker free-only mode: never call the paid gateway; read on the owner's free OpenAI allowance.
   if (process.env["IR_FREE_ONLY"] === "1") {
     if (opts.tools) throw new Error("free-only mode: hosted tools are unavailable");
     const { openaiStructured } = await import("@/lib/openai.server");
-    return (await openaiStructured<T>({ model: "gpt-5.4-mini", name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, effort: opts.effort })).data;
+    return (await openaiStructured<T>({ model: "gpt-5.4-mini", name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, effort: opts.effort, signal: opts.signal })).data;
   }
   try {
     const res = await generateResponse({
@@ -35,7 +36,7 @@ export async function structured<T>(opts: {
       reasoning: { effort: opts.effort ?? "low" },
       text: { format: { type: "json_schema", name: opts.name, schema: opts.schema, strict: true } },
       ...(opts.tools ? { tools: opts.tools as never } : {}),
-    });
+    }, opts.signal ? { signal: opts.signal } : undefined);
     return JSON.parse(outputText(res)) as T;
   } catch (e) {
     throw friendlyAiError(e);

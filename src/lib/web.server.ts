@@ -11,11 +11,12 @@ export interface WebResult {
 
 export async function tavilySearch(
   query: string,
-  opts: { topic?: "general" | "news" | "finance"; days?: number; maxResults?: number; domains?: string[]; depth?: "basic" | "advanced" } = {},
+  opts: { topic?: "general" | "news" | "finance"; days?: number; maxResults?: number; domains?: string[]; depth?: "basic" | "advanced"; signal?: AbortSignal } = {},
 ): Promise<{ answer?: string; results: WebResult[] }> {
   const key = process.env["TAVILY_API_KEY"];
   if (!key) throw new Error("Web search is not configured");
   const res = await fetch("https://api.tavily.com/search", {
+    signal: opts.signal,
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
@@ -41,7 +42,7 @@ export async function tavilySearch(
 }
 
 /** Scrape a page to markdown. Supports both direct (fc-) and gateway-backed (lovc_) Firecrawl keys. */
-export async function firecrawlScrape(url: string): Promise<{ markdown: string; title?: string; url: string }> {
+export async function firecrawlScrape(url: string, signal?: AbortSignal): Promise<{ markdown: string; title?: string; url: string }> {
   const key = process.env["FIRECRAWL_API_KEY"];
   if (!key) throw new Error("Page reader is not configured");
   const gateway = key.startsWith("lovc_");
@@ -52,6 +53,7 @@ export async function firecrawlScrape(url: string): Promise<{ markdown: string; 
     headers["X-Connection-Api-Key"] = key;
   } else headers["Authorization"] = `Bearer ${key}`;
   const res = await fetch(endpoint, {
+    signal,
     method: "POST",
     headers,
     body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true, timeout: 45000 }),

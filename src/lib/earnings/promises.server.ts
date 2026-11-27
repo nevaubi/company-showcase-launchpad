@@ -87,6 +87,7 @@ export async function analyzePromises(co: CoverageCompany) {
         };
       const res = await structured<{ promises: RawPromise[] }>({
         name: "promises",
+        signal: AbortSignal.timeout(5 * 60_000),
         effort: "medium",
         instructions:
           "You track whether management keeps its word. From the earnings-call management remarks below (oldest first, each headed by its call date), list concrete forward-looking commitments: numeric guidance, margin/growth targets, product or plant launch dates, capex/buyback/dividend plans, cost programs, debt targets. Skip vague aspirations. 'quote' MUST be copied character-for-character from that call (one or two sentences). Then grade each against LATER calls only: kept / missed / partial, with 'outcomeQuote' copied character-for-character from the later call and its outcomeCallDate; if no later call settles it, status 'pending' with outcomeQuote and outcomeCallDate null. summary: one plain sentence of what was promised. note: one short sentence explaining the grade. deadline: the stated timeframe or null. 8-20 promises, prefer ones that are gradable.",

@@ -1,23 +1,68 @@
-// Resolve durable transcript requests and fill the issuer archive from its published source.
+// External requests run on independent worker lanes. An occupied model or crawler cannot delay
+// the other queues. Only source-backed measurements from local data run on the managed HTTP job.
 import { DEMAND_PREFIX, PROMISE_PREFIX } from "@/lib/transcripts.server";
 import {
   inspectCoverage,
   mirrorNext,
   nextTranscriptDemand,
 } from "@/lib/transcripts/issuer-jobs.server";
-import { args, dbGate, sleep } from "./lib/supa";
+import { args, dbGate, sb, sleep } from "./lib/supa";
 
-let nextAnalysis = 0;
-do {
-  await dbGate("transcript-worker");
-  await mirrorNext();
-  if (Date.now() >= nextAnalysis) {
-    if (process.env.TAVILY_API_KEY && process.env.FIRECRAWL_API_KEY)
-      await nextTranscriptDemand(DEMAND_PREFIX);
-    await nextTranscriptDemand(PROMISE_PREFIX);
+type Outcome = {
+  items: number;
+  detail?: Record<string, string | number | boolean | null | undefined>;
+};
+async function superviseLane(job: string, cadenceMs: number, work: () => Promise<Outcome>) {
+  let lastReceipt = 0;
+  do {
+    const started = new Date().toISOString();
+    let ok = true;
+    let outcome: Outcome;
+    try {
+      await dbGate(job);
+      outcome = await work();
+    } catch (error) {
+      ok = false;
+      outcome = {
+        items: 0,
+        detail: {
+          error: error instanceof Error ? error.message.slice(0, 200) : "Transcript worker failed",
+        },
+      };
+      console.error(job, outcome.detail?.error);
+    }
+    if (!ok || outcome.items > 0 || Date.now() - lastReceipt >= 5 * 60_000) {
+      const receipt = await sb.from("job_runs").insert({
+        job,
+        started_at: started,
+        finished_at: new Date().toISOString(),
+        ok,
+        items: outcome.items,
+        detail: outcome.detail || {},
+      });
+      if (receipt.error) console.error(job, receipt.error.message);
+      else lastReceipt = Date.now();
+    }
+    if (args.once) return;
+    await sleep(cadenceMs);
+  } while (true);
+}
+await Promise.all([
+  superviseLane("call-source-worker", 30_000, async () => {
+    const result = await mirrorNext();
+    if (result?.error) throw new Error(result.error);
+    return {
+      items: result?.copied || 0,
+      detail: result ? { ticker: result.ticker, remaining: result.remaining } : { busy: true },
+    };
+  }),
+  superviseLane("call-discovery-worker", 5 * 60_000, async () => {
     await inspectCoverage();
-    nextAnalysis = Date.now() + 5 * 60_000;
-  }
-  if (args.once) break;
-  await sleep(30_000);
-} while (true);
+    if (!process.env.TAVILY_API_KEY || !process.env.FIRECRAWL_API_KEY)
+      throw new Error("Transcript search or page reader is not configured on this worker");
+    return { items: Number(await nextTranscriptDemand(DEMAND_PREFIX)) };
+  }),
+  superviseLane("call-commitments-worker", 5 * 60_000, async () => ({
+    items: Number(await nextTranscriptDemand(PROMISE_PREFIX)),
+  })),
+]);

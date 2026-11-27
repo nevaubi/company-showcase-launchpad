@@ -14,13 +14,14 @@ import {
   compQuery,
   fmtMetric,
   noteParts,
-  notesQuery,
+  historicalNotesQuery,
+  overviewQuery,
   qLabel,
   type GroupFile,
   type Note,
   type Overview,
 } from "@/lib/sectors/groups";
-import { noteWeek } from "@/lib/sectors/notes";
+import { noteWeek, releaseNotes } from "@/lib/sectors/notes";
 import { placeLabels } from "@/lib/sectors/labels";
 import { Section, useWidth } from "./ui";
 
@@ -143,10 +144,13 @@ type NoteFact = Note["facts"][string] | undefined;
 const isAgg = (f: NoteFact): f is NonNullable<NoteFact> & { ref: { type: "agg"; metric: string; q?: string } } => f?.ref?.type === "agg" && !!f.ref.metric;
 
 export function SectorNotes({ only, onlyName }: { only?: string; onlyName?: string }) {
-  const q = useQuery(notesQuery);
+  const q = useQuery(overviewQuery);
   const navigate = useNavigate();
   const matchRoute = useMatchRoute();
-  const nw = useMemo(() => noteWeek(q.data?.notes, { only }), [q.data, only]);
+  const nw = useMemo(() => noteWeek(releaseNotes(q.data), { only }), [q.data, only]);
+  const [viewHistory, setViewHistory] = useState(false);
+  const history = useQuery({ ...historicalNotesQuery, enabled: viewHistory });
+  const earlier = (history.data?.notes ?? []).filter((n) => (!only || n.slug === only) && n.week < (nw.week ?? "")).sort((a, b) => b.week.localeCompare(a.week));
   if (q.isLoading) return <Skeleton className="h-32" />;
   if (!nw.week || !nw.notes.length) return null;
   return (
@@ -154,7 +158,7 @@ export function SectorNotes({ only, onlyName }: { only?: string; onlyName?: stri
       id="notes"
       name="Weekly notes"
       title={only ? (onlyName ? `Sector note · ${onlyName}` : "Sector note") : "Sector notes"}
-      caption={`Week of ${fmtDate(nw.week)} · each underlined number opens the aggregate it cites`}
+      caption={`Filing review as of ${fmtDate(nw.week)} · select a figure to inspect its contributors`}
     >
       <div className={cn("grid grid-cols-1 gap-px bg-border", !only && "md:grid-cols-2")}>
         {nw.notes.map((n) => (
@@ -202,14 +206,23 @@ export function SectorNotes({ only, onlyName }: { only?: string; onlyName?: stri
           </article>
         ))}
       </div>
+      <details className="border-t px-3.5 py-2 text-xs" onToggle={(e) => setViewHistory(e.currentTarget.open)}>
+        <summary className="cursor-pointer text-muted-foreground">Earlier weekly commentary</summary>
+        {viewHistory && (history.isLoading ? <Skeleton className="mt-2 h-8" /> : history.isError ? <p className="mt-2">Historical notes are unavailable.</p> :
+          earlier.length ? earlier.slice(0, only ? 8 : 12).map((n) => <div key={n.slug + n.week} className="mt-2 border-t pt-2">
+            <p className="text-muted-foreground">Archived · week of {fmtDate(n.week)} · {n.sector}</p>
+            <p className="mt-1 font-medium">{n.title}</p>
+            <p className="mt-1 leading-relaxed">{noteParts(n).map((p) => typeof p === "string" ? p : p.text).join("")}</p>
+          </div>) : <p className="mt-2">No earlier dated commentary is available.</p>)}
+      </details>
     </Section>
   );
 }
 
 /** Whether a note will show for this selection, so a page can lay out the row before the notes render. */
 export function useHasNotes(only?: string) {
-  const q = useQuery(notesQuery);
-  return q.isLoading ? null : noteWeek(q.data?.notes, { only }).notes.length > 0;
+  const q = useQuery(overviewQuery);
+  return q.isLoading ? null : noteWeek(releaseNotes(q.data), { only }).notes.length > 0;
 }
 
 /* ---------- quarterly aggregates with the breakdown behind each point ---------- */

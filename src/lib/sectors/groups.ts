@@ -49,6 +49,8 @@ export interface ValRange {
   pct: number | null;
 }
 export interface Overview {
+  filing_notes?: { as_of: string; notes: Note[] };
+  sector_release?: { as_of: string; period: string };
   generated: string;
   as_of: string;
   groups: GroupSummary[];
@@ -221,7 +223,7 @@ export const overviewQuery = queryOptions({
   staleTime: hour,
   retry: 1,
 });
-export const notesQuery = queryOptions({
+export const historicalNotesQuery = queryOptions({
   queryKey: ["sectors", "notes"],
   queryFn: () => partnerFile<{ notes: Note[] }>("sectors/notes.json"),
   staleTime: hour,

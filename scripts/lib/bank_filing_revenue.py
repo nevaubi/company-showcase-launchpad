@@ -45,7 +45,18 @@ def extract(raw, cik, start, as_of):
             continue
         nii, fees = next(iter(tags[NET_INTEREST])), next(iter(tags[NONINTEREST]))
         total = nii + fees
-        reported = [tag for tag in REPORTED if tag in tags]
+        excluded = {}
+        # CBSH's original iXBRL applies Revenues=0 to “no material intersegment
+        # revenues”. It is a segment disclosure, not the consolidated income line.
+        # Limit the exception to the reviewed filing and its two verified periods.
+        cbsh_values = {("2026-07-01","2026-09-30"):(308877000,185466000),
+                       ("2025-07-01","2025-09-30"):(279457000,161511000)}
+        if (int(cik) == 22356 and accession == "0000022356-26-000213" and
+                tags.get("Revenues") == {0} and (nii, fees) == cbsh_values.get((s,e))):
+            excluded["Revenues"] = {"value":0, "scope":"intersegment", "filing_section":"Business Segment Data",
+                "source_text":"There were no material intersegment revenues between the three segments.",
+                "filing_url":"https://www.sec.gov/Archives/edgar/data/22356/000002235626000213/cbsh-20260930.htm"}
+        reported = [tag for tag in REPORTED if tag in tags and tag not in excluded]
         if any(next(iter(tags[tag])) != total for tag in reported):
             latest[s, e] = None
             continue
@@ -53,6 +64,8 @@ def extract(raw, cik, start, as_of):
                      NET_INTEREST: nii, NONINTEREST: fees, "net_revenue": total,
                      "reconciled_to": reported,
                      "filing_url": f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}/{accession}-index.htm"}
+        if excluded:
+            point["excluded_subtotals"] = excluded
         latest[s, e] = by_filing[s, e, accession] = point
     def quarterly(s, e):
         return 75 <= (dt.date.fromisoformat(e) - dt.date.fromisoformat(s)).days + 1 <= 105

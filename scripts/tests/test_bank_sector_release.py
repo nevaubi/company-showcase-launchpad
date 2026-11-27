@@ -51,6 +51,18 @@ class FilingArithmetic(unittest.TestCase):
         b=dict(a,start="2026-07-03")
         self.assertEqual(self.extract({NET_INTEREST:[a,b],NONINTEREST:[a,b]})["periods"],{})
 
+    def test_zero_intersegment_tag_is_excluded_only_for_verified_consolidated_period(self):
+        a=obs("2026-07-01","2026-09-30",accn="0000022356-26-000213")
+        rows={NET_INTEREST:[dict(a,val=308877000)],NONINTEREST:[dict(a,val=185466000)],"Revenues":[dict(a,val=0)]}
+        def reviewed(r):
+            obj=json.loads(raw(r));obj["cik"]=22356
+            return extract(json.dumps(obj).encode(),22356,"2024-01-01","2026-11-27")
+        point=reviewed(rows)["periods"][a["end"]]
+        self.assertEqual(point["net_revenue"],494343000)
+        self.assertEqual(point["excluded_subtotals"]["Revenues"]["scope"],"intersegment")
+        rows[NET_INTEREST]=[dict(a,val=999)]
+        self.assertNotIn(a["end"],reviewed(rows)["periods"])
+
     def test_trailing_bridge_rejects_restated_comparative(self):
         a=obs("2025-01-01","2025-12-31",accn=ANNUAL,form="10-K",filed="2026-02-01",val=40)
         b=obs("2026-01-01","2026-09-30",val=35)

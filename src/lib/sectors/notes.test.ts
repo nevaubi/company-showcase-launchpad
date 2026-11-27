@@ -36,3 +36,20 @@ describe("weekly notes: current week only", () => {
     expect(noteWeek(null)).toEqual({ week: null, notes: [] });
   });
 });
+
+describe("notes from the verified sector release", () => {
+  it("publishes each figure with its own denominator, quarter and drill-down", async () => {
+    const { releaseNotes } = await import("./notes");
+    const snapshot = {
+      sector_release: { as_of: "2026-11-27", period: "2026Q3" },
+      groups: [{ name: "Financials", sector: "Financials", slug: "financials", kind: "sector", n: 324, q: "2026Q3",
+        latest: { rev_growth: ["2026Q3", .0393174, 298], ni_growth: ["2026Q3", -.018841, 318], nm: ["2026Q2", .2, 279] } }],
+    } as unknown as import("./groups").Overview;
+    const n = releaseNotes(snapshot)[0];
+    expect(n.week).toBe("2026-11-27");
+    expect(n.facts.rev_growth).toMatchObject({ text: "3.93% (298 of 324)", ref: { type: "agg", metric: "rev_growth", q: "2026Q3" } });
+    expect(n.facts.ni_growth.text).toBe("-1.88% (318 of 324)");
+    expect(n.facts.nm).toBeUndefined();
+    expect(releaseNotes({ ...snapshot, filing_notes: { as_of: n.week, notes: [n] } })).toEqual([n]);
+  });
+});

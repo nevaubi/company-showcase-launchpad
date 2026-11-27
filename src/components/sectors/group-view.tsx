@@ -676,7 +676,7 @@ function Distribution({ rows, dm, onDm, name }: { rows: Row[]; dm: string; onDm:
       title="Where each company sits"
       caption={
         dist.n
-          ? `${m.l} across ${dist.n} of ${rows.length} companies · median ${fmt(dist.median)}, middle half ${fmt(dist.q1)} to ${fmt(dist.q3)} · ranks count from the highest`
+          ? `${m.l} across ${dist.n} of ${rows.length} companies · median ${fmt(dist.median)}, middle half ${fmt(dist.q1)} to ${fmt(dist.q3)}${m.k === "rev_growth" ? " · individual rates require positive prior-year revenue" : ""} · ranks count from the highest`
           : `No company in ${name} reports ${m.l.toLowerCase()}`
       }
       actions={<Segmented size="xs" label="Distribution metric" value={m.k} onChange={onDm} options={DIST.map((x) => ({ v: x.k, l: x.s }))} />}
