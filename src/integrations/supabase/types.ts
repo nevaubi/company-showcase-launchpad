@@ -4316,6 +4316,16 @@ export type Database = {
       }
       accept_firm_invite: { Args: { _token: string }; Returns: string }
       accept_trial_terms: { Args: never; Returns: undefined }
+      activate_bank_sector_release_v1: {
+        Args: {
+          _as_of: string
+          _manifest: Json
+          _quarter: string
+          _release: string
+          _tickers: string[]
+        }
+        Returns: number
+      }
       alt_event_buckets: {
         Args: never
         Returns: {
