@@ -561,6 +561,13 @@
       "when": 1795774530145,
       "tag": "0079_replay_publication_cutoff",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1795775056742,
+      "tag": "0080_replay_filing_cutoff",
+      "breakpoints": true
     }
   ]
 }
