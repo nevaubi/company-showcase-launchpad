@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { MISSING } from "./missing";
 import { ChartColumnBig } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import { Sparkline } from "@/components/charts/sparkline";
@@ -8,6 +9,8 @@ import { rowLabel } from "./row-label";
 import { cagr } from "@/lib/financials/metrics";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { isRatioLine, levelClass, splitMark, stripes, INDENT } from "@/components/ir/table-style";
+import "@/components/ir/table.css";
 
 export type StatementView = "values" | "yoy" | "common";
 
@@ -36,6 +39,35 @@ export function rowTrend(row: Row, periods: Period[], freq: "annual" | "quarterl
   const g = cagr(fv, lv, years);
   return g == null ? null : { v: g, label: `${periods[first].label}–${periods[last].label} (${years}y)`, since: first > 0 ? periods[first].label : null };
 }
+
+/**
+ * Lines that close a statement, set as grand totals (double rule) as statements print them: net income,
+ * total assets, total liabilities and equity. From the builder's row keys; a `total` flag on the row, when
+ * the builder sets one (finding finstyle-01), wins.
+ */
+const GRAND_KEYS = new Set(["netIncome", "totalAssets", "liabilitiesAndEquity"]);
+
+/**
+ * How a standardized statement row is set, from its data (never its label):
+ * grand  a statement's closing line: bold, firm rule above, double rule under the figures
+ * sub    a bold reported line (a subtotal): semibold, hairline rule above the figures
+ * emph   a bold per-share, ratio or calculated line (diluted EPS, free cash flow): semibold, no rule
+ * line   any other line
+ */
+export type StatementRowKind = "line" | "sub" | "grand" | "emph";
+export function statementRowKind(row: Row): StatementRowKind {
+  const flag = (row as Row & { total?: "sub" | "grand" }).total;
+  if (flag === "grand" || (flag == null && GRAND_KEYS.has(row.key))) return "grand";
+  if (flag === "sub") return "sub";
+  if (!row.bold) return "line";
+  return row.kind === "kpi" || isUnitLine(row.unit) ? "emph" : "sub";
+}
+
+/** Per-share, percentage, ratio and day-count lines: set in the muted unit style. */
+export const isUnitLine = (unit: Row["unit"]) => isRatioLine(unit === "days" ? "ratio" : unit, unit === "usdPerShare");
+
+/** The unit mark set apart after a figure (12.5% → 12.5 and %). */
+const MARK: Partial<Record<Row["unit"], string>> = { pct: "%", ratio: "×" };
 
 export function StatementTable({
   statement,
@@ -68,6 +100,7 @@ export function StatementTable({
 }) {
   void maxHeight;
   const { open, target } = useSource();
+  const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const lastHead = useRef<HTMLTableCellElement>(null);
   const start = maxPeriods ? Math.max(0, statement.periods.length - maxPeriods) : 0;
@@ -153,6 +186,8 @@ export function StatementTable({
   };
 
   const activeKey = target ? `${target.label}|${target.periodLabel}` : "";
+  const banded = useMemo(() => stripes(rows.map(() => ({ kind: "line" as const }))), [rows]);
+  const latest = periods.length - 1;
 
   const onCell = (row: Row, i: number, cell: Cell) => {
     open({
@@ -169,12 +204,16 @@ export function StatementTable({
   };
 
   return (
-    <div data-section="Financial statements" className="min-w-0 overflow-clip rounded-lg border bg-card shadow-paper">
-      <div ref={scroller} className={cn("scrollbar-thin", fits ? "overflow-visible" : "overflow-x-auto")}>
+    <div ref={root} data-section="Financial statements" className="irt-root min-w-0 overflow-clip rounded-lg border bg-card shadow-paper">
+      <div
+        ref={scroller}
+        onScroll={(e) => root.current?.toggleAttribute("data-scrolled", e.currentTarget.scrollLeft > 1)}
+        className={cn("scrollbar-thin", fits ? "overflow-visible" : "overflow-x-auto overscroll-x-contain")}
+      >
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
-          <thead>
+          <thead className="irt-colhead">
             <tr>
-              <th className={cn("sticky left-0 z-30 w-44 min-w-44 border-b border-r bg-card px-3 py-2 text-left align-bottom sm:w-auto sm:min-w-60 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}>
+              <th className={cn("irt-fc sticky left-0 z-30 w-44 min-w-44 px-3 py-2 text-left align-bottom sm:w-auto sm:min-w-60 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}>
                 <span className="eyebrow">Line item</span>
                 {tableUnit && <span className="num ml-2 text-[11px] font-normal text-muted-foreground">{unitLabel(tableUnit, scale)}</span>}
               </th>
@@ -185,10 +224,11 @@ export function StatementTable({
                   <th
                     key={p.key}
                     ref={i === periods.length - 1 ? lastHead : undefined}
-                    className={cn("z-20 border-b bg-card px-2.5 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]", read && "bg-highlight-soft")}
+                    className={cn("z-20 px-2.5 py-2 text-right align-bottom font-normal", fits && "sticky top-[var(--sticky-top,3.5rem)]", i === latest && "irt-latest")}
+                    style={read ? { background: "var(--highlight-soft)" } : undefined}
                   >
-                    <span className="num block text-[11px] font-semibold">{p.label}</span>
-                    <span className="num block text-[11px] font-normal text-muted-foreground">{fmtDate(p.end, { month: "short", year: "2-digit" })}</span>
+                    <span className="irt-period num block text-[11px]">{p.label}</span>
+                    <span className="irt-date num block text-[11px]">{fmtDate(p.end, { month: "short", year: "2-digit" })}</span>
                     {read ? (
                       <Tooltip delayDuration={250}>
                         <TooltipTrigger asChild>
@@ -207,33 +247,41 @@ export function StatementTable({
                 );
               })}
               {showGrowth && (
-                <th className={cn("z-20 border-b border-l bg-card px-3 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
+                <th className={cn("z-20 border-l px-3 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
                   <span className="eyebrow">{freq === "annual" ? "CAGR" : "YoY"}</span>
                 </th>
               )}
               {showTrend && (
-                <th className={cn("z-20 border-b bg-card px-3 py-2 text-left align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
+                <th className={cn("z-20 px-3 py-2 text-left align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
                   <span className="eyebrow">Trend</span>
                 </th>
               )}
             </tr>
           </thead>
-          <tbody>
-            {rows.map((row) => {
+          <tbody className="irt-body">
+            {rows.map((row, ri) => {
               const vals = row.cells.slice(-12).map((c) => c?.v ?? NaN);
               const trend = rowTrend(row, periods, freq);
               const isCharted = charted?.includes(row.key);
+              const kind = statementRowKind(row);
+              const unitLine = isUnitLine(row.unit);
+              const calculated = row.kind === "kpi";
+              const weight = kind === "emph" ? "font-semibold" : kind === "line" ? "font-normal" : undefined;
               return (
-                <tr key={row.key} className="group">
-                  <th
-                    scope="row"
-                    className={cn(
-                      "sticky left-0 z-10 max-w-44 border-b border-r bg-card px-2 py-1 text-left font-normal transition-colors group-hover:bg-secondary sm:max-w-none",
-                      row.bold && "font-semibold",
-                      isCharted && "bg-highlight-soft",
-                    )}
-                  >
-                    <span className={cn("flex items-center gap-1.5", row.indent && "pl-4 text-foreground/80")}>
+                <tr
+                  key={row.key}
+                  data-kind={kind}
+                  className={cn(
+                    "group irt-line",
+                    levelClass(row.indent ?? 0),
+                    banded[ri] && "irt-stripe",
+                    (kind === "sub" || kind === "grand") && `irt-${kind}`,
+                    unitLine && "irt-ratio",
+                    isCharted && "irt-match",
+                  )}
+                >
+                  <th scope="row" className={cn("irt-fc sticky left-0 z-10 max-w-44 px-2 py-1 text-left sm:max-w-none", weight)}>
+                    <span className="flex items-center gap-1.5">
                       {onToggleChart ? (
                         <button
                           type="button"
@@ -250,7 +298,13 @@ export function StatementTable({
                       ) : (
                         <span className="w-2" />
                       )}
-                      <span className={cn("min-w-0 leading-4 [overflow-wrap:anywhere] sm:whitespace-nowrap", row.kind === "kpi" && row.unit === "usd" && "italic")}>{rowLabel(row.label)}</span>
+                      <span
+                        className={cn("min-w-0 leading-4 [overflow-wrap:anywhere] sm:whitespace-nowrap", calculated && row.unit === "usd" && "italic")}
+                        style={row.indent ? { paddingLeft: row.indent * INDENT } : undefined}
+                      >
+                        {rowLabel(row.label)}
+                        {calculated && <span className="sr-only"> (calculated)</span>}
+                      </span>
                       {row.unit !== tableUnit && <span className="num ml-auto whitespace-nowrap pl-2 text-[11px] font-normal text-muted-foreground">{unitLabel(row.unit, scale)}</span>}
                     </span>
                   </th>
@@ -258,7 +312,7 @@ export function StatementTable({
                     const key = `${row.label}|${periods[i].label}`;
                     if (!cell)
                       return (
-                        <td key={i} className="num border-b px-2.5 py-1 text-right text-muted-foreground/50 group-hover:bg-secondary/60">
+                        <td key={i} title="No figure filed for this period" className={cn("num irt-missing px-2.5 py-1 text-right", i === latest && "irt-latest")} style={MISSING}>
                           –
                         </td>
                       );
@@ -268,7 +322,7 @@ export function StatementTable({
                     return (
                       <td
                         key={i}
-                        className="border-b p-0 group-hover:bg-secondary/60"
+                        className={cn("p-0", weight, i === latest && "irt-latest")}
                         style={heat ? { backgroundColor: `color-mix(in oklab, var(${s!.g! >= 0 ? "--positive" : "--negative"}) ${heat.toFixed(0)}%, transparent)` } : undefined}
                       >
                         <Tooltip delayDuration={350}>
@@ -278,14 +332,13 @@ export function StatementTable({
                               onClick={() => onCell(row, i, cell)}
                               className={cn(
                                 "num relative block w-full px-2.5 py-1 text-right tabular-nums transition-colors hover:bg-highlight-soft focus-visible:bg-highlight-soft focus-visible:outline-none",
-                                row.bold && "font-medium",
                                 cell.v < 0 && row.unit !== "pct" && "text-negative",
                                 cell.derived && "italic text-foreground/85",
                                 activeKey === key && "bg-highlight text-highlight-foreground not-italic",
                               )}
                             >
                               {cell.approx && "≈"}
-                              {fmtCell(cell.v, row.unit, scale)}
+                              <Figure text={fmtCell(cell.v, row.unit, scale)} mark={MARK[row.unit] ?? ""} />
                               {view !== "values" && (
                                 <span
                                   className={cn(
@@ -321,7 +374,7 @@ export function StatementTable({
                       </td>
                     );
                   })}
-                  {showGrowth && <td className="border-b border-l px-3 py-1 text-right group-hover:bg-secondary/60">
+                  {showGrowth && <td className="border-l px-3 py-1 text-right font-normal">
                     {trend ? (
                       <Tooltip delayDuration={300}>
                         <TooltipTrigger asChild>
@@ -338,7 +391,7 @@ export function StatementTable({
                     )}
                   </td>}
                   {showTrend && (
-                    <td className="border-b px-3 py-1 group-hover:bg-secondary/60">
+                    <td className="px-3 py-1">
                       <Sparkline values={vals.filter((v) => Number.isFinite(v))} className="h-5 w-20" />
                     </td>
                   )}
@@ -349,6 +402,17 @@ export function StatementTable({
         </table>
       </div>
     </div>
+  );
+}
+
+/** A figure with its unit mark set muted. */
+function Figure({ text, mark }: { text: string; mark: string }) {
+  const [figure, unit] = splitMark(text, mark);
+  return (
+    <>
+      {figure}
+      {unit && <span className="irt-mark">{unit}</span>}
+    </>
   );
 }
 

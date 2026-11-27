@@ -22,10 +22,15 @@ import {
   unitOf,
   type FiledDoc,
   type FiledFact,
+  type FiledLine,
   type FiledReport,
   type FiledScale,
 } from "@/lib/statements/filed";
 import { FiledGrid, type GridColumn, type GridRow } from "./filed-grid";
+import { isGrandTag, orderColumns, shapeLines, type LineFacts } from "./as-reported-structure";
+
+/** A statement total by its tag only (the label is never read for structure). */
+const isTotalTag = (ln: FiledLine) => isTotalLine([ln[0], ln[1], ln[2], "", ln[4]]);
 
 /** Statements exactly as the company filed them: labels, order, signs and rounding of the filing. */
 export function AsReported({ ticker }: { ticker: string }) {
@@ -174,12 +179,14 @@ function Statement({
     const keys = [...new Set((plain.length ? plain : r.facts).map((f) => `${f[1]}|${f[2]}`))]
       .map((k) => k.split("|"))
       .map(([d, q]) => [d, Number(q)] as [string, number]);
-    return keys.sort((a, b) => b[0].localeCompare(a[0]) || a[1] - b[1]);
+    return orderColumns(keys);
   }, [r]);
+  const newest = columns.reduce((m, [d]) => (d > m ? d : m), "");
   const cols: GridColumn[] = columns.map(([d, q]) => ({
     key: `${d}|${q}`,
     top: q ? `${q * 3} months ended` : "As of",
     bottom: fmtDate(d),
+    latest: d === newest,
   }));
   const byTag = useMemo(() => {
     const m: Record<string, FiledFact[]> = {};
@@ -187,16 +194,37 @@ function Statement({
     return m;
   }, [r]);
 
+  const shapes = useMemo(
+    () =>
+      shapeLines(
+        r.lines.map((ln): LineFacts => {
+          const plain = (byTag[ln[1]] ?? []).filter((f) => !f[4] && !f[5] && f[6] != null);
+          return {
+            hasFacts: plain.length > 0,
+            totalTag: isTotalTag(ln),
+            grandTag: isGrandTag(r.stmt, ln[1]),
+            values: columns.map(([d, q]) => plain.find((f) => f[1] === d && f[2] === q)?.[6] ?? null),
+          };
+        }),
+      ),
+    [r, byTag, columns],
+  );
+
   const rows: GridRow[] = [];
   let prev: number | null = null;
-  for (const ln of r.lines) {
+  r.lines.forEach((ln, li) => {
     const [line, tag, customN, plabel, negN] = ln;
+    const shape = shapes[li];
     const custom = !!customN;
     const negating = !!negN;
     if (prev != null && line > prev + 1)
       rows.push({ key: `sp-${line}`, label: "", kind: "spacer", cells: [] });
     prev = line;
     const facts = byTag[tag] ?? [];
+    if (shape.head && !facts.length) {
+      rows.push({ key: `${line}-${tag}`, label: plabel, title: `${plabel}\n${custom ? "Company extension tag" : "us-gaap"}: ${tag}`, kind: "group", depth: shape.depth, cells: [] });
+      return;
+    }
     const groups: Record<string, FiledFact[]> = {};
     for (const f of facts) (groups[`${f[4] ?? ""}|${f[5] ?? ""}`] ??= []).push(f);
     const keys = Object.keys(groups)
@@ -212,7 +240,10 @@ function Statement({
         key: `${line}-${tag}-${k}`,
         label: name,
         title: `${plabel}\n${custom ? "Company extension tag" : "us-gaap"}: ${tag}${negating ? "\nNegated label: the filing shows this value with its sign reversed" : ""}${sub ? `\n${k.replace("|", " ")}` : ""}`,
-        kind: sub ? "sub" : isTotalLine(ln) ? "total" : undefined,
+        kind: sub ? "sub" : shape.total === "grand" ? "grand" : shape.total === "sub" ? "total" : undefined,
+        depth: shape.depth,
+        ratio: !sub && (facts[0] ? /\/shares$/.test(unitOf(facts[0][3], tag, custom)) : false),
+        empty: "blank",
         cells: columns.map(([d, q]) => {
           const f = (groups[k] ?? []).find((x) => x[1] === d && x[2] === q);
           if (!f || f[6] == null) return null;
@@ -229,7 +260,7 @@ function Statement({
         }),
       });
     }
-  }
+  });
   return (
     <FiledGrid
       head={STMT_LABEL[r.stmt] + (r.inpth ? " (parenthetical)" : "")}
@@ -289,7 +320,8 @@ function EquityStatement({ ticker, doc, r }: { ticker: string; doc: FiledDoc; r:
         key: `${d}-${q}-${li}`,
         label: plabel,
         title: `${plabel}\n${customN ? "Company extension tag" : "us-gaap"}: ${tag}`,
-        kind: instant || isTotalLine(ln) ? "total" : undefined,
+        kind: instant || isTotalTag(ln) ? "total" : undefined,
+        empty: "blank",
         cells: row.map((f) => {
           if (!f || f[6] == null) return null;
           const shown = negN ? -f[6] : f[6];

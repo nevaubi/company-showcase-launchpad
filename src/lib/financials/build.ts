@@ -291,7 +291,39 @@ function choose(list: RawFact[], concept: string, pred: (f: RawFact) => boolean)
 }
 
 /** Lines that can't be negative; a negative derived quarter means mismatched restatements, so it's dropped. */
-const NON_NEGATIVE = new Set(["revenue", "costOfRevenue", "rnd", "sga", "salesMarketing", "generalAdmin", "dna", "sbc", "capex", "dividends", "buybacks", "sharesBasic", "sharesDiluted"]);
+const NON_NEGATIVE = new Set(["revenue", "costOfRevenue", "rnd", "sga", "salesMarketing", "generalAdmin", "opex", "dna", "sbc", "capex", "dividends", "dividendsPerShare", "buybacks", "sharesBasic", "sharesDiluted"]);
+
+/**
+ * Per-share dividends declared for a year (or year to date) are the sum of the quarters' dividends. A filer that tags
+ * the quarterly rate on the year's duration gives a figure below the quarters it holds: Visa's "Dividends declared,
+ * quarterly, per share" $0.67 for FY2026 beside $0.67 in each of its quarters (10-K 0001403161-26-000134); Prologis
+ * tags $0.03 under CommonStockDividendsPerShareDeclared for FY2025 beside $1.01 a quarter under the cash-paid concept
+ * (10-K 0001193125-26-051453). Such a fact is not the period's dividend: true when the period's own discrete quarters,
+ * under any of the line's concepts, add up to more than it.
+ */
+function dividendRate(cf: CompanyFacts, def: LineDef, f: RawFact, concept: string): boolean {
+  const start = f.start;
+  if (def.key !== "dividendsPerShare" || !start) return false;
+  // Each quarter's figure from the newest filing up to the total's own that tags it, by concept.
+  const quarters = (c: string) => {
+    const byEnd = new Map<string, RawFact>();
+    for (const q of factsFor(cf, c, unitKey(def))) {
+      if (!q.start || !isDuration(80, Q_MAX)(q) || q.filed > f.filed || toTime(q.start) < toTime(start) - 4 * DAY || toTime(q.end) > toTime(f.end) + 4 * DAY) continue;
+      const seen = byEnd.get(q.end);
+      if (!seen || q.filed > seen.filed) byEnd.set(q.end, q);
+    }
+    return [...byEnd.values()].filter((q) => q.val > 0);
+  };
+  const own = quarters(concept);
+  const other = def.concepts.filter((c) => c !== concept).flatMap(quarters);
+  const all = [...own, ...other];
+  // The quarterly rate on the year's duration: two or more quarters, each the same figure as the total (Visa).
+  if (new Set(all.map((q) => q.end)).size >= 2 && all.every((q) => Math.abs(q.val - f.val) <= f.val * 0.05)) return true;
+  // A concept with no quarters of its own whose total is short of the quarters tagged under another (Prologis).
+  // Quarters under the total's own concept are not compared by sum: across a stock split they sit on two bases.
+  const sum = other.reduce((a, q) => a + q.val, 0);
+  return !own.length && new Set(other.map((q) => q.end)).size >= 2 && sum > f.val * 1.05 + 0.005;
+}
 
 const ref = (p: Picked): SourceRef => ({
   accn: p.fact.accn,
@@ -367,12 +399,21 @@ export function humanizeConcept(c: string) {
 }
 
 function annualCell(cf: CompanyFacts, def: LineDef, p: Period): Cell | null {
+  if (def.key === "dividendsPerShare") {
+    // The newest filing's figure of each concept in turn; a concept whose figure is a quarterly rate is skipped.
+    for (const c of def.concepts) {
+      const picked = choose(factsFor(cf, c, unitKey(def)), c, (f) => isAnnualForm(f.form) && isDuration(350, 380)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4));
+      if (picked && !dividendRate(cf, def, picked.fact, c)) return reportedCell(picked);
+    }
+    return null;
+  }
   return def.kind === "stock"
     ? pickCell(cf, def, (f) => !f.start && near(f.end, p.end, 4))
     : pickCell(
         cf,
         def,
-        (f) => isAnnualForm(f.form) && isDuration(350, 380)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4),
+        (f) =>
+          isAnnualForm(f.form) && isDuration(350, 380)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4),
       );
 }
 
@@ -398,7 +439,7 @@ function quarterCell(
       k === 4
         ? choose(list, c, (f) => isAnnualForm(f.form) && isDuration(350, 380)(f) && near(f.start, year.start, 4) && near(f.end, year.end, 4))
         : choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, p.end, 4) && isDuration(160, 290)(f));
-    if (!cum) continue;
+    if (!cum || dividendRate(cf, def, cum.fact, c)) continue;
     const cumLabel = k === 4 ? `FY${year.fy} total (10-K)` : `${YTD_LABEL[k - 1]} (Q${k} 10-Q)`;
     const prevEnd = year.qEnds[k - 2];
     // Latest-filed on both sides keeps them on the same restatement basis when a later filing
@@ -416,7 +457,7 @@ function quarterCell(
     const prevCum =
       (k === 4 && totalOnOriginalBasis(list, cum.fact) ? choose(list, c, (f) => prevPred(f) && f.filed <= cum.fact.filed) : undefined) ??
       choose(list, c, prevPred);
-    if (prevCum && !(NON_NEGATIVE.has(def.key) && cum.fact.val - prevCum.fact.val < 0)) {
+    if (prevCum && !dropDerived(def, cum.fact.val - prevCum.fact.val)) {
       const prevLabel = k - 1 === 1 ? "Q1 (3M)" : `${YTD_LABEL[k - 2]} (Q${k - 1} 10-Q)`;
       const parts: DerivedPart[] = [
         { ...ref(cum), label: cumLabel, sign: 1 },
@@ -428,15 +469,18 @@ function quarterCell(
         ...(approx ? { approx } : {}),
       };
     }
-    // Sum of earlier discrete quarters, when each was reported directly.
+    // Sum of earlier discrete quarters, when each was reported directly under the same concept as the total: a total
+    // of one concept less quarters of another is no figure (Prologis' FY2025 $0.03 under one dividend concept less
+    // three $1.01 quarters under another gave −$3.00).
     const earlier = prevCells.slice(-(k - 1));
-    if (earlier.length === k - 1 && earlier.every((x) => x?.src)) {
+    const sameConcept = (x: Cell | null) => !!x?.src && x.src.concept === ref(cum).concept;
+    if (earlier.length === k - 1 && earlier.every(sameConcept)) {
       const parts: DerivedPart[] = [
         { ...ref(cum), label: cumLabel, sign: 1 },
         ...earlier.map((x, i) => ({ ...x!.src!, label: `Q${i + 1}`, sign: -1 as const })),
       ];
       const v = cum.fact.val - earlier.reduce((s, x) => s + x!.v, 0);
-      if (NON_NEGATIVE.has(def.key) && v < 0) return null;
+      if (dropDerived(def, v)) return null;
       return {
         v: round(v, def.unit),
         derived: { formula: `${cumLabel.split(" (")[0]} − ${earlier.map((_, i) => `Q${i + 1}`).join(" − ")}`, parts },
@@ -445,6 +489,15 @@ function quarterCell(
     }
   }
   return null;
+}
+
+/**
+ * A derived quarter below zero on a line that cannot be negative means the two sides are on different bases. A
+ * derived dividend of zero stays: Walmart declares the year's dividend in its first quarter, so its third-quarter
+ * declarations are nil (9M YTD less 6M YTD).
+ */
+function dropDerived(def: LineDef, v: number) {
+  return NON_NEGATIVE.has(def.key) && v < 0;
 }
 
 function round(v: number, unit: string) {
@@ -1288,6 +1341,130 @@ function netIncomeAvailableOnly(cf: CompanyFacts, rows: Row[], key: string) {
   });
 }
 
+const conceptOf = (c: Cell | null | undefined) => c?.src?.concept ?? c?.derived?.parts[0]?.concept;
+const sameAmount = (a: number, b: number) => Math.abs(a - b) <= Math.max(1, Math.abs(a) * 0.0005);
+/** Preferred dividends and participating securities: what separates profit less noncontrolling interests from common. */
+const NOT_NCI = NOT_AVAILABLE_TO_COMMON.filter((c) => !/Noncontrolling|Minority/.test(c));
+
+/**
+ * "Net income" is the line attributable to the company's shareholders, and consolidated profit with the
+ * noncontrolling interests' share stands above it as the filing prints them, never one under the other's name.
+ * For a period with noncontrolling interests tagged (and not zero): NetIncomeLoss stays; net income available to
+ * common stays when it equals consolidated profit less those interests and no preferred dividends or participating
+ * securities are tagged (Caterpillar's "Profit" $3,287M Q3 2026, 10-Q 0000018230-26-000057); otherwise, and in place of
+ * ProfitLoss, the line is calculated as consolidated profit less noncontrolling interests (American Tower Q3 2026:
+ * $780.8M − $15.0M = $765.8M, 10-Q 0001053507-26-000157). Where none are tagged, the two lines above are left out
+ * and available to common stays only where nothing else separates it from net income (netIncomeAvailableOnly).
+ */
+function attributableNetIncome(cf: CompanyFacts, income: Row[], periods: Period[]) {
+  const ni = rowOf(income, "netIncome");
+  const incl = rowOf(income, "netIncomeInclNci");
+  const nci = rowOf(income, "nciIncome");
+  if (!ni || !incl || !nci) return;
+  const blocked = (p: Period, list: string[]) =>
+    list.some((c) => factsFor(cf, c, "USD").some((f) => f.val !== 0 && near(f.start, p.start, 4) && near(f.end, p.end, 4)));
+  ni.cells = ni.cells.map((c, i) => {
+    const n = nci.cells[i];
+    const p = incl.cells[i];
+    const concept = conceptOf(c);
+    if (!n || n.v === 0 || !p) {
+      if (concept === AVAILABLE_TO_COMMON && blocked(periods[i], NOT_AVAILABLE_TO_COMMON)) return null;
+      return c;
+    }
+    const calc = () => combine(p, n, "sub", ["Net income incl. noncontrolling interests", "Noncontrolling interests"]);
+    if (!c || concept === "us-gaap:ProfitLoss") return calc();
+    if (concept === AVAILABLE_TO_COMMON) return !blocked(periods[i], NOT_NCI) && sameAmount(c.v, p.v - n.v) ? c : calc();
+    return c;
+  });
+  // The two lines above net income only where noncontrolling interests are tagged for the period and differ from zero.
+  for (let i = 0; i < ni.cells.length; i++) {
+    const n = nci.cells[i];
+    if (!n || n.v === 0 || !incl.cells[i]) {
+      incl.cells[i] = null;
+      nci.cells[i] = null;
+    }
+  }
+  if (incl.cells.some(Boolean)) ni.label = "Net income attributable to shareholders";
+}
+
+/** The cash flow statement's first line includes noncontrolling interests: say so where it differs from net income. */
+function labelCashNetIncome(cash: Row[], income: Row[]) {
+  const cfn = rowOf(cash, "cfNetIncome");
+  const ni = rowOf(income, "netIncome");
+  if (!cfn || !ni) return;
+  const differs = cfn.cells.some((c, i) => c && ni.cells[i] && conceptOf(c) === "us-gaap:ProfitLoss" && !sameAmount(c.v, ni.cells[i]!.v));
+  if (differs) cfn.label = "Net income incl. noncontrolling interests";
+}
+
+/**
+ * NonoperatingIncomeExpense is the non-operating total where operating income plus it is pretax income (Amazon Q3
+ * 2026: 28,076 − 1,207 = 26,869), and then it stands as "Total non-operating income (expense)". Interest income and
+ * the other line stand beside it only where interest income less interest expense plus the other line is that total,
+ * so that they are its printed lines (Amazon: 1,187 − 1,691 − 703 = −1,207); a breakdown from a note (Microsoft's
+ * "Other, net") is left out. Where NonoperatingIncomeExpense does not bridge operating income to pretax income
+ * (Walmart's "Other (gains) and losses", beside "Interest, net"), or no operating income is tagged (Lilly's "Other–net,
+ * (income) expense", GE's "Other income (loss)"), it is a line of its own: the other line, ahead of any
+ * OtherNonoperatingIncomeExpense, which such filers tag in a note (Lilly's −$25.4M FY2024 beside −$219.0M printed).
+ */
+function splitNonOperating(income: Row[]) {
+  const other = rowOf(income, "otherIncome");
+  const total = rowOf(income, "nonOperatingTotal");
+  const ii = rowOf(income, "interestIncome");
+  const ie = rowOf(income, "interestExpense");
+  const oi = rowOf(income, "operatingIncome");
+  const pt = rowOf(income, "pretaxIncome");
+  if (!other || !total) return;
+  for (let i = 0; i < total.cells.length; i++) {
+    const t = total.cells[i];
+    if (!t) {
+      if (ii) ii.cells[i] = null;
+      continue;
+    }
+    const o = oi?.cells[i];
+    const b = pt?.cells[i];
+    const tol = Math.max(1, Math.abs(b?.v ?? 0) * 0.0005, Math.abs(o?.v ?? 0) * 0.0005);
+    if (!o || !b || Math.abs(o.v + t.v - b.v) > tol) {
+      other.cells[i] = t;
+      total.cells[i] = null;
+      if (ii) ii.cells[i] = null;
+      continue;
+    }
+    const own = conceptOf(other.cells[i]) === "us-gaap:NonoperatingIncomeExpense" ? null : other.cells[i];
+    const inc = ii?.cells[i] ?? null;
+    const exp = ie?.cells[i] ?? null;
+    const printed = (!!own || !!inc) && Math.abs((inc?.v ?? 0) - (exp?.v ?? 0) + (own?.v ?? 0) - t.v) <= tol;
+    if (!printed) {
+      other.cells[i] = null;
+      if (ii) ii.cells[i] = null;
+    } else other.cells[i] = own;
+  }
+}
+
+/**
+ * "Total operating expenses" only where it is the statement's total: not negative, and revenue less it (or less cost
+ * of revenue and it) comes within 2% of revenue to operating income. Prologis tags OperatingExpenses for a note
+ * subtotal ($612.9M Q3 2026 against its printed "Total expenses" $1,450.8M) and for a reconciling item (−$2,280.7M
+ * FY2025, 10-K 0001193125-26-051453).
+ */
+function dropUntiedOpex(income: Row[]) {
+  const opex = rowOf(income, "opex");
+  const rev = rowOf(income, "revenue");
+  const cost = rowOf(income, "costOfRevenue");
+  const oi = rowOf(income, "operatingIncome");
+  if (!opex) return;
+  opex.cells = opex.cells.map((c, i) => {
+    if (!c) return c;
+    if (c.v < 0) return null;
+    const r = rev?.cells[i];
+    const o = oi?.cells[i];
+    if (!r || !o || !r.v) return c;
+    const tol = Math.abs(r.v) * 0.02;
+    const k = cost?.cells[i];
+    const ties = Math.abs(r.v - c.v - o.v) <= tol || (!!k && Math.abs(r.v - k.v - c.v - o.v) <= tol);
+    return ties ? c : null;
+  });
+}
+
 /**
  * A positive EPS in a period with a net loss is a contradiction unless the filing shows income available to common
  * stockholders above zero (Corsair FY2023: a net loss of $2.6M, $3.2M available to common after a change in the
@@ -1381,8 +1558,11 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     fillDerived(income, "grossProfit", "revenue", "costOfRevenue", ["Revenue", "Cost of revenue"]);
     dropSegmentOperatingIncome(income, buildStatement(cf, [TOTAL_EXPENSES], ps, years, freq)[0]);
     dropContinuingEpsBesideDiscontinued(cf, income);
-    netIncomeAvailableOnly(cf, income, "netIncome");
+    attributableNetIncome(cf, income, ps);
     netIncomeAvailableOnly(cf, cash, "cfNetIncome");
+    labelCashNetIncome(cash, income);
+    splitNonOperating(income);
+    dropUntiedOpex(income);
     dropEpsAgainstNetLoss(cf, income, ps);
     fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);

@@ -82,4 +82,12 @@ describe("FilingDetailView money map", () => {
     expect(screen.queryByRole("radio", { name: /money map/i })).toBeNull();
     expect(container.textContent).toContain("Product A");
   });
+
+  it("sets the table in the shared statement style: newest column marked, grand total ruled, missing cell titled", () => {
+    const { container } = mount(false);
+    expect(container.querySelector(".irt-root.irt-scope")).not.toBeNull();
+    expect(container.querySelector("thead.irt-colhead th.irt-latest")).not.toBeNull();
+    expect(container.querySelector("tr[data-kind=grand]")?.textContent).toContain("Consolidated total");
+    expect(container.querySelector("td.irt-missing")?.getAttribute("title")).toMatch(/no figure/i);
+  });
 });

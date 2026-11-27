@@ -127,7 +127,13 @@ const unmark = (s: string) => s.replace(/\s*[®™©℠]+/g, "").replace(/\s{2,}
 export const rawKey = (f: Pick<IrFact, "category" | "metric" | "unit" | "label" | "parent">) => `${f.category}|${f.metric}|${f.unit}|${normLabel(f.label)}|${normLabel(f.parent ?? "")}`;
 
 /** A line is its dimension, label and the total it rolls into (the same label can appear in two tables). */
-const seriesKey = (f: Pick<IrFact, "category" | "metric" | "label" | "unit" | "parent">) => `${f.category}|${f.metric}|${normLabel(f.label)}|${f.unit}|${normLabel(f.parent ?? "")}`;
+/**
+ * A sign printed straight before a figure in a name is a word of it ("+100 bps" and "-100 bps" are two rows of
+ * JPM's earnings-at-risk table), so two printed rows never share a series because of their sign. Only series
+ * keys read it; label-map keys (`rawKey`) stay as stored.
+ */
+export const signWords = (s: string) => s.replace(/(^|[\s(])\+(?=\d)/g, "$1plus ").replace(/(^|[\s(])[-−–](?=\d)/g, "$1minus ");
+const seriesKey = (f: Pick<IrFact, "category" | "metric" | "label" | "unit" | "parent">) => `${f.category}|${f.metric}|${normLabel(signWords(f.label))}|${f.unit}|${normLabel(f.parent ?? "")}`;
 const docOf = (f: IrFact) => f.document_id ?? f.accn ?? "doc";
 
 /** Ratio of levels past which two tables' same-named lines are not one line (a quarter-on-quarter move stays well under it). */

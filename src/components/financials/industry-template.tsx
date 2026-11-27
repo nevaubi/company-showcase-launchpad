@@ -156,7 +156,8 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
       key: line.id,
       label: line.label,
       title: `${line.label}\nTags, in priority order: ${line.tags.length ? line.tags.join(", ") : line.calc}\nFiled as: ${filed.join(" | ")}`,
-      kind: isTotalTemplateLine(line.id) ? "total" : undefined,
+      kind: templateLineKind(line.id),
+      ratio: per,
       cells: cells.map((c, i) =>
         !c
           ? null
@@ -216,10 +217,11 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
       </div>
       <FiledGrid
         head="Template line"
-        columns={ends.map((e) => ({
+        columns={ends.map((e, i) => ({
           key: e,
           top: kind === "A" ? "Fiscal year" : "Quarter",
           bottom: fmtDate(e),
+          latest: i === ends.length - 1,
         }))}
         rows={rows}
         footer={
@@ -307,4 +309,17 @@ function MappingTable({
       )}
     </div>
   );
+}
+
+/** Template lines that close a statement (net income, total assets, total liabilities and equity). */
+const GRAND_TEMPLATE_LINES = new Set(["is_net_income", "bs_total_assets", "bs_liab_equity"]);
+
+/**
+ * How a template line is set, from its template id: the closing lines as grand totals, other total lines
+ * as subtotals. The cash flow statement's net income opens that statement and is a plain line.
+ */
+export function templateLineKind(id: string): GridRow["kind"] {
+  if (GRAND_TEMPLATE_LINES.has(id)) return "grand";
+  if (id === "cf_net_income") return undefined;
+  return isTotalTemplateLine(id) ? "total" : undefined;
 }

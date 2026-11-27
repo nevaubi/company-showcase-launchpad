@@ -90,6 +90,12 @@ export const INCOME_LINES: LineDef[] = [
   }),
   usd("opex", "Total operating expenses", ["OperatingExpenses", "CostsAndExpenses"], "flow"),
   usd("operatingIncome", "Operating income", ["OperatingIncomeLoss"], "flow", { bold: true }),
+  // Shown only for a period where interest income, interest expense and the other line add up to the non-operating
+  // total, so that they are that total's printed lines (splitNonOperating in build.ts): Amazon Q3 2026 1,187 − 1,691
+  // − 703 = −1,207; American Tower prints "Interest income" (InterestIncomeOther) the same way.
+  usd("interestIncome", "Interest income", ["InvestmentIncomeInterest", "InterestIncomeOther", "InvestmentIncomeInterestAndDividend"], "flow", {
+    indent: 1,
+  }),
   usd(
     "interestExpense",
     "Interest expense",
@@ -97,13 +103,20 @@ export const INCOME_LINES: LineDef[] = [
     "flow",
     { indent: 1 },
   ),
+  // The other non-operating line, never the non-operating total: Amazon prints "Other income (expense), net" (703)
+  // (OtherNonoperatingIncomeExpense) above "Total non-operating income (expense)" (1,207) (NonoperatingIncomeExpense),
+  // which already holds the interest expense line (10-Q 0001018724-26-000040). NonoperatingIncomeExpense stands here
+  // only for a period where it does not bridge operating income to pretax income, so that it is a line of its own
+  // (Walmart's "Other (gains) and losses"; splitNonOperating in build.ts).
   usd(
     "otherIncome",
     "Other income (expense), net",
-    ["NonoperatingIncomeExpense", "OtherNonoperatingIncomeExpense"],
+    ["OtherNonoperatingIncomeExpense", "NonoperatingIncomeExpense"],
     "flow",
     { indent: 1 },
   ),
+  // Kept only for a period where operating income plus it is pretax income (splitNonOperating in build.ts).
+  usd("nonOperatingTotal", "Total non-operating income (expense)", ["NonoperatingIncomeExpense"], "flow"),
   usd(
     "pretaxIncome",
     "Income before taxes",
@@ -114,17 +127,26 @@ export const INCOME_LINES: LineDef[] = [
     "flow",
   ),
   usd("incomeTax", "Income tax expense", ["IncomeTaxExpenseBenefit"], "flow", { indent: 1 }),
+  // Consolidated profit and the noncontrolling interests' share, printed above the attributable line by filers with
+  // noncontrolling interests; kept only for periods where that share is tagged and not zero (attributableNetIncome).
+  usd("netIncomeInclNci", "Net income incl. noncontrolling interests", ["ProfitLoss"], "flow"),
+  usd(
+    "nciIncome",
+    "Less: noncontrolling interests",
+    ["NetIncomeLossAttributableToNoncontrollingInterest", "MinorityInterestInNetIncomeLossOfConsolidatedEntities"],
+    "flow",
+    { indent: 1 },
+  ),
   usd(
     "netIncome",
     "Net income",
-    [
-      "NetIncomeLoss",
-      "ProfitLoss",
-      // Last, and only for a period with no preferred dividends and no noncontrolling interests tagged, where it is
-      // the same figure (netIncomeAvailableOnly in build.ts): Booking's "Net income" $5,404M FY2025 (10-K
-      // 0001075531-26-000009) is tagged with it alone.
-      "NetIncomeLossAvailableToCommonStockholdersBasic",
-    ],
+    // Net income attributable to the company's shareholders, the line EPS is computed on. Available to common
+    // stands only where nothing but noncontrolling interests separates it from consolidated profit (Booking's "Net
+    // income" $5,404M FY2025, 10-K 0001075531-26-000009; Caterpillar's "Profit" $3,287M Q3 2026 = profit of
+    // consolidated and affiliated companies $3,286M less noncontrolling interests −$1M, 10-Q 0000018230-26-000057).
+    // ProfitLoss stands only for a period with no noncontrolling interests tagged; otherwise the line is calculated
+    // as ProfitLoss less the noncontrolling interests (attributableNetIncome in build.ts).
+    ["NetIncomeLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss"],
     "flow",
     { bold: true },
   ),
@@ -302,7 +324,10 @@ export const BALANCE_LINES: LineDef[] = [
 ];
 
 export const CASHFLOW_LINES: LineDef[] = [
-  usd("cfNetIncome", "Net income", ["NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"], "flow"),
+  // The cash flow statement starts from consolidated net income, noncontrolling interests included (ASC 230):
+  // Berkshire's "Net earnings" $67,260M FY2025 (ProfitLoss), not the $66,968M attributable to its shareholders
+  // (10-K 0001193125-26-083899). Labelled as including noncontrolling interests where they differ (build.ts).
+  usd("cfNetIncome", "Net income", ["ProfitLoss", "NetIncomeLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"], "flow"),
   usd(
     "dna",
     "Depreciation & amortization",

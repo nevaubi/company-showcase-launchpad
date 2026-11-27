@@ -77,6 +77,7 @@ export function AdjustedView({ ticker }: { ticker: string }) {
           key: `${m.id}-diff`,
           label: "Difference: adjusted minus GAAP",
           kind: "sub",
+          ratio: perShare,
           cells: ends.map((e, i) => {
             const v = m.values?.[K]?.[e];
             const g = gaap[i];
@@ -84,7 +85,7 @@ export function AdjustedView({ ticker }: { ticker: string }) {
             // Per-share figures from before a stock split aren't comparable with split-adjusted ones.
             if (perShare && g !== 0 && (Math.abs(v.v / g) > 3 || Math.abs(v.v / g) < 1 / 3)) return null;
             const d = v.v - g;
-            return { text: fmtMillions(d, perShare), negative: d < 0, italic: true };
+            return { text: fmtMillions(d, perShare), negative: d < 0, italic: true, mark: "calc", title: `Calculated: adjusted ${fmtMillions(v.v, perShare)} minus GAAP ${fmtMillions(g, perShare)}` };
           }),
         });
       }
@@ -117,7 +118,7 @@ export function AdjustedView({ ticker }: { ticker: string }) {
       {blocks.map((b) => (
         <div key={b.key} className="grid gap-1.5">
           <p className="eyebrow">{b.title}</p>
-          <FiledGrid head="Line" columns={b.ends.map((e) => ({ key: e, top: K === "A" ? "Year" : "Quarter", bottom: fmtDate(e) }))} rows={b.rows} maxHeight="none" />
+          <FiledGrid head="Line" columns={b.ends.map((e, i) => ({ key: e, top: K === "A" ? "Year" : "Quarter", bottom: fmtDate(e), latest: i === b.ends.length - 1 }))} rows={b.rows} maxHeight="none" />
         </div>
       ))}
       {blocks.length > 0 && (
@@ -135,7 +136,9 @@ function kpiRow(it: KpiItem, ends: string[], K: "Q" | "A", perShare: boolean, he
     key: it.id,
     label: it.name,
     title: it.description ? `${it.name}\n${it.description}` : it.name,
-    kind: headline ? "total" : "sub",
+    kind: headline ? undefined : "sub",
+    emph: headline,
+    ratio: perShare,
     cells: ends.map((e) => {
       const v = vals[e];
       if (!v) return null;

@@ -17,6 +17,7 @@ import tsla from "@/lib/ir/fixtures/statements/tsla-rows.json";
 import now from "@/lib/ir/fixtures/statements/now-sum.json";
 import crm from "@/lib/ir/fixtures/statements/crm-rpo.json";
 import intc2 from "@/lib/ir/fixtures/statements/intc-two.json";
+import ear from "@/lib/ir/fixtures/statements/jpm-ear.json";
 import { buildPayload, type IrPayload, type PayloadSeries } from "@/lib/ir/payload";
 import type { IrFact } from "@/lib/ir/kpis";
 import type { TableCaption } from "@/lib/ir/table-captions";
@@ -314,5 +315,17 @@ describe("lines only older documents print", () => {
     expect(after.every((r) => r.kind === "line" && r.old)).toBe(true);
     expect(s.rows.slice(0, i).some((r) => r.kind === "line" && r.old)).toBe(false);
     expect(assembleStatements(p).some((x) => x.id === `${s.id}~old`)).toBe(false);
+  });
+});
+
+describe("vera-02 JPM: rows that differ only by their sign", () => {
+  it("+100 bps and -100 bps are two series with their own figures", async () => {
+    const p = await payloadOf(ear);
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    const s = assembleStatements(p)[0];
+    const rows = s.rows.filter((r): r is Line => r.kind === "line");
+    expect(rows).toHaveLength(2);
+    const v = rows.map((r) => rowCells(r.ks, by, "q", r.at).cells["2026-09-30"]?.v);
+    expect(v).toEqual([1.4e9, -2.2e9]);
   });
 });

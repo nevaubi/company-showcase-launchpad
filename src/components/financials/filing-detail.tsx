@@ -1,7 +1,9 @@
 import { TickerMark } from "@/components/app/ticker";
+import { MISSING } from "./missing";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import "@/components/ir/table.css";
 import { FileText } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
@@ -99,7 +101,7 @@ export function FilingDetailView({ ticker, map = true }: { ticker: string; map?:
   const filings = [q.data.annual, q.data.quarterly].filter(Boolean) as FilingDetail[];
 
   return (
-    <div className="grid grid-cols-1 content-start gap-3" data-section="Filing detail">
+    <div className="irt-root irt-scope grid grid-cols-1 content-start gap-3" data-section="Filing detail">
       <div className="flex flex-wrap items-center gap-2">
         {filings.length > 1 && (
           <Segmented
@@ -189,10 +191,15 @@ const unitCaption = (unit: string, scale: ReturnType<typeof useUnitScale>[0]) =>
   return u === "usd" ? scaleCaption(scale) : u === "pct" ? "percent" : u === "shares" ? "shares" : u === "usdPerShare" ? "dollars per share" : unit.replace(/^.*:/, "").toLowerCase();
 };
 
-function ValueCell({ v, onOpen, text, className }: { v: DetailValue | undefined; onOpen?: () => void; text: string; className?: string }) {
-  if (!v) return <td className={cn("num border-b px-3 py-1 text-right text-muted-foreground/40", className)}>–</td>;
+function ValueCell({ v, onOpen, text, className, style }: { v: DetailValue | undefined; onOpen?: () => void; text: string; className?: string; style?: CSSProperties }) {
+  if (!v)
+    return (
+      <td title="The filing tags no figure for this period" className={cn("num irt-missing border-b px-3 py-1 text-right", className)} style={{ ...MISSING, ...style }}>
+        –
+      </td>
+    );
   return (
-    <td className={cn("border-b p-0", className)}>
+    <td className={cn("border-b p-0", className)} style={style}>
       <button type="button" onClick={onOpen} className="num block w-full px-3 py-1 text-right hover:bg-secondary focus-visible:bg-secondary focus-visible:outline-none" title="Show in filing">
         {text}
       </button>
@@ -201,9 +208,9 @@ function ValueCell({ v, onOpen, text, className }: { v: DetailValue | undefined;
 }
 
 /** Signed growth rate cell ("+12.4%"), muted dash when it can't be computed. */
-function GrowthCell({ rate, title, className }: { rate: number | null; title?: string; className?: string }) {
+function GrowthCell({ rate, title, className, style }: { rate: number | null; title?: string; className?: string; style?: CSSProperties }) {
   return (
-    <td className={cn("num border-b px-3 py-1 text-right text-[12px]", rate == null ? "text-muted-foreground/40" : rate >= 0 ? "text-positive" : "text-negative", className)} title={title}>
+    <td className={cn("num border-b px-3 py-1 text-right text-[12px]", rate == null ? "text-muted-foreground/40" : rate >= 0 ? "text-positive" : "text-negative", className)} style={style} title={title}>
       {rate == null ? "–" : `${rate >= 0 ? "+" : "−"}${Math.abs(rate * 100).toFixed(1)}%`}
     </td>
   );
@@ -239,17 +246,17 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
     // A parent with only nested values is a group heading.
     if (!depth && r.sub?.length && !Object.keys(r.values).length)
       return (
-        <tr key={`${parent}/${r.member}`}>
-          <th scope="row" colSpan={t.periods.length + 1 + extra} className="border-b px-3 pb-1 pt-2 text-left text-[12px] font-semibold" title={r.member}>
+        <tr key={`${parent}/${r.member}`} data-kind="head" className="irt-group">
+          <th scope="row" colSpan={t.periods.length + 1 + extra} className="border-b px-3 pb-1 pt-2 text-left text-[12px] font-semibold" style={BAND} title={r.member}>
             {r.label}
           </th>
         </tr>
       );
     return (
-      <tr key={`${parent}/${r.member}`} className="group">
+      <tr key={`${parent}/${r.member}`} data-kind="line" className={cn("group irt-line", depth ? "irt-l1" : "irt-l0")}>
         <th
           scope="row"
-          className={cn("sticky left-0 z-10 min-w-40 max-w-72 border-b bg-panel px-3 py-1 text-left font-normal group-hover:bg-secondary", depth || r.former ? "text-muted-foreground" : "", depth ? "pl-7" : "")}
+          className={cn("irt-fc sticky left-0 z-10 min-w-40 max-w-72 border-b bg-panel px-3 py-1 text-left font-normal group-hover:bg-secondary", depth || r.former ? "text-muted-foreground" : "", depth ? "pl-7" : "")}
           title={r.former ? `${r.label}: reported only in earlier filings (renamed, merged or no longer broken out)` : r.member}
         >
           <span className="line-clamp-2">{r.label}</span>
@@ -285,12 +292,12 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
     >
       <div ref={scroller} className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-0 text-[13px]">
-          <thead>
+          <thead className="irt-colhead">
             <tr>
-              <th className="sticky left-0 z-10 border-b bg-panel px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">{t.axisLabel}</th>
+              <th className="irt-fc sticky left-0 z-10 border-b bg-panel px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">{t.axisLabel}</th>
               {t.periods.map((k) => (
-                <th key={k} data-latest={k === latest ? "" : undefined} className="num whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-semibold">
-                  {detailPeriodLabel(d.periods[k])}
+                <th key={k} data-latest={k === latest ? "" : undefined} className={cn("num whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-normal", k === latest && "irt-latest")}>
+                  <span className="irt-period">{detailPeriodLabel(d.periods[k])}</span>
                 </th>
               ))}
               {hasChange && (
@@ -309,17 +316,17 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
           <tbody>
             {t.rows.flatMap((r) => [rowFor(r, 0), ...(r.sub ?? []).map((s) => rowFor(s, 1, r.member))])}
             {t.total && Object.keys(t.total).length > 0 && (
-              <tr className="font-medium">
-                <th scope="row" className="sticky left-0 z-10 border-t-2 border-t-foreground/70 bg-panel px-3 py-1 text-left">Consolidated total</th>
+              <tr data-kind="grand" className="font-bold">
+                <th scope="row" className="irt-fc sticky left-0 z-10 bg-panel px-3 py-1 text-left">Consolidated total</th>
                 {t.periods.map((k) => (
-                  <ValueCell key={k} className="border-t-2 border-t-foreground/70" v={t.total![k]} text={t.total![k] ? fmtValue(t.total![k].v, t.unit, scale) : ""} onOpen={() => open(`${t.conceptLabel}, total`, k, t.total![k], t.concept, t.unit)} />
+                  <ValueCell key={k} style={GRAND} v={t.total![k]} text={t.total![k] ? fmtValue(t.total![k].v, t.unit, scale) : ""} onOpen={() => open(`${t.conceptLabel}, total`, k, t.total![k], t.concept, t.unit)} />
                 ))}
-                {hasChange && <GrowthCell className="border-t-2 border-t-foreground/70" rate={changeOf(t, t.total, d.periods)} />}
+                {hasChange && <GrowthCell style={GRAND} rate={changeOf(t, t.total, d.periods)} />}
                 {hasCagr && (() => {
                   const g = cagrOf(t, t.total!, d.periods);
-                  return <GrowthCell className="border-t-2 border-t-foreground/70" rate={g?.rate ?? null} title={g ? `${detailPeriodLabel(d.periods[g.from])} to ${detailPeriodLabel(d.periods[g.to])}, ${g.years} years compounded` : undefined} />;
+                  return <GrowthCell style={GRAND} rate={g?.rate ?? null} title={g ? `${detailPeriodLabel(d.periods[g.from])} to ${detailPeriodLabel(d.periods[g.to])}, ${g.years} years compounded` : undefined} />;
                 })()}
-                {showShare && <td className="border-t-2 border-t-foreground/70" />}
+                {showShare && <td style={GRAND} />}
               </tr>
             )}
           </tbody>
@@ -331,13 +338,17 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
 
 type MatrixRow = SegmentMatrix["rows"][number];
 
+/** A printed heading's band and a grand total's rules, in the shared statement style's colours. */
+const BAND: CSSProperties = { backgroundColor: "var(--irt-band)" };
+const GRAND: CSSProperties = { borderTop: "1px solid var(--irt-rule-strong)", borderBottom: "3px double var(--irt-rule-strong)" };
+
 /** A per-segment ratio of two tagged lines; each cell opens both parts. */
 function RatioRow({ segs, period, d, ticker, num, den, label, note, what, first }: { segs: SegmentMatrix["segments"]; period: string; d: FilingDetail; ticker: string; num: MatrixRow; den: MatrixRow; label: string; note: string; what: string; first: boolean }) {
   const source = useSource();
-  const line = first ? "border-t-2 border-t-foreground/70" : "border-t";
+  const line = first ? "border-t border-t-[color:var(--irt-rule-strong)]" : "border-t border-t-[color:var(--irt-rule)]";
   return (
-    <tr className="font-medium">
-      <th scope="row" className={cn("sticky left-0 z-10 bg-panel px-3 py-1 text-left", line)} title={`${num.label} ÷ ${den.label}`}>
+    <tr data-kind="ratio" className="font-medium">
+      <th scope="row" className={cn("irt-fc sticky left-0 z-10 bg-panel px-3 py-1 text-left", line)} title={`${num.label} ÷ ${den.label}`}>
         {label} <span className="text-[11px] font-normal text-muted-foreground">· {note}</span>
       </th>
       {segs.map((s) => {
@@ -398,9 +409,9 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
     >
       <div className="overflow-x-auto">
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
-          <thead>
+          <thead className="irt-colhead">
             <tr>
-              <th className="sticky left-0 z-10 min-w-56 border-b bg-panel px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">Line</th>
+              <th className="irt-fc sticky left-0 z-10 min-w-56 border-b bg-panel px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">Line</th>
               {segs.map((s) => {
                 const share = revenue && totalRev > 0 ? (revenue.values[s.member]?.[period]?.v ?? 0) / totalRev : null;
                 return (
@@ -425,14 +436,14 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
               lastKind = r.kind;
               return [
                 head && (
-                  <tr key={`h-${r.kind}`}>
-                    <th colSpan={segs.length + 1} className="sticky left-0 border-b bg-secondary/40 px-3 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <tr key={`h-${r.kind}`} data-kind="head" className="irt-group">
+                    <th colSpan={segs.length + 1} className="sticky left-0 border-b px-3 py-1 text-left text-[12px] font-semibold" style={BAND}>
                       {head}
                     </th>
                   </tr>
                 ),
-                <tr key={r.concept} className="group">
-                  <th scope="row" className="sticky left-0 z-10 max-w-80 border-b bg-panel px-3 py-1 text-left font-normal group-hover:bg-secondary" title={r.concept}>
+                <tr key={r.concept} data-kind="line" className="group irt-line">
+                  <th scope="row" className="irt-fc sticky left-0 z-10 max-w-80 border-b bg-panel px-3 py-1 text-left font-normal group-hover:bg-secondary" title={r.concept}>
                     <span className="line-clamp-2">{r.label}</span>
                   </th>
                   {segs.map((s) => {
