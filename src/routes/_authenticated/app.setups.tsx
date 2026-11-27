@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { PageHeader, Panel, Stat } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
+import { HistoricalReplayScoreboard } from "@/components/signals/historical-replay-scoreboard";
 import { Scoreboard } from "@/components/signals/scoreboard";
 import { SetupsList } from "@/components/signals/setups-list";
 import { FilterSelect, SECTION_OFFSET, SectionJump } from "@/components/signals/parts";
@@ -44,12 +45,18 @@ const ALL_LIMIT = 100;
 const SECTIONS = [
   { id: "today", label: "Today's setups" },
   { id: "scoreboard", label: "Scoreboard" },
+  { id: "historical-replay", label: "Historical replay" },
   { id: "method", label: "How this is tested" },
 ] as const;
 
 function SetupsPage() {
   const { data, isLoading, error, refetch } = useQuery(setupsQuery);
-  if (error) return <DataUnavailable title="Setups could not load" error={error} onRetry={() => void refetch()} />;
+  if (error) return (
+    <div className="space-y-4">
+      <DataUnavailable title="Setups could not load" error={error} onRetry={() => void refetch()} />
+      <HistoricalReplayScoreboard />
+    </div>
+  );
   if (isLoading || !data)
     return (
       <div className="space-y-3">
@@ -70,7 +77,7 @@ function SetupsPage() {
       }).slice(0, 12);
     return (
       <div className="space-y-4">
-        <PageHeader eyebrow="Signals" title="Short-term setups" description={`Closing prices ${dayLong(data.asOf)}. Historical rankings resume after the nightly replay verifies executable entries and exits.`} />
+        <PageHeader eyebrow="Signals" title="Short-term setups" description={`Closing prices ${dayLong(data.asOf)}. Live rankings resume after the nightly replay verifies executable entries and exits.`} />
         <Panel title="Recent observations" subtitle="Latest firing per company, by date and ticker. These observations have no historical rank." collapse={false}>
           <div className="divide-y">
             {observed.map((r) => <div key={r.ticker} className="grid grid-cols-[5rem_1fr_auto] items-baseline gap-3 px-3 py-2 text-[13px]">
@@ -81,6 +88,7 @@ function SetupsPage() {
             {!observed.length && <p className="px-3 py-2 text-sm text-muted-foreground">{data.liveError ? "The session’s signal records could not be loaded." : "No dated signal records for this session."}</p>}
           </div>
         </Panel>
+        <HistoricalReplayScoreboard />
       </div>
     );
   }
@@ -111,6 +119,7 @@ function SetupsPage() {
           <Scoreboard data={data} book={data.book} sameLive={data.sameLive} />
         </div>
       </Panel>
+      <HistoricalReplayScoreboard />
       <MethodPanel data={data} />
     </div>
   );

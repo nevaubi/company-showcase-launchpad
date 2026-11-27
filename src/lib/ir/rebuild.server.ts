@@ -1,3 +1,4 @@
+import { holdCutoff, holdKey, publicationWindow } from "./history-hold";
 // Load a company's IR facts + label map and rebuild its precomputed series payload.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
@@ -385,10 +386,31 @@ export async function reportDates(ticker: string): Promise<string[]> {
     .filter((x): x is string => !!x);
 }
 
+/** A historical campaign may finish after an operator has paused it. Only newly processed,
+ * current SEC source documents can then replace the published chart. */
+async function preserveHeldHistory(ticker: string): Promise<boolean> {
+  const held = await supabaseAdmin.from("job_state").select("paused_reason,updated_at").eq("job",holdKey(ticker)).maybeSingle();
+  if (held.error) throw new Error(held.error.message);
+  const cutoff = holdCutoff(held.data?.paused_reason);
+  if (!cutoff || !held.data) return false;
+  const previous = await supabaseAdmin.from("ir_company_series").select("built_at").eq("ticker",ticker).maybeSingle();
+  if (previous.error) throw new Error(previous.error.message);
+  if (!previous.data?.built_at) return false;
+  const days = Number(process.env.IR_FRESH_DAYS ?? 45);
+  const range = publicationWindow(cutoff, held.data.updated_at, previous.data.built_at, Number.isFinite(days) ? days : 45);
+  const since = range.processedSince;
+  const recent = await supabaseAdmin.from("ir_documents").select("id").eq("ticker",ticker)
+    .like("source_url","https://www.sec.gov/Archives/%").gte("filed",range.filedSince)
+    .or(`and(extracted_at.gt.${since},extract_status.like.ok*),and(vision_at.gt.${since},vision_status.like.ok*),and(prose_at.gt.${since},prose_status.like.ok*)`).limit(1);
+  if (recent.error) throw new Error(recent.error.message);
+  return !recent.data?.length;
+}
+
 export async function rebuildCompany(
   ticker: string,
   opts: { dry?: boolean; captions?: boolean; fill?: boolean; expectedBuiltAt?: string } = {},
 ): Promise<IrPayload | null> {
+  if (!opts.dry && await preserveHeldHistory(ticker)) return null;
   // Only the planned documents' facts are loaded (doc-plan.ts): one copy per document family, decks for two
   // years, older history from the primary statement documents only; documents without a filing date are placed
   // by their period, never left out for lacking one.
@@ -487,6 +509,7 @@ export async function rebuildCompany(
       `payload over budget: ${bounded.budget.before} bytes built, ${bounded.budget.after} after every step (cap ${bounded.budget.cap})`,
     );
   if (!opts.dry) {
+    if (await preserveHeldHistory(ticker)) return null;
     // Payloads for banks run to several MB: keep them in storage, with stats in the table.
     const body = JSON.stringify(payload);
     const bytes = new Blob([body]).size;

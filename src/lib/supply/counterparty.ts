@@ -49,6 +49,8 @@ export function byCounterparty<T extends CpSignal>(signals: T[]): Counterparty<T
 
 /** Browser text-fragment link (#:~:text=start,end) so a web/transcript source opens scrolled to and highlighting the quote. */
 export function quoteLink(url: string, quote: string): string {
+  // A publisher-supplied PDF page opens the evidence directly in the document viewer.
+  if (/\.pdf(?:\?[^#]*)?#page=[1-9]\d*$/i.test(url)) return url;
   const words = quote.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").trim().split(/\s+/).filter(Boolean);
   if (!words.length) return url;
   const enc = (w: string[]) => encodeURIComponent(w.join(" ")).replace(/-/g, "%2D").replace(/,/g, "%2C").replace(/&/g, "%26");

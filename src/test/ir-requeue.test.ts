@@ -1,5 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { rereadTickers } from "../../scripts/lib/ir-requeue";
+import { createClient } from "@supabase/supabase-js";
+import { rereadTickers, requeueReaderErrors, VISION_REVIEW_FILTER } from "../../scripts/lib/ir-requeue";
+
+describe("reader retries within the same build", () => {
+  it.each(["extract_status", "vision_status", "prose_status"] as const)(
+    "atomically excludes held and output-limited files when resetting %s",
+    async (field) => {
+      let request: Request | undefined;
+      const client = createClient("https://test.invalid", "test", {
+        global: { fetch: async (url, init) => {
+          request = new Request(url, init);
+          return new Response(null, { status: 204, headers: { "Content-Range": "*/3" } });
+        } },
+      });
+      expect(await requeueReaderErrors(client, "BAC", field)).toBe(3);
+      const query = new URL(request!.url).searchParams;
+      expect(request!.method).toBe("PATCH");
+      expect(query.get("ticker")).toBe("eq.BAC");
+      expect(query.getAll(field)).toEqual(["like.error:%", String.raw`not.ilike.%max\_output\_tokens%`]);
+      expect(await request!.json()).toEqual(field === "extract_status"
+        ? { extract_status: null, extracted_at: null }
+        : field === "prose_status" ? { prose_status: null, prose_at: null } : { vision_status: null });
+    },
+  );
+  it("counts held reviews and regular errors without counting held unread slides", () => {
+    const prefixes = VISION_REVIEW_FILTER.split(",").map((term) => term.slice("vision_status.like.".length, -1));
+    const counted = (status: string) => prefixes.some(prefix => status.startsWith(prefix));
+    expect(counted("held:historical-vision:review | error: Response incomplete (max_output_tokens)")).toBe(true);
+    expect(counted("held:historical-vision:unread")).toBe(false);
+    expect(counted("error: rate limited")).toBe(true);
+  });
+});
 const today = new Date("2026-11-19T00:00:00Z");
 const row = (ticker: string, filed: string | null, fetched_at = "2026-11-19T08:00:00Z", kind = "press-release") => ({ ticker, filed, fetched_at, kind });
 describe("finished-company re-read", () => {

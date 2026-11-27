@@ -20,6 +20,7 @@
  * at most IR_FRESH_MAX_FILES=60, newest first, so a new release does not wait behind old files.
  * IR_FRESH_DAYS=0 turns it off.
  */
+import { HISTORY_HOLD_PREFIX, holdCutoff } from "../src/lib/ir/history-hold";
 import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { args, dbGate, sb } from "./lib/supa";
@@ -426,12 +427,19 @@ async function startRequestedHistoryFill(): Promise<boolean> {
     .finally(()=>{busy.delete(ticker);requestedHistoryTicker=null;rebuildingStale=false;});
   return true;
 }
+async function heldHistoricalTickers(): Promise<string[] | null> {
+  const holds = await sb.from("job_state").select("job,paused_reason").like("job", HISTORY_HOLD_PREFIX + "%");
+  if (holds.error) { log("Could not check historical holds: " + holds.error.message); return null; }
+  return (holds.data ?? []).filter(h => holdCutoff(h.paused_reason)).map(h => h.job.slice(HISTORY_HOLD_PREFIX.length));
+}
 async function maybeRebuildStale(laneStarted: boolean) {
   const due = staleLane(staleInput(laneStarted)).start;
   // A deep build started by hand rebuilds its company itself and holds memory: not beside it.
   if (!due || deepRunning()) return;
   // Beside reading: companies a lane holds now are left for a later pass (their read rebuilds them).
-  const skip = BESIDE ? [...busy, ...freshBusy] : [];
+  const holds = await heldHistoricalTickers();
+  if (!holds) return;
+  const skip = [...new Set([...(BESIDE ? [...busy, ...freshBusy] : []), ...holds])];
   if (BESIDE) log(`stale payload pass beside ${lanesBusy()} reading lane(s)${skip.length ? `, leaving ${skip.join(", ")} to their reads` : ""}`);
   rebuildingStale = true;
   void run("ir-rebuild", "scripts/ir-rebuild-stale.ts", skip.length ? [`--skip=${skip.join(",")}`] : [], `${OUT}/ir-rebuild.log`, rebuildEnv).then(async (code) => {
@@ -874,6 +882,10 @@ let lastDocCheck = 0;
 const pendingReread: string[] = (state.pendingReread ??= []);
 /** Next company: interrupted ones first, then started-but-unfinished, then new (largest revenue), then finished with new files. */
 async function pickNext(busy: Set<string>): Promise<string | null> {
+  // Explicit historical holds apply only to the full campaign. ID-scoped fresh work stays eligible.
+  const holds = await heldHistoricalTickers();
+  if (!holds) return null;
+  busy = new Set([...busy, ...holds]);
   const free = (t: string) => !busy.has(t) && !state.review![t];
   for (const t of interrupted) if (free(t) && !state.done.includes(t)) return (interrupted.delete(t), t);
   // Priority companies (IR_PRIORITY_GROUP / IR_PRIORITY_TICKERS) before every other one.

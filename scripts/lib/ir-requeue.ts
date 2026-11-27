@@ -1,5 +1,25 @@
 import { classify } from "@/lib/jobs/failure";
 import { byRank } from "@/lib/jobs/priority";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+type ReaderStatus = "extract_status" | "vision_status" | "prose_status";
+
+/** Running the same input against the same output limit cannot fix a truncated response. */
+export async function requeueReaderErrors(client: SupabaseClient, ticker: string, field: ReaderStatus) {
+  const reset = field === "extract_status"
+    ? { extract_status: null, extracted_at: null }
+    : field === "prose_status" ? { prose_status: null, prose_at: null } : { vision_status: null };
+  const { count, error } = await client.from("ir_documents")
+    .update(reset, { count: "exact" })
+    .eq("ticker", ticker)
+    .like(field, "error:%")
+    .not(field, "ilike", String.raw`%max\_output\_tokens%`);
+  if (error) throw new Error(`Could not requeue ${ticker} ${field}: ${error.message}`);
+  return count ?? 0;
+}
+
+/** A held failure still belongs in the company's review count. An unread hold has no error. */
+export const VISION_REVIEW_FILTER = "vision_status.like.error:*,vision_status.like.held:historical-vision:review*";
 
 /** Files that make a finished company worth re-reading (same kinds the readers handle). */
 export const REREAD_KINDS = ["press-release", "supplement", "presentation", "data", "other", "image"];

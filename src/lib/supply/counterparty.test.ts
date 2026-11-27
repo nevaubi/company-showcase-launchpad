@@ -31,6 +31,10 @@ describe("multi-party statements", () => {
 
 import { quoteLink } from "./counterparty";
 describe("quoteLink", () => {
+  it("preserves a documented page inside an issuer PDF", () => {
+    const source = "https://issuer.example/earnings.pdf#page=3";
+    expect(quoteLink(source, "majority of our new orders")).toBe(source);
+  });
   it("uses start,end fragment for long quotes and encodes hyphens", () => {
     const u = quoteLink("https://x.com/a#old", "one two three four five six seven eight nine ten eleven twelve-thirteen end");
     expect(u).toBe("https://x.com/a#:~:text=one%20two%20three%20four%20five%20six,eight%20nine%20ten%20eleven%20twelve%2Dthirteen%20end");

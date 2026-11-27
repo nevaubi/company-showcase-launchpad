@@ -15,10 +15,12 @@
  * figures (rebuildCompany, as after a company's tables); no dates, conversion, slides, text, retry or
  * report, so a company's stage is unchanged. last-run.json in --out carries the stop reason.
  */
+import { holdCutoff, holdKey } from "../src/lib/ir/history-hold";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { rebuildCompany } from "@/lib/ir/rebuild.server";
+import { requeueReaderErrors, VISION_REVIEW_FILTER } from "./lib/ir-requeue";
 import { args, dbGate, sb } from "./lib/supa";
 
 const TICKERS = (args.tickers ?? "").split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
@@ -93,9 +95,7 @@ async function count(q: PromiseLike<{ count: number | null }>) {
 
 async function requeueFailed(ticker: string, field: "extract_status" | "vision_status") {
   await dbGate("ir-deep");
-  const patch = field === "extract_status" ? { extract_status: null, extracted_at: null } : { vision_status: null };
-  const { data } = await sb.from("ir_documents").update(patch).eq("ticker", ticker).like(field, "error:%").select("id");
-  return data?.length ?? 0;
+  return requeueReaderErrors(sb, ticker, field);
 }
 
 const EXTRACTABLE = ["press-release", "supplement", "presentation", "data", "other"];
@@ -177,7 +177,7 @@ async function prose(ticker: string) {
   const c = await cap();
   if (c < 0.5) return { credits: 0, done: 0, facts: 0, stop: "budget spent" as string | null };
   // One more try per build for documents whose read failed last time.
-  await sb.from("ir_documents").update({ prose_status: null, prose_at: null }).eq("ticker", ticker).like("prose_status", "error:%");
+  await requeueReaderErrors(sb, ticker, "prose_status");
   const r = await run(`${ticker}-prose`, "scripts/ir-prose.ts", [`--ticker=${ticker}`, "--resume", `--concurrency=${process.env.IR_PROSE_CONCURRENCY ?? "8"}`, "--max=5000", ...(Number.isFinite(c) ? [`--max-credits=${c.toFixed(2)}`] : [])], logFile);
   if (!r.spend) return { credits: 0, done: 0, facts: 0, stop: `prose exited ${r.code} without a spend report (see ${logFile})` as string | null };
   await addSpend(r.spend.credits);
@@ -196,7 +196,7 @@ async function report(ticker: string, parts: Record<string, unknown>) {
     count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).is("extract_status", null).is("extracted_at", null).or("ext.in.(htm,html),rendition_path.like.%html").in("kind", EXTRACTABLE)),
     count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).is("vision_status", null).not("path", "is", null).or(`and(kind.eq.image,bytes.gt.40000),and(kind.eq.presentation,ext.eq.pdf),and(ext.eq.pdf,kind.in.(${VISION_PDF.join(",")}))`)),
     count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).like("extract_status", "error:%")),
-    count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).like("vision_status", "error:%")),
+    count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).or(VISION_REVIEW_FILTER)),
   ]);
   const { data: series } = await sb.from("ir_company_series").select("stats, built_at").eq("ticker", ticker).maybeSingle();
   const r = { ticker, files: total, tableFacts: table, visionFacts: vis, textFacts: text, waitingText: waitingP, waitingTables: waitingT, waitingSlides: waitingV, failedTables: errT, failedSlides: errV, series: series?.stats ?? null, builtAt: series?.built_at ?? null, ...parts, ledgerCredits: +(await spent()).toFixed(2) };
@@ -255,11 +255,16 @@ const queue: string[] = [];
 // --continue lists companies this pipeline already started (partial figures are its own work).
 const CONTINUE = new Set((args.continue ?? "").split(",").filter(Boolean));
 for (const t of TICKERS) {
+  const held = await sb.from("job_state").select("paused_reason").eq("job",holdKey(t)).maybeSingle();
+  if (held.error) throw new Error(held.error.message);
+  if (holdCutoff(held.data?.paused_reason)) { log(`${t}: historical campaign held; fresh filings use their document IDs`); continue; }
   const n = await count(sb.from("ir_kpi_facts").select("id", { count: "exact", head: true }).eq("ticker", t));
   if (n && args["include-existing"] === undefined && !CONTINUE.has(t)) log(`${t}: skipped — already has ${n.toLocaleString()} IR figures`);
   else queue.push(t);
 }
 log(`companies: ${queue.join(", ")} | ${Number.isFinite(BUDGET) ? `budget ${BUDGET} credits` : "no spend cap"}, ${(await spent()).toFixed(2)} already used | ${MODEL} → ${ESCALATE}`);
+
+if (!queue.length) process.exit(0);
 
 // 1. Dates first (seconds per company): the readers validate periods against filing dates.
 if (args["skip-prepare"] === undefined) {

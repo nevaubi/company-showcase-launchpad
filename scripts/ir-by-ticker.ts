@@ -15,6 +15,7 @@
  */
 import { spawn } from "node:child_process";
 import { COVERAGE } from "@/lib/coverage";
+import { requeueReaderErrors } from "./lib/ir-requeue";
 import { args, log, sb } from "./lib/supa";
 
 const EXTRACT_CONC = Number(args.concurrency ?? 32);
@@ -140,8 +141,8 @@ async function paused(job: string): Promise<string | null> {
 
 /** Requeue one company's failed items so they get a second pass. */
 async function requeueFailures(ticker: string) {
-  await sb.from("ir_documents").update({ extract_status: null }).eq("ticker", ticker).like("extract_status", "error:%");
-  await sb.from("ir_documents").update({ vision_status: null }).eq("ticker", ticker).like("vision_status", "error:%");
+  await requeueReaderErrors(sb, ticker, "extract_status");
+  await requeueReaderErrors(sb, ticker, "vision_status");
 }
 
 const startAfter = args.start;
