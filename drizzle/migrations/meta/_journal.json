@@ -526,6 +526,20 @@
       "when": 1795769657908,
       "tag": "0074_setup_execution_version",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1795770154403,
+      "tag": "0075_bank_sector_releases",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1795770179775,
+      "tag": "0076_issuer_directory",
+      "breakpoints": true
     }
   ]
 }
