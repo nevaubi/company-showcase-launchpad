@@ -2682,6 +2682,8 @@ export type Database = {
           lease_until: string | null
           receipt: Json | null
           retry_at: string | null
+          superseded_at: string | null
+          superseded_receipt: Json | null
           ticker: string
           token: string | null
         }
@@ -2693,6 +2695,8 @@ export type Database = {
           lease_until?: string | null
           receipt?: Json | null
           retry_at?: string | null
+          superseded_at?: string | null
+          superseded_receipt?: Json | null
           ticker: string
           token?: string | null
         }
@@ -2704,6 +2708,8 @@ export type Database = {
           lease_until?: string | null
           receipt?: Json | null
           retry_at?: string | null
+          superseded_at?: string | null
+          superseded_receipt?: Json | null
           ticker?: string
           token?: string | null
         }
@@ -4424,6 +4430,14 @@ export type Database = {
         }[]
       }
       check_call_archive_evidence: { Args: never; Returns: number }
+      claim_setup_replay_after_filing_v2: {
+        Args: { p_as_of: string }
+        Returns: {
+          sector: string
+          ticker: string
+          token: string
+        }[]
+      }
       claim_setup_replay_v2: {
         Args: { p_as_of: string }
         Returns: {
@@ -4623,6 +4637,15 @@ export type Database = {
       request_bot_close: { Args: { _position: string }; Returns: undefined }
       require_feature: { Args: { _feature: string }; Returns: boolean }
       reset_paper_bot: { Args: { _bot: string }; Returns: undefined }
+      save_setup_replay_v2: {
+        Args: {
+          p_receipt: Json
+          p_rows: Json
+          p_ticker: string
+          p_token: string
+        }
+        Returns: boolean
+      }
       sector_dataset_release_v1: { Args: { _path: string }; Returns: Json }
       seed_issuer_directory: { Args: { entries: Json }; Returns: number }
       set_firm_member_role: {
