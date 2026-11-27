@@ -5,7 +5,7 @@
 // group.ts `joinRows`), so the strip, the peers row and the company table cannot disagree.
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { SectorSourceLink } from "@/components/alt/source-links";
@@ -22,7 +22,7 @@ import { groupTape, tapeAsOf } from "@/lib/sectors/breadth";
 import { driversOf } from "@/lib/sectors/drivers";
 import { byUnit, count, mult, pct, pts, ratio, tone, usd } from "@/lib/sectors/format";
 import { COL_SETS, COLS, COMPANY_NAME_W, figAt, companyColW, DIST, fitCompanies, IND_W, joinRows, sortRows, summary, tableSort, tapeOn, type ColSet, type GroupSearch, type Row, type Summary } from "@/lib/sectors/group";
-import { BREAKDOWN_METRICS, fmtMetric, groupQuery, loadFailure, overviewQuery, qLabel, tapeQuery, type GroupFile, type ValRange } from "@/lib/sectors/groups";
+import { BREAKDOWN_METRICS, fmtMetric, groupQuery, loadFailure, overviewQuery, qLabel, valuationCohort, valuationHistory, tapeQuery, type GroupFile, type ValRange } from "@/lib/sectors/groups";
 import { baseMembers, membersOf, pageMembers, type Member } from "@/lib/sectors/members";
 import { groupRisk, marketIndex, type MarketIndex, type Signal } from "@/lib/sectors/risk";
 import { distribution, ends, ranks, type DistPoint, type Distribution as Dist } from "@/lib/sectors/stats";
@@ -229,7 +229,7 @@ function SummaryStrip({ d, s, onPick }: { d: GroupFile; s: Summary; onPick: (m: 
       <Tile
         label="P/E"
         value={mult(s.pe.v)}
-        sub={s.pe.pct != null ? `${ordinal(Math.round(s.pe.pct * 100))} pct of 10Y` : s.pe.q ? "quarter-end caps" : undefined}
+        sub={s.pe.pct != null ? `${ordinal(Math.round(s.pe.pct * 100))} historical pct` : s.pe.q ? "quarter-end caps" : undefined}
         basis={s.pe.v != null ? (s.pe.q ? `${qLabel(s.pe.q)} · ${coverageCount(s.pe.n, s.n)}` : `today · ${coverageCount(s.pe.n, s.n)}`) : undefined}
         title={
           s.pe.q
@@ -378,7 +378,7 @@ function PeerTr({ r, here, spy }: { r: BoardRow; here: boolean; spy: Record<stri
       <td className="num text-right" title={basis(r.f.om)}>
         {pct(r.f.om.v)}
       </td>
-      <td className="num text-right" title={r.valQuarter ? `${qLabel(r.valQuarter)} quarter-end caps` : r.valN ? `today · ${r.valN} companies` : undefined}>
+      <td className="num text-right" title={r.valuation.pe.q ? `${qLabel(r.valuation.pe.q)} quarter-end caps` : r.valuation.pe.n != null ? `Latest available caps · ${r.valuation.pe.n} companies` : undefined}>
         {mult(r.pe)}
       </td>
     </tr>
@@ -580,7 +580,7 @@ function Performance({ d, win, onWin }: { d: GroupFile; win: "6m" | "1y" | "2y";
   );
 }
 
-function RangeRow({ label, r, now, onClick }: { label: string; r: ValRange | null | undefined; now: number | null | undefined; onClick?: () => void }) {
+function RangeRow({ label, r, now, cohort, total, onClick }: { label: string; r: ValRange | null | undefined; now: number | null | undefined; cohort: ReturnType<typeof valuationCohort>; total: number; onClick?: () => void }) {
   if (!r) return null;
   const pos = (v: number) => Math.max(0, Math.min(100, ((v - r.min) / (r.max - r.min || 1)) * 100));
   return (
@@ -596,6 +596,9 @@ function RangeRow({ label, r, now, onClick }: { label: string; r: ValRange | nul
           <span className="font-medium">{mult(now)}</span>
           <span className="ml-1.5 text-[11px] text-muted-foreground">{r.pct != null ? `${ordinal(Math.round(r.pct * 100))} percentile` : "–"}</span>
         </span>
+      </span>
+      <span className="mt-0.5 block text-[11px] text-muted-foreground">
+        {cohort && now != null ? `${cohort.aggregate} / ${total} companies · ` : ""}{valuationHistory(r)}
       </span>
       <span className="relative mt-2 block h-1.5 rounded-full bg-secondary">
         <span className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-muted-foreground" style={{ left: `${pos(r.med)}%` }} />
@@ -617,26 +620,31 @@ function RangeRow({ label, r, now, onClick }: { label: string; r: ValRange | nul
 function Valuation({ d, onPick }: { d: GroupFile; onPick: (m: string, q?: string) => void }) {
   const vn = d.val_now as Record<string, number | null> | undefined;
   const lq = d.quarters[d.quarters.length - 1];
-  const any = d.val_range?.pe || d.val_range?.ps || d.val_range?.pfcf;
+  const multiples = ([
+    { key: "pe", label: "P/E" }, { key: "ps", label: "P/Sales" }, { key: "pfcf", label: "P/FCF" },
+  ] as const).map((item) => ({ ...item, cohort: valuationCohort(d.val_now, item.key), range: d.val_range?.[item.key] }));
+  const any = multiples.some((item) => item.range);
   return (
     <Section
       id="valuation"
       name="Valuation"
       title="Valuation against its own history"
-      caption={`Today's aggregate multiple (${vn?.n ?? "–"} companies) within its 10-year quarterly range · click a row for the latest quarter's companies (quarter-end market caps)`}
+      caption="The rank uses up to 40 positive quarter-end multiples. Missing or nonpositive observations are skipped, so the range can span more than 10 years. Select a row for the quarter-end breakdown."
     >
       {any ? (
         <div className="divide-y">
-          <RangeRow label="P/E" r={d.val_range?.pe} now={vn?.pe} onClick={() => onPick("pe", lq)} />
-          <RangeRow label="P/Sales" r={d.val_range?.ps} now={vn?.ps} onClick={() => onPick("ps", lq)} />
-          <RangeRow label="P/FCF" r={d.val_range?.pfcf} now={vn?.pfcf} onClick={() => onPick("pfcf", lq)} />
+          {multiples.map(({ key, label, range, cohort }) => (
+            <RangeRow key={key} label={label} r={range} now={vn?.[key]} cohort={cohort}
+              total={d.constituents.length} onClick={() => onPick(key, lq)} />
+          ))}
         </div>
       ) : (
         <QuietLine>Not enough quarters of earnings to place today's multiples in a range.</QuietLine>
       )}
       <p className="border-t px-3.5 py-2 text-[11px] leading-4 text-muted-foreground">
-        Company medians today: P/E {mult(vn?.pe_med)}, P/S {mult(vn?.ps_med)}, P/FCF {mult(vn?.pfcf_med)}. Aggregates above 150× (earnings near zero)
-        are left out.
+        Company medians use positive denominators. {multiples.map(({ key, label, cohort }, i) => (
+          <Fragment key={key}>{i > 0 ? " · " : ""}{label} {mult(vn?.[key + "_med"])}{cohort ? ` (${cohort.median} companies)` : ""}</Fragment>
+        ))}
       </p>
     </Section>
   );

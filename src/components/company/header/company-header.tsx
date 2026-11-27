@@ -1,3 +1,5 @@
+import { listingClosure } from "@/lib/company/listing-history";
+import { fmtDate } from "@/lib/format";
 import { issuerLink } from "@/lib/company/issuer-directory";
 import { useQuery } from "@tanstack/react-query";
 import { CompanyLogo } from "@/components/app/company-logo";
@@ -52,6 +54,7 @@ export function CompanyHeader({
   quoteExchange?: string;
 }) {
   const hq = useQuery(hqQuery);
+  const closed = listingClosure(ticker);
   // the IR address of a generated-list profile that lacks one (same query as the About section)
   const details = useCompanyDetails(ticker, profile);
   return (
@@ -77,15 +80,24 @@ export function CompanyHeader({
         <div className="col-span-full row-start-3 mt-3 flex min-w-0 flex-wrap items-end gap-x-8 gap-y-2">
           {/* past 40rem the price block has one width for any price under $1,000, so the facts start at the same
               place on every company and do not move when the quote lands; below it the facts take their own row */}
-          <PriceBlock ticker={ticker} quote={quote} pending={quotePending} className="@min-[40rem]/hdr:min-w-[15rem]" />
-          <QuoteFacts
-            className="basis-full @min-[40rem]/hdr:basis-auto"
-            ticker={ticker}
-            quote={quote}
-            profile={profile}
-            quotePending={quotePending}
-            profilePending={profilePending}
-          />
+          {closed ? (
+            <div className="min-w-0 border-l-2 border-border pl-3">
+              <p className="text-sm font-medium">Historical listing · {ticker}</p>
+              <p className="text-xs text-muted-foreground">{closed.description} <a href={closed.source} target="_blank" rel="noreferrer" className="underline underline-offset-2">Effective {fmtDate(closed.effective)}</a></p>
+            </div>
+          ) : (
+            <>
+              <PriceBlock ticker={ticker} quote={quote} pending={quotePending} className="@min-[40rem]/hdr:min-w-[15rem]" />
+              <QuoteFacts
+                className="basis-full @min-[40rem]/hdr:basis-auto"
+                ticker={ticker}
+                quote={quote}
+                profile={profile}
+                quotePending={quotePending}
+                profilePending={profilePending}
+              />
+            </>
+          )}
         </div>
         {/* after the identity and the price in the page order, so the keyboard reads the header as it is laid out */}
         <CompanyActions

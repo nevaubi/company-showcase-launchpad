@@ -449,7 +449,7 @@ async function setupReplayLoop() {
       if (lease) {
         const result = await childRun(lease, 'scripts/setup-replay.ts', ['--max-tickers=12'], 135_000);
         if (result.told?.idle === true) pause = 15 * 60_000;
-        else if (result.told?.items === 12 && result.told?.interrupted !== true) pause = 1000;
+        else if (result.told?.processed === 12 && result.told?.interrupted !== true) pause = 1000;
         failures = result.code === 0 || result.code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
       }
     } catch (e) {

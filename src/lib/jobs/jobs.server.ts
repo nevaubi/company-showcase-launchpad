@@ -16,6 +16,8 @@ import { loadJobRank } from "@/lib/jobs/priority.server";
 import { backoffRow, blockStreak, chainStatus, judgeSlice, OPTIONS_BACKOFF_KEY, OPTIONS_PROBE, optionsNight, type ChainResult } from "@/lib/jobs/options-run";
 import { backoffTicker, chargeFailure, estimateErrorClass, pickEstimates, scanCursorAfter, ESTIMATE_FAIL_PREFIX, ESTIMATE_NONE_PREFIX, ESTIMATE_SCAN, type FailReceipt } from "@/lib/jobs/estimates-order";
 import { barProblem } from "@/lib/jobs/bar-check";
+import { targetSession } from "@/lib/jobs/trading-days";
+import { listingClosure } from "@/lib/company/listing-history";
 import { healRow, providerKey, tripRow, type CircuitRow } from "@/lib/jobs/provider-health";
 import { isEarnings } from "@/lib/jobs/sec-discover";
 
@@ -448,20 +450,28 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
     const stocks = new Set(COVERAGE.map((c) => c.ticker));
     const flagged: string[] = [];
     let started = 0;
+    const session = targetSession();
+    const closed: string[] = [];
     const results = await pool(batch, 3, async (symbol) => {
       // Out of budget: leave this symbol (and the rest of the slice) for the next run.
       if (!left()) return null;
       started++;
+      if (listingClosure(symbol, session)) {
+        closed.push(symbol);
+        return 0;
+      }
       // Yahoo first (dividend-adjusted closes); Nasdaq (stocks, ETFs) or Cboe (VIX) when Yahoo throttles.
       let bars;
+      let usedFallback = false;
       try {
-        bars = toBars(await fetchYahoo(symbol, "1mo", "1d", left.signal()), false);
+        bars = toBars(await fetchYahoo(symbol, "1mo", "1d", left.signal()), false, "official");
       } catch (e) {
+        usedFallback = true;
         const fallback = isCboeIndex(symbol)
-          ? fetchCboeDaily(symbol, 31, left.signal())
+          ? fetchCboeDaily(symbol, 31, left.signal(), "official")
           : symbol.startsWith("^")
             ? Promise.reject(new Error("no fallback for this index"))
-            : fetchNasdaqDaily(symbol, stocks.has(symbol) ? "stocks" : "etf", 31, left.signal());
+            : fetchNasdaqDaily(symbol, stocks.has(symbol) ? "stocks" : "etf", 31, left.signal(), "official");
         bars = await fallback.catch((n: Error) => {
           throw new Error(`${(e as Error).message}; ${n.message}`);
         });
@@ -484,11 +494,22 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
         volume: Math.round(volume),
         updated_at: new Date().toISOString(),
       }));
-      if (rows.length) {
-        const { error } = await supabaseAdmin.from("market_bars").upsert(rows);
+      // Nasdaq/Cboe can fill missing historical dates without overwriting Yahoo's adjusted history.
+      let written = 0;
+      if (usedFallback) {
+        const history = rows.filter((row) => row.date < session);
+        if (history.length) {
+          const { data, error } = await supabaseAdmin.from("market_bars").upsert(history, { onConflict: "symbol,date", ignoreDuplicates: true }).select("date");
+          if (error) throw new Error(error.message);
+          written = data?.length ?? 0;
+        }
+      }
+      const recent = usedFallback ? rows.filter((row) => row.date >= session) : rows;
+      if (recent.length) {
+        const { error } = await supabaseAdmin.from("market_bars").upsert(recent);
         if (error) throw new Error(error.message);
       }
-      return rows.length;
+      return written + recent.length;
     });
     const failed = batch.flatMap((sym, i) => (results[i].status === "rejected" ? [`${sym}: ${String((results[i] as PromiseRejectedResult).reason?.message ?? results[i])}`] : []));
     // pool starts symbols in order, so the unstarted ones are the end of the slice
@@ -501,7 +522,7 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
       await supabaseAdmin.from("job_runs").delete().neq("job", "vendor-backfill").lt("started_at", new Date(Date.now() - 14 * 86400000).toISOString());
     }
     const items = results.reduce((n, r) => n + (r.status === "fulfilled" ? (r.value ?? 0) : 0), 0);
-    return { ok: outcome === "done", items, detail: { ...sliceDetail(cl, outcome, symbols.length), symbols: batch.slice(0, started), notStarted: batch.slice(started), failed, ...(flagged.length ? { flagged } : {}) } };
+    return { ok: outcome === "done", items, detail: { ...sliceDetail(cl, outcome, symbols.length), symbols: batch.slice(0, started), notStarted: batch.slice(started), failed, ...(closed.length ? { closed } : {}), ...(flagged.length ? { flagged } : {}) } };
   },
 
   /** Four macro series per run: recent observations plus a fresh dashboard summary. */

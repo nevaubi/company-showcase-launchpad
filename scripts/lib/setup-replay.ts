@@ -9,6 +9,19 @@ import { MIN_BARS, scanTicker } from '../../src/lib/signals/scan';
 export const sha256 = (contents: string) => createHash('sha256').update(contents).digest('hex');
 export type ReplayInputs = TickerEvents & { official: OfficialRow[] };
 
+export class InsufficientReplayHistory extends Error {
+  constructor(readonly observedSessions: number) { super(`Insufficient observed history (${observedSessions} sessions)`); }
+}
+
+export type ReplayHold =
+  | { kind: 'insufficient-history'; ticker: string; observedSessions: number }
+  | { kind: 'retired-listing'; ticker: string; effective: string };
+
+export function replayPassReceipt(completed: string[], samples: number, held: ReplayHold[], errors: string[], idle: boolean, interrupted: boolean) {
+  return { ok: errors.length === 0, items: completed.length, completed, samples, held, processed: completed.length + held.length,
+    idle, interrupted, errors, ...(errors.length ? { error: errors[0] } : {}) };
+}
+
 export function replayCalendar(bench: BenchFile, asOf: string) {
   const dates = bench.dates;
   if (!dates || dates.length < MIN_BARS || dates.at(-1) !== asOf || dates.some((d, i) =>
@@ -35,7 +48,8 @@ export function replayHistory(calendar: ReturnType<typeof replayCalendar>, ticke
   const sessions = new Set(ctx.dates);
   const dated = bars.filter(b => sessions.has(b[0].slice(0, 10)));
   const observed = dated.filter(b => b[6] > 0);
-  if (observed.length < MIN_BARS || observed.at(-1)?.[0].slice(0, 10) !== asOf) throw new Error(`Insufficient observed history (${observed.length} sessions)`);
+  if (observed.length < MIN_BARS) throw new InsufficientReplayHistory(observed.length);
+  if (observed.at(-1)?.[0].slice(0, 10) !== asOf) throw new Error(`No observed closing trade for ${ticker} on ${asOf}`);
   for (let i = 0; i < dated.length; i++) {
     const [date, open, high, low, close, adjusted, volume] = dated[i] as Bar;
     if ((i && dated[i - 1][0].slice(0, 10) === date.slice(0, 10)) || !(adjusted > 0) || !Number.isFinite(volume) || volume < 0 || barProblem({ open, high, low, close })) {

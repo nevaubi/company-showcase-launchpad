@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { PriceSeries } from '../financials/types';
 import { benchFromBars } from '../signals/context';
-import { replayCalendar, replayHistory, type ReplayInputs } from '../../../scripts/lib/setup-replay';
+import { InsufficientReplayHistory, replayCalendar, replayHistory, replayPassReceipt, type ReplayInputs } from '../../../scripts/lib/setup-replay';
 
 const prices = (path: string): PriceSeries => JSON.parse(readFileSync(path, 'utf8'));
 const stock = prices('src/test/fixtures/prices/JPM.json');
@@ -29,6 +29,15 @@ describe('authenticated historical replay', () => {
       const entry = enter[1] * enter[5] / enter[4];
       expect(r.gross).toBeCloseTo((side === 'L' ? 1 : -1) * (exit[5] / entry - 1), 5);
     }
+  });
+  it('distinguishes a completed pass with insufficient listings from an operational failure', () => {
+    const held = [{ kind: 'insufficient-history' as const, ticker: 'NEW', observedSessions: 232 }];
+    expect(replayPassReceipt(['JPM'], 524, held, [], false, false)).toMatchObject({ ok: true, items: 1, processed: 2, held });
+    expect(replayPassReceipt([], 0, held, [], true, false)).toMatchObject({ ok: true, items: 0, processed: 1 });
+    expect(replayPassReceipt([], 0, [{ kind: 'retired-listing', ticker: 'BKH', effective: '2026-11-16' }], [], false, false)).toMatchObject({ ok: true, items: 0, processed: 1 });
+    expect(replayPassReceipt(['JPM'], 524, held, ['storage read failed'], false, false)).toMatchObject({ ok: false, items: 1, error: 'storage read failed' });
+    expect(() => replay({ ...stock, bars: stock.bars.slice(-40) })).toThrow(InsufficientReplayHistory);
+    expect(() => replay(stock, { ...inputs, official: official.slice(0, -1) })).not.toThrow(InsufficientReplayHistory);
   });
   it('refuses incomplete or mismatched sources and future evidence', () => {
     expect(() => replay({ ...stock, symbol: 'BAC' })).toThrow(/Wrong/);

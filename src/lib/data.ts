@@ -1,4 +1,5 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
+import { listingClosure } from "@/lib/company/listing-history";
 import { mergeStoredBars } from "@/lib/append-bars";
 import type {
   CompanyDataset,
@@ -386,6 +387,13 @@ export const pricesQuery = (symbol: string, range: Range = "1y", interval: Inter
   queryOptions({
     queryKey: ["prices", symbol, range, interval],
     queryFn: async (): Promise<PriceSeries> => {
+      const closed = listingClosure(symbol);
+      if (closed && interval === "1d") {
+        const stored = await storedDailyBars(symbol);
+        const bars = stored.bars.filter(([date]) => date < closed.effective);
+        if (range === "1d" || range === "5d") return { ...stored, bars: bars.slice(range === "1d" ? -1 : -5) };
+        return sliceRange({ ...stored, bars }, range);
+      }
       if (interval === "1d" && range !== "1d" && range !== "5d") {
         try {
           const stored = await storedDailyBars(symbol);
@@ -445,17 +453,18 @@ export const quotesQuery = (symbols: string[]) =>
   queryOptions({
     queryKey: ["quotes", symbols.join(",")],
     queryFn: async () => {
-      let live: Awaited<ReturnType<typeof getQuotes>> = { quotes: [], errors: symbols };
+      const active = symbols.filter((s) => !listingClosure(s));
+      let live: Awaited<ReturnType<typeof getQuotes>> = { quotes: [], errors: active };
       try {
         const chunks: string[][] = [];
-        for (let i = 0; i < symbols.length; i += 40) chunks.push(symbols.slice(i, i + 40));
+        for (let i = 0; i < active.length; i += 40) chunks.push(active.slice(i, i + 40));
         const parts = await Promise.all(chunks.map((c) => getQuotes({ data: { symbols: c } })));
         live = { quotes: parts.flatMap((p) => p.quotes), errors: parts.flatMap((p) => p.errors) };
       } catch {
         /* fall through to snapshots */
       }
       const have = new Set(live.quotes.map((q) => q.symbol.toUpperCase()));
-      const missing = symbols.filter((s) => !have.has(s.toUpperCase()));
+      const missing = active.filter((s) => !have.has(s.toUpperCase()));
       const filled = await Promise.all(missing.map((s) => snapshotQuote(s).catch(() => null)));
       const bySym = new Map(
         [...live.quotes, ...filled.filter((q): q is NonNullable<typeof q> => !!q)].map((q) => [

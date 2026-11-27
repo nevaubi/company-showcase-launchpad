@@ -40,6 +40,7 @@ vi.mock("@/lib/market-data.server", async () => {
   };
 });
 import { runJob } from "./jobs.server";
+import { fetchNasdaqDaily } from "@/lib/market-data.server";
 
 const nowIso = () => new Date().toISOString();
 const st = (job: string, cursor: number, paused_reason: string | null = null) => ({ job, cursor, paused_reason, updated_at: nowIso() });
@@ -113,6 +114,20 @@ describe("commit-after-work cursors", () => {
     const stored = (mocks.db.tables.market_bars ?? []).filter((b) => b.symbol === "AAPL");
     expect(stored.map((b) => b.date)).toEqual(["2026-11-18"]);
     expect(r.detail.flagged).toEqual([expect.stringContaining("AAPL 2026-11-19: open 53.47 above high 52.44")]);
+  });
+
+  it("a general prices fallback cannot replace older Yahoo adjusted closes used by nightly setups", async () => {
+    const previous = { symbol: "AAPL", date: "2020-03-02", close: 112, adj_close: 95, updated_at: "2020-03-03T00:00:00Z" };
+    mocks.db = fakeSupabase({ market_bars: [previous], job_state: [st("prices", 0)] });
+    mocks.fetchYahoo.mockRejectedValue(new Error("no Yahoo"));
+    vi.mocked(fetchNasdaqDaily).mockResolvedValueOnce([
+      ["2020-03-02", 111, 114, 110, 112, 112, 20],
+      ["2020-03-03", 108, 110, 104, 106, 106, 25],
+    ]);
+    await runJob("prices");
+    expect(mocks.db.tables.market_bars.filter(r => r.symbol === "AAPL")).toEqual([
+      previous, expect.objectContaining({ date: "2020-03-03", adj_close: 106 }),
+    ]);
   });
 
   it("rotating jobs walk the top of the dv20 rank first", async () => {

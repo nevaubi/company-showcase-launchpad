@@ -294,6 +294,29 @@ export function fmtMetric(v: number | null | undefined, unit: string | undefined
 }
 export const qLabel = (q: string) => q.replace(/^(\d{4})Q(\d)$/, "Q$2 $1");
 
+export function valuationHistory(range: ValRange): string {
+  const observations = Number.isInteger(range.n) && range.n > 0 ? `${range.n} positive quarterly observations` : "Positive quarterly observations";
+  const quarter = /^\d{4}Q[1-4]$/;
+  return quarter.test(range.from) && quarter.test(range.to) ? `${observations}, ${qLabel(range.from)}–${qLabel(range.to)}` : observations;
+}
+
+/** Published current aggregates include all finite denominators, including zero and losses.
+ * Company medians require a positive denominator. Quarterly cohorts are stored separately. */
+export function valuationCohort(now: GroupFile["val_now"], key: "pe" | "ps" | "pfcf") {
+  if (!Array.isArray(now?.rows) || (Number.isInteger(now.n) && now.rows.length !== now.n)) return null;
+  const column = { pe: 3, ps: 4, pfcf: 5 }[key];
+  let aggregate = 0;
+  let median = 0;
+  for (const row of now.rows) {
+    const denominator = row[column];
+    if (typeof row[2] !== "number" || !Number.isFinite(row[2]) || row[2] <= 0 ||
+        typeof denominator !== "number" || !Number.isFinite(denominator)) continue;
+    aggregate++;
+    if (denominator > 0) median++;
+  }
+  return { aggregate, median };
+}
+
 /* ---------- aggregate breakdown (mirrors etl/sectors.py) ---------- */
 type CompRow = Record<string, number | string | null>;
 interface CompanyM {

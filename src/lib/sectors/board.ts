@@ -2,7 +2,7 @@
 // sectors.json (cap-weighted returns, fundamentals, valuation range), the member tape (breadth and
 // volatility from setup_series), the markets file (earnings moves, chart signals) and the sector ETFs'
 // closes. The board has three column sets: overview, fundamentals, and risk and signals. Pure.
-import type { GroupSummary, Overview } from "./groups";
+import type { GroupSummary, Overview, ValRange } from "./groups";
 import { groupTape, type GroupTape, type MemberTape } from "./breadth";
 import { membersOf, type Member } from "./members";
 import { groupMarket, type Based, type GroupSignals, type MarketIndex } from "./risk";
@@ -48,10 +48,9 @@ export interface BoardRow {
   ps: number | null;
   /** Σ free cash flow ÷ Σ market cap, the inverse of the aggregate P/FCF. */
   fcfYield: number | null;
-  valN: number | null;
-  /** Set when the file has no current multiples and the latest quarter's (quarter-end caps) stand in. */
-  valQuarter: string | null;
-  /** Where today's aggregate P/E sits in its own 10-year quarterly range, 0 to 1. */
+  valuation: Record<ValuationKey, Cell>;
+  peHistory: ValRange | null;
+  /** Rank of the current P/E among the published positive quarterly observations. */
   pePct: number | null;
   /** Latest calendar quarter the fundamentals describe. */
   q: string | null;
@@ -72,6 +71,16 @@ const cell = (g: GroupSummary, k: string): Cell => {
   const l = g.latest?.[k];
   return { v: l?.[1] ?? null, q: l?.[0] ?? null, n: l?.[2] ?? null };
 };
+
+export type ValuationKey = "pe" | "ps" | "pfcf";
+
+function valuationCell(g: GroupSummary, key: ValuationKey): Cell {
+  const value = g.val_now?.[key];
+  if (value == null) return cell(g, key);
+  // The overview only supplies the count of companies with trailing earnings.
+  // Sales and free cash flow use their own subsets in the detailed file.
+  return { v: value, q: null, n: key === "pe" ? (g.val_now?.n ?? null) : null };
+}
 
 export function boardRows(
   ov: Overview,
@@ -96,8 +105,8 @@ export function boardRows(
       // else; without it, the pipeline's share for every group.
       const t = tapeOn ? groupTape(members, tape!) : null;
       const m = market ? groupMarket(members, market) : null;
-      const pfcf = g.val_now?.pfcf ?? g.latest?.pfcf?.[1] ?? null;
-      const today = g.val_now?.pe != null;
+      const valuation = { pe: valuationCell(g, "pe"), ps: valuationCell(g, "ps"), pfcf: valuationCell(g, "pfcf") };
+      const pfcf = valuation.pfcf.v;
       return {
         slug: g.slug,
         name: g.name,
@@ -112,11 +121,11 @@ export function boardRows(
         above200: t ? t.above200.share : (g.breadth?.b200 ?? null),
         nearHigh: t ? t.nearHigh.share : null,
         f: Object.fromEntries(FUND_KEYS.map((k) => [k, cell(g, k)])) as Record<FundKey, Cell>,
-        pe: g.val_now?.pe ?? g.latest?.pe?.[1] ?? null,
-        ps: g.val_now?.ps ?? g.latest?.ps?.[1] ?? null,
+        pe: valuation.pe.v,
+        ps: valuation.ps.v,
         fcfYield: pfcf != null && pfcf > 0 ? 1 / pfcf : null,
-        valN: today ? (g.val_now?.n ?? null) : (g.latest?.pe?.[2] ?? null),
-        valQuarter: today ? null : (g.latest?.pe?.[0] ?? null),
+        valuation,
+        peHistory: g.pe_range ?? null,
         pePct: g.pe_range?.pct ?? null,
         q: g.latest?.rev_growth?.[0] ?? g.q ?? null,
         top5: g.top5 ?? null,

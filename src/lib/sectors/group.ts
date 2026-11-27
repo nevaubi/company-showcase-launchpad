@@ -261,7 +261,7 @@ export interface Summary {
     n: number | null;
     /** Null when it is today's multiple; the quarter when the latest quarter's stands in. */
     q: string | null;
-    /** Where it sits in its own 10-year range, 0 to 1. */
+    /** Where it sits among the published positive quarterly observations, 0 to 1. */
     pct: number | null;
   };
   ret3m: number | null;

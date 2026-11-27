@@ -286,7 +286,7 @@ function MethodPanel({ data }: { data: SetupsData }) {
           <h3 className="mb-1 text-[13px] font-semibold leading-5">The test</h3>
           <ul className="list-disc space-y-1 pl-4 text-[13px] leading-5 text-muted-foreground">
             <li>Each rule uses the settings of its published paper. Nothing is fitted to this data. A signal uses only what was known at that day's close; the trade enters at the next open and exits at the close after the holding period.</li>
-            <li>Returns are measured against the stock's sector fund, after a round trip of 4 to 30 basis points by liquidity and 3% a year to borrow shorts. Stocks trading under $5M a day are skipped.</li>
+            <li>Sector-relative returns deduct a modeled round-trip cost of 4–30 basis points and assume 3% annual borrow on shorts. The model estimates liquidity from 20 sessions of adjusted closing price × reported volume and skips estimates below $5 million. Actual spreads, slippage and borrow fees can differ.</li>
             <li>A rule is judged on trades since {year}, month by month, with the error widened where holds run across months. Signal days are not counted as independent: holds overlap, and neighbouring days move together.</li>
           </ul>
         </div>

@@ -870,7 +870,8 @@ async function ingestMacro(s: MacroDef) {
     !Number.isFinite(val) || (i > 0 && day <= observations[i - 1][0]))) throw new Error("Empty, future, or out-of-order series");
   const dates = new Set(observations.map(([day]) => day));
   if (prior?.observations.some(([day]) => !dates.has(day))) throw new Error("Published observations missing from response; retained stored history");
-  if (prior && JSON.stringify(prior.observations) === JSON.stringify(observations)) {
+  if (prior && prior.title === s.title && prior.units === s.units && prior.frequency === s.frequency &&
+    prior.agency === s.agency && JSON.stringify(prior.observations) === JSON.stringify(observations)) {
     console.log(`  ${s.id}: unchanged`);
     return;
   }

@@ -28,6 +28,7 @@ import {
   type BoardRow,
   type BoardSet,
   type BoardSort,
+  type ValuationKey,
   type Cell,
   type Span,
 } from "@/lib/sectors/board";
@@ -35,7 +36,7 @@ import { tapeAsOf, type MemberTape, type TapeFile } from "@/lib/sectors/breadth"
 import { pickDrivers } from "@/lib/sectors/drivers";
 import { fundRisk } from "@/lib/sectors/etf";
 import { corr100, mult, pct, ratio, tone, usd } from "@/lib/sectors/format";
-import { qLabel, SECTOR_ETF, type Overview } from "@/lib/sectors/groups";
+import { qLabel, valuationHistory, SECTOR_ETF, type Overview } from "@/lib/sectors/groups";
 import { baseMembers } from "@/lib/sectors/members";
 import { marketIndex } from "@/lib/sectors/risk";
 import { QuietLine, Section, ShareMeter, SortTh, STICKY_HEAD, STICKY_HEAD_2, heat, useFits, useWidth } from "./ui";
@@ -88,7 +89,11 @@ const RETURN_COLS: ColSpec[] = WINDOWS.map((w, i) => ({
   cellTitle: (r) => (r.excess[w] != null ? `${w}: ${pct(r.ret[w], { sign: true })}, ${pct(r.excess[w], { sign: true })} vs SPY` : undefined),
   style: (r) => heat(r.excess[w], SCALE[w]),
 }));
-const valTitle = (r: BoardRow, what: string) => (r.valQuarter ? `${what}: ${qLabel(r.valQuarter)} quarter-end market caps (no current multiple in the file)` : `${what}: today's market caps · ${r.valN ?? 0} companies`);
+const valTitle = (r: BoardRow, key: ValuationKey) => {
+  const cell = r.valuation[key];
+  const basis = cell.q ? `${qLabel(cell.q)} quarter-end market caps` : "Latest available market caps";
+  return cell.n == null ? basis : `${basis} · ${cell.n} of ${r.n} companies`;
+};
 const PE: ColSpec = {
   k: "pe",
   label: "P/E",
@@ -96,7 +101,7 @@ const PE: ColSpec = {
   w: 56,
   first: "asc",
   cell: (r) => mult(r.pe),
-  cellTitle: (r) => (r.pe != null ? valTitle(r, "P/E") : undefined),
+  cellTitle: (r) => (r.pe != null ? valTitle(r, "pe") : undefined),
 };
 
 const COLS: Record<BoardSet, ColSpec[]> = {
@@ -128,11 +133,11 @@ const COLS: Record<BoardSet, ColSpec[]> = {
     { ...PE, group: "Valuation, today" },
     {
       k: "pep",
-      label: "vs 10Y",
-      title: "Where today's aggregate P/E sits in its own 10-year quarterly range, 0 cheapest to 100 dearest",
+      label: "P/E rank",
+      title: "Percentile of the latest P/E among up to 40 positive quarterly observations, from lowest to highest",
       w: 84,
       first: "asc",
-      cell: (r) => (r.pePct != null ? <PctBar p={r.pePct} /> : dash),
+      cell: (r) => (r.pePct != null ? <PctBar p={r.pePct} history={r.peHistory ? valuationHistory(r.peHistory) : undefined} /> : dash),
     },
   ],
   fundamentals: [
@@ -160,7 +165,7 @@ const COLS: Record<BoardSet, ColSpec[]> = {
       w: 56,
       first: "asc",
       cell: (r) => mult(r.ps),
-      cellTitle: (r) => (r.ps != null ? valTitle(r, "P/S") : undefined),
+      cellTitle: (r) => (r.ps != null ? valTitle(r, "ps") : undefined),
     },
     {
       k: "fcfy",
@@ -168,7 +173,7 @@ const COLS: Record<BoardSet, ColSpec[]> = {
       title: "Free cash flow yield: Σ free cash flow ÷ Σ market cap (1 ÷ aggregate P/FCF)",
       w: 66,
       cell: (r) => pct(r.fcfYield),
-      cellTitle: (r) => (r.fcfYield != null ? valTitle(r, "FCF yield") : undefined),
+      cellTitle: (r) => (r.fcfYield != null ? valTitle(r, "pfcf") : undefined),
     },
   ],
   risk: [
@@ -374,14 +379,14 @@ export function SectorBoard({
               `The daily member tape did not load: breadth is the pipeline's share above the 200-day average on ${fmtDate(ov.as_of)}, and the near-high share is not available.`
             )}{" "}
             Fundamentals aggregate the members' filings (Σ numerator ÷ Σ denominator) for {q ? qLabel(q) : "each group's latest quarter (in each cell's tooltip)"}, the
-            newest quarter at least half as many companies have reported as the one before. P/E is on today's market caps; vs 10Y places it in its own 10-year range.
+            newest quarter at least half as many companies have reported as the one before. P/E rank compares the latest multiple with up to 40 positive quarterly observations. Skipped quarters can extend the calendar span.
             Prices as of {fmtDate(ov.as_of)}.
           </>
         )}
         {set === "fundamentals" && (
           <>
             Every figure is Σ numerator ÷ Σ denominator over the members reporting both, for {q ? qLabel(q) : "each group's latest quarter"}; a cell's tooltip gives its
-            quarter and company count. Revenue is the members' trailing twelve months summed. Valuation is on today's market caps over trailing figures (
+            quarter and the available contributor count. Revenue is the members' trailing twelve months summed. Valuation is on today's market caps over trailing figures (
             {ov.groups.find((g) => g.kind === level)?.val_now ? "the companies with a recent report" : "quarter-end caps where the file has no current multiple"}); FCF
             yield is 1 ÷ aggregate P/FCF. Banks report no gross margin, so Financials shows none. Prices as of {fmtDate(ov.as_of)}.
           </>
@@ -438,9 +443,9 @@ function BoardTr({ r, ind, cols, ctx }: { r: BoardRow; ind: boolean; cols: ColSp
   );
 }
 
-function PctBar({ p }: { p: number }) {
+function PctBar({ p, history }: { p: number; history?: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5" title={`${ordinal(Math.round(p * 100))} percentile of its 10-year range`}>
+    <span className="inline-flex items-center gap-1.5" title={`${ordinal(Math.round(p * 100))} percentile${history ? ` · ${history}` : ""}`}>
       <span className="relative h-1 w-10 rounded-full bg-secondary" aria-hidden>
         <span className="absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground" style={{ left: `${p * 100}%` }} />
       </span>

@@ -2,6 +2,9 @@
 // Shared by the live server functions and the scheduled refresh jobs.
 import type { Bar } from "@/lib/financials/types";
 
+// Chart display can substitute the close for absent fields. Official storage needs all four observed prices.
+type BarMode = "chart" | "official";
+
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const RESEARCH_UA = "FiledUnder Research research@filedunder.ai";
@@ -62,7 +65,7 @@ export async function fetchYahoo(symbol: string, range: string, interval: string
  * Daily bars from Nasdaq's public quote API — a fallback when Yahoo throttles. Prices are
  * split-adjusted (not dividend-adjusted), so adjusted close = close for these recent bars.
  */
-export async function fetchNasdaqDaily(symbol: string, kind: "stocks" | "etf", days = 31, signal?: AbortSignal): Promise<Bar[]> {
+export async function fetchNasdaqDaily(symbol: string, kind: "stocks" | "etf", days = 31, signal?: AbortSignal, mode: BarMode = "chart"): Promise<Bar[]> {
   const to = new Date();
   const from = new Date(to.getTime() - days * 86400_000);
   const d = (x: Date) => x.toISOString().slice(0, 10);
@@ -79,7 +82,8 @@ export async function fetchNasdaqDaily(symbol: string, kind: "stocks" | "etf", d
       const c = num(r.close);
       if (!y || !Number.isFinite(c)) return null;
       const o = num(r.open), h = num(r.high), l = num(r.low), v = num(r.volume);
-      return [`${y}-${m}-${dd}`, Number.isFinite(o) ? o : c, Number.isFinite(h) ? h : c, Number.isFinite(l) ? l : c, c, c, Number.isFinite(v) ? v : 0];
+      const missing = mode === "official" ? NaN : c;
+      return [`${y}-${m.padStart(2, "0")}-${dd.padStart(2, "0")}`, Number.isFinite(o) ? o : missing, Number.isFinite(h) ? h : missing, Number.isFinite(l) ? l : missing, c, c, Number.isFinite(v) ? v : 0];
     })
     .filter((b): b is Bar => !!b)
     .sort((a, b) => a[0].localeCompare(b[0]));
@@ -141,7 +145,7 @@ export async function fetchCboeQuote(symbol: string): Promise<{ price: number; p
 }
 
 /** Recent daily bars for a Cboe index. */
-export async function fetchCboeDaily(symbol: string, days = 31, signal?: AbortSignal): Promise<Bar[]> {
+export async function fetchCboeDaily(symbol: string, days = 31, signal?: AbortSignal, mode: BarMode = "chart"): Promise<Bar[]> {
   const res = await fetch(`${CBOE}/charts/historical/_${encodeURIComponent(symbol.slice(1))}.json`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" }, signal });
   if (!res.ok) throw new Error(`Cboe responded ${res.status}`);
   const j = (await res.json()) as { data?: { date: string; open: string; high: string; low: string; close: string }[] };
@@ -150,11 +154,12 @@ export async function fetchCboeDaily(symbol: string, days = 31, signal?: AbortSi
     .filter((r) => r.date >= cutoff)
     .map((r): Bar => {
       const c = Number(r.close);
-      return [r.date, Number(r.open) || c, Number(r.high) || c, Number(r.low) || c, c, c, 0];
+      const missing = mode === "official" ? NaN : c;
+      return [r.date, Number(r.open) || missing, Number(r.high) || missing, Number(r.low) || missing, c, c, 0];
     });
 }
 
-export function toBars(r: YahooChartResult, intraday: boolean): Bar[] {
+export function toBars(r: YahooChartResult, intraday: boolean, mode: BarMode = "chart"): Bar[] {
   const q = r.indicators.quote[0];
   const adj = r.indicators.adjclose?.[0]?.adjclose;
   const ts = r.timestamp ?? [];
@@ -164,7 +169,8 @@ export function toBars(r: YahooChartResult, intraday: boolean): Bar[] {
     const c = q.close[i];
     if (c == null) return;
     const d = intraday ? new Date(t * 1000).toISOString() : new Date((t + (r.meta.gmtoffset ?? 0)) * 1000).toISOString().slice(0, 10);
-    bars.push([d, f(q.open[i] ?? c), f(q.high[i] ?? c), f(q.low[i] ?? c), f(c), f(adj?.[i] ?? c), q.volume[i] ?? 0]);
+    const missing = mode === "official" ? NaN : c;
+    bars.push([d, f(q.open[i] ?? missing), f(q.high[i] ?? missing), f(q.low[i] ?? missing), f(c), f(adj?.[i] ?? c), q.volume[i] ?? 0]);
   });
   return bars;
 }

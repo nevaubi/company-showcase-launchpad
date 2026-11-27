@@ -1,3 +1,4 @@
+import { listingClosure } from "@/lib/company/listing-history";
 import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
@@ -21,6 +22,7 @@ export const getPriceSeries = createServerFn({ method: "GET" })
       .parse(d),
   )
   .handler(async ({ data }): Promise<PriceSeries> => {
+    const closed = listingClosure(data.symbol);
     const r = await fetchYahoo(data.symbol, data.range, data.interval);
     const intraday = !["1d", "1wk", "1mo"].includes(data.interval);
     return {
@@ -28,7 +30,7 @@ export const getPriceSeries = createServerFn({ method: "GET" })
       name: r.meta.longName ?? r.meta.shortName,
       currency: r.meta.currency,
       interval: data.interval,
-      bars: toBars(r, intraday),
+      bars: toBars(r, intraday).filter(([date]) => !closed || date.slice(0, 10) < closed.effective),
       fetchedAt: new Date().toISOString(),
       source: "yahoo-live",
     };
@@ -59,6 +61,7 @@ export const getQuotes = createServerFn({ method: "GET" })
     const { fetchCboeQuote, fetchNasdaqDaily, fetchNasdaqQuote, isCboeIndex } = await import("@/lib/market-data.server");
     const stocks = new Set(COVERAGE.map((c) => c.ticker));
     const results = await pool(data.symbols, 4, async (s) => {
+      if (listingClosure(s)) throw new Error("Listing closed");
       try {
         const r = await fetchYahoo(s, "5d", "1d");
         const closes = (r.indicators.quote[0]?.close ?? []).filter((x): x is number => x != null);

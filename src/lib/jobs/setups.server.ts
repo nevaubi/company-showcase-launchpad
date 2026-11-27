@@ -1,4 +1,3 @@
-import { closeInstant, targetSession } from "./trading-days";
 // Nightly short-term setups refresh. After each US close the scheduled `setups` job walks one cycle:
 //   bars → context → scan → cross → evaluate → publish → bots → done
 // Each call does a small slice inside the scheduler's short window; several calls can run at once
@@ -6,6 +5,7 @@ import { closeInstant, targetSession } from "./trading-days";
 // code the full-history script uses (src/lib/signals/*), so the job only maintains what changed.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { COVERAGE } from "@/lib/coverage";
+import { listingClosure } from "@/lib/company/listing-history";
 import { pageSupplyLinks } from "@/lib/supply/read";
 import type { Bar } from "@/lib/financials/types";
 import { fetchCboeDaily, fetchNasdaqDaily, fetchYahoo, isCboeIndex, pool, toBars } from "@/lib/market-data.server";
@@ -20,6 +20,8 @@ import { GATE, OOS_START } from "@/lib/signals/backtest";
 import { roundTripCost, tradeCost } from "@/lib/signals/features";
 import type { Json } from "@/integrations/supabase/types";
 import { barProblem } from "@/lib/jobs/bar-check";
+import type { Budget } from "./jobs.server";
+import { closeInstant, targetSession } from "./trading-days";
 import { mergeOfficialBars } from "@/lib/jobs/setups-bars";
 
 type Result = { ok: boolean; items: number; detail: Record<string, unknown> };
@@ -32,41 +34,48 @@ const SERIES_BARS = 300;
 
 // ---------------------------------------------------------------- session timing
 
-/** Current New York date/time parts. */
 export { targetSession } from "./trading-days";
 
 // ---------------------------------------------------------------- bars
 
-async function fetchDaily(symbol: string): Promise<Bar[]> {
-  try {
-    return toBars(await fetchYahoo(symbol, "5d", "1d"), false);
-  } catch (e) {
-    if (isCboeIndex(symbol)) return fetchCboeDaily(symbol, 7);
-    if (symbol.startsWith("^")) throw e;
-    const stock = !BENCH_SYMBOLS.includes(symbol);
-    return fetchNasdaqDaily(symbol, stock ? "stocks" : "etf", 7);
-  }
+function validPrices([, open, high, low, close]: Bar): boolean {
+  return !barProblem({ open, high, low, close });
 }
 
-/**
- * Store bars, rejecting any whose open or close lies outside its high-low range (`barProblem`). A
- * rejected bar for the session itself throws after the good bars are stored, so the symbol is
- * reported as failed for this session instead of carrying an impossible bar into the scan.
- */
-async function upsertBars(symbol: string, bars: Bar[], session?: string) {
-  const bad: string[] = [];
-  const good = bars.filter(([date, open, high, low, close]) => {
-    const p = barProblem({ open, high, low, close });
-    if (p) bad.push(`${date}: ${p}`);
-    return !p;
-  });
-  const rows = good.map(([date, open, high, low, close, adj, volume]) => ({ symbol, date, open, high, low, close, adj_close: adj, volume: Math.round(volume), updated_at: nowIso() }));
-  if (rows.length) {
-    const { error } = await db().from("market_bars").upsert(rows);
-    if (error) throw new Error(error.message);
+type StoredQuote = { updated_at: string; open: number | null; high: number | null; low: number | null; close: number };
+function finalQuote(row: StoredQuote, settledAt: number): boolean {
+  return Date.parse(row.updated_at) >= settledAt &&
+    !barProblem({ open: Number(row.open), high: Number(row.high), low: Number(row.low), close: Number(row.close) });
+}
+
+async function storeClosingBars(symbol: string, session: string, left: Budget): Promise<number> {
+  let bars: Bar[];
+  try {
+    const chart = await fetchYahoo(symbol, "5d", "1d", left.signal());
+    bars = toBars(chart, false, "official").filter((bar) => bar[0] <= session && validPrices(bar));
+    if (!bars.some(([date]) => date === session)) throw new Error(`Yahoo has no valid OHLC for ${session}`);
+  } catch (yahooError) {
+    if (symbol.startsWith("^") && !isCboeIndex(symbol)) throw yahooError;
+    try {
+      const fallback = isCboeIndex(symbol)
+        ? await fetchCboeDaily(symbol, 7, left.signal(), "official")
+        : await fetchNasdaqDaily(symbol, BENCH_SYMBOLS.includes(symbol) ? "etf" : "stocks", 7, left.signal(), "official");
+      // The fallback carries raw closes. Keep the older dividend-adjusted history and its vintage.
+      bars = fallback.filter((bar) => bar[0] === session && validPrices(bar));
+      if (!bars.length) throw new Error(`fallback has no valid OHLC for ${session}`);
+    } catch (fallbackError) {
+      throw new Error(`${String(yahooError)}; ${String(fallbackError)}`);
+    }
   }
-  if (session && bad.some((b) => b.startsWith(session))) throw new Error(`rejected bar ${bad.find((b) => b.startsWith(session))}`);
+  const updated_at = nowIso();
+  const rows = bars.map(([date, open, high, low, close, adj, volume]) => ({ symbol, date, open, high, low, close, adj_close: adj, volume: Math.round(volume), updated_at }));
+  await db().from("market_bars").upsert(rows).throwOnError();
   return rows.length;
+}
+
+async function ensureBenchmark(session: string, left: Budget) {
+  const { data: spy } = await db().from("market_bars").select("updated_at, open, high, low, close").eq("symbol", "SPY").eq("date", session).maybeSingle().throwOnError();
+  if (!spy || !finalQuote(spy, Date.parse(closeInstant(session)))) await storeClosingBars("SPY", session, left);
 }
 
 const ALL = () => [...BENCH_SYMBOLS, ...COVERAGE.map((c) => c.ticker)];
@@ -101,7 +110,7 @@ interface Cycle {
 }
 
 async function currentCycle(): Promise<Cycle | null> {
-  const { data } = await db().from("setup_cycles").select("as_of, phase, cursor, started_at, updated_at, detail").order("as_of", { ascending: false }).limit(1).maybeSingle();
+  const { data } = await db().from("setup_cycles").select("as_of, phase, cursor, started_at, updated_at, detail").order("as_of", { ascending: false }).limit(1).maybeSingle().throwOnError();
   return (data as Cycle | null) ?? null;
 }
 
@@ -109,20 +118,18 @@ const advance = (asOf: string, from: string, to: string) => db().rpc("setup_adva
 const lease = async (asOf: string, phase: string, secs = 60) => !!(await db().rpc("setup_lease", { _as_of: asOf, _phase: phase, _secs: secs }).throwOnError()).data;
 const take = async (asOf: string, phase: string, n: number) => (await db().rpc("setup_take", { _as_of: asOf, _phase: phase, _n: n }).throwOnError()).data as number | null;
 
-export async function runSetups(left: () => boolean): Promise<Result> {
+export async function runSetups(left: Budget): Promise<Result> {
   const target = targetSession();
   let cycle = await currentCycle();
   if (!cycle || (cycle.as_of < target && cycle.phase === "done")) {
-    if (cycle?.detail?.checked === target) return { ok: true, items: 0, detail: { idle: true, asOf: cycle.as_of, note: "no session on " + target } };
-    // Holidays: the newest SPY bar decides the session.
-    const spy = (await fetchDaily("SPY")).filter((b) => b[0] <= target);
-    const last = spy.at(-1)?.[0];
-    if (!last || (cycle && last <= cycle.as_of)) {
-      if (cycle) await db().from("setup_cycles").update({ detail: { ...cycle.detail, checked: target } as Json }).eq("as_of", cycle.as_of);
-      return { ok: true, items: 0, detail: { idle: true, note: `no new session (latest ${last})` } };
+    // The exchange calendar already accounts for closures. An absent benchmark on a scheduled
+    // session is retryable, including when an older cycle previously marked this date checked.
+    try {
+      await ensureBenchmark(target, left);
+    } catch (error) {
+      return { ok: false, items: 0, detail: { asOf: target, waitingFor: "SPY", error: String(error).slice(0, 350) } };
     }
-    await upsertBars("SPY", spy);
-    const { error } = await db().from("setup_cycles").insert({ as_of: last, phase: "bars", cursor: 0, detail: {} });
+    const { error } = await db().from("setup_cycles").insert({ as_of: target, phase: "bars", cursor: 0, detail: {} });
     if (error && !/duplicate/i.test(error.message)) throw new Error(error.message);
     cycle = await currentCycle();
   }
@@ -135,42 +142,45 @@ export async function runSetups(left: () => boolean): Promise<Result> {
   return out ?? { ok: false, items: 0, detail: { error: `unknown phase ${cycle.phase}` } };
 }
 
-type Phase = (asOf: string, left: () => boolean, cycle: Cycle, stuck: boolean) => Promise<Result>;
+type Phase = (asOf: string, left: Budget, cycle: Cycle, stuck: boolean) => Promise<Result>;
 
 const PHASES: Record<string, Phase> = {
   /** Closing bars for every symbol that doesn't have a final bar for the session yet. */
   async bars(asOf, left) {
     const symbols = ALL();
-    const closeAt = closeInstant(asOf);
+    const closeAt = Date.parse(closeInstant(asOf));
     let items = 0;
     const failed: string[] = [];
-    const rejected: string[] = [];
+    const closed: string[] = [];
+    const result = (done: boolean) => ({
+      ok: failed.length === 0, items, detail: { asOf, phase: "bars", done, failed, ...(closed.length ? { closed } : {}) },
+    });
     while (left()) {
       const start = await take(asOf, "bars", 6);
       if (start == null) break;
       if (start >= symbols.length) {
         await advance(asOf, "bars", "context");
-        return { ok: true, items, detail: { asOf, phase: "bars", done: true } };
+        return result(true);
       }
       const batch = symbols.slice(start, start + 6);
-      const { data: have } = await db().from("market_bars").select("symbol, updated_at").eq("date", asOf).in("symbol", batch);
-      const fresh = new Set((have ?? []).filter((r) => r.updated_at >= closeAt).map((r) => r.symbol));
-      const todo = batch.filter((s) => !fresh.has(s));
-      const res = await pool(todo, 3, async (s) => upsertBars(s, (await fetchDaily(s)).filter((b) => b[0] <= asOf), asOf));
+      const { data: have } = await db().from("market_bars").select("symbol, updated_at, open, high, low, close").eq("date", asOf).in("symbol", batch).throwOnError();
+      const fresh = new Set(have.filter((r) => finalQuote(r, closeAt)).map((r) => r.symbol));
+      const todo = batch.filter((symbol) => {
+        if (!listingClosure(symbol, asOf)) return !fresh.has(symbol);
+        closed.push(symbol);
+        return false;
+      });
+      const res = await pool(todo, 3, (s) => storeClosingBars(s, asOf, left));
       res.forEach((r, k) => {
         if (r.status === "fulfilled") items += r.value;
-        else {
-          failed.push(todo[k]);
-          const why = String((r.reason as Error)?.message ?? "");
-          if (why.startsWith("rejected bar")) rejected.push(`${todo[k]} ${why.slice(13)}`);
-        }
+        else failed.push(`${todo[k]}: ${String(r.reason).slice(0, 240)}`);
       });
     }
-    return { ok: true, items, detail: { asOf, phase: "bars", failed, ...(rejected.length ? { rejected } : {}) } };
+    return result(false);
   },
 
   /** Extend the calendar/benchmark file to the session and queue every ticker for the scan. */
-  async context(asOf, _left, cycle) {
+  async context(asOf, left, cycle) {
     if (!(await lease(asOf, "context", 90))) return { ok: true, items: 0, detail: { asOf, phase: "context", waiting: true } };
     const bench = await loadBench();
     const lastDate = bench.dates[bench.dates.length - 1];
@@ -179,9 +189,21 @@ const PHASES: Record<string, Phase> = {
       const o = bench.o[sym] ?? [], c = bench.c[sym] ?? [];
       bars[sym] = bench.dates.flatMap((d, i) => (c[i] == null ? [] : [[d, o[i] ?? c[i]!, c[i]!, c[i]!, c[i]!, c[i]!, 0] as Bar]));
     }
+    const missingBenchmarks: string[] = [];
     if (lastDate < asOf) {
-      const { data: rows } = await db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").in("symbol", BENCH_SYMBOLS).gt("date", lastDate).lte("date", asOf).order("date");
-      for (const r of rows ?? []) bars[r.symbol]?.push([r.date, Number(r.open), Number(r.high), Number(r.low), Number(r.close), Number(r.adj_close ?? r.close), Number(r.volume ?? 0)]);
+      // A cycle created by an older runner can reach this phase without a final SPY observation.
+      await ensureBenchmark(asOf, left);
+      const settledAt = Date.parse(closeInstant(asOf));
+      const { data: rows } = await db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume, updated_at").in("symbol", BENCH_SYMBOLS).gt("date", lastDate).lte("date", asOf).order("date").throwOnError();
+      const current = new Set<string>();
+      for (const r of rows) {
+        if (r.date === asOf) {
+          if (!finalQuote(r, settledAt)) continue;
+          current.add(r.symbol);
+        }
+        bars[r.symbol]?.push([r.date, Number(r.open), Number(r.high), Number(r.low), Number(r.close), Number(r.adj_close ?? r.close), Number(r.volume ?? 0)]);
+      }
+      missingBenchmarks.push(...BENCH_SYMBOLS.filter((symbol) => !current.has(symbol)));
     }
     let v3 = new Map<string, number>();
     try {
@@ -199,7 +221,7 @@ const PHASES: Record<string, Phase> = {
     const rows = COVERAGE.map((c) => ({ ticker: c.ticker, sector: c.sector || null }));
     for (let k = 0; k < rows.length; k += 500) await db().from("setup_scan").upsert(rows.slice(k, k + 500), { onConflict: "ticker", ignoreDuplicates: true });
     await advance(asOf, "context", "scan");
-    return { ok: true, items: next.dates.length, detail: { asOf, phase: "context", from: lastDate, vix3m: v3.get(asOf) ?? null, detail: cycle.detail } };
+    return { ok: true, items: next.dates.length, detail: { asOf, phase: "context", from: lastDate, vix3m: v3.get(asOf) ?? null, missingBenchmarks, detail: cycle.detail } };
   },
 
   /** Rescan a few tickers per call with full history; keep the samples tail, live signals and outcomes current. */
@@ -425,16 +447,27 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
   const series: Record<string, unknown>[] = [];
   const scanRows: Record<string, unknown>[] = [];
   const idx = new Map(ctx.dates.map((d, i) => [d, i]));
+  const settledAt = Date.parse(closeInstant(asOf));
   for (let k = 0; k < list.length; k++) {
     const { ticker, sector } = list[k];
+    const closure = listingClosure(ticker, asOf);
+    if (closure) {
+      scanRows.push({ ticker, sector, scanned_for: asOf, claimed_at: null, error: `listing ceased trading effective ${closure.effective}`, updated_at: nowIso() });
+      continue;
+    }
     const name = COVERAGE.find((c) => c.ticker === ticker)?.shortName ?? ticker;
     // The official `market_bars` row wins for every date both sources hold; a partner bar with no
     // official row yet (possibly a mid-session snapshot) is dropped and reported.
-    const merged = mergeOfficialBars(files[k], recent.filter((r) => r.symbol === ticker), recentFrom, asOf);
+    const official = recent.filter((r) => r.symbol === ticker);
+    if (!official.some((r) => r.date === asOf && finalQuote(r, settledAt))) {
+      provisional.push(`${ticker} ${asOf}`);
+      scanRows.push({ ticker, sector, scanned_for: asOf, claimed_at: null, error: `no valid post-close official bar for ${asOf}`, updated_at: nowIso() });
+      continue;
+    }
+    const merged = mergeOfficialBars(files[k], official, recentFrom, asOf);
     const bars = merged.bars;
     if (merged.provisional) provisional.push(`${ticker} ${merged.provisional}`);
     if (merged.corrected.length) corrected.push(ticker);
-    const stale = bars.at(-1)?.[0] !== asOf;
     const events = {
       earnings: earn.filter((e) => e.ticker === ticker).map((e) => e.filed),
       buys: buys.filter((b) => b.ticker === ticker).map((b) => ({ filed: b.filed, owner: b.owner, value: Number(b.value ?? 0), plan: b.plan_10b5 })),
@@ -453,10 +486,6 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
       continue;
     }
     const { a, f, bench } = out;
-    if (stale) {
-      scanRows.push({ ticker, sector, scanned_for: asOf, claimed_at: null, error: merged.provisional ? `provisional bar for ${merged.provisional} skipped (no official bar yet)` : "no bar for the session yet", updated_at: nowIso() });
-      continue;
-    }
     const last = D - 1;
     // Samples whose signal falls in the tail are rewritten (their outcomes may have just completed).
     const tailSamples = out.samples.filter((s) => !complete.has(ticker) || s.i >= D - SAMPLE_TAIL);

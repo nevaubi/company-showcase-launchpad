@@ -7,7 +7,7 @@ import { hazardLink } from "@/lib/alt/hazards";
 import { PERIOD_LABEL, actionSummary, ratingLabel } from "@/lib/estimates/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { companyQuery, macroQuery, newsQuery, pricesQuery, quotesQuery, universeQuery, type Range } from "@/lib/data";
-import { COVERAGE, companyCiks, coverageOf, MACRO_SERIES } from "@/lib/coverage";
+import { COVERAGE, companyCiks, coverageOf, macroDef } from "@/lib/coverage";
 import { getFilingDocument, searchFilings } from "@/lib/sec.functions";
 import { crawlSite, extractFromPage, fetchUrl, mapSite, readWebpage, webSearch } from "@/lib/web.functions";
 import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
@@ -820,7 +820,7 @@ Month-start closes:\n${monthly.join("\n")}`;
     }
     case "get_macro": {
       const id = String(args.series_id).toUpperCase();
-      const def = MACRO_SERIES.find((m) => m.id === id) ?? { id, title: id, units: "", frequency: "" };
+      const def = macroDef(id) ?? { id, title: id, units: "", frequency: "", source: `https://fred.stlouisfed.org/series/${id}` };
       const years = Math.max(1, Math.min(30, Number(args.years) || 5));
       const since = new Date(Date.now() - years * 365.25 * 86400000).toISOString().slice(0, 10);
       const s = await qc.fetchQuery(macroQuery({ ...def, since }));
@@ -828,7 +828,7 @@ Month-start closes:\n${monthly.join("\n")}`;
       const step = Math.max(1, Math.floor(obs.length / 60));
       const sampled = obs.filter((_, i) => i % step === 0 || i === obs.length - 1);
       return {
-        output: clip(`${s.title || id} (${s.units}, ${s.frequency}). Source: https://fred.stlouisfed.org/series/${id}\nLatest ${obs.at(-1)?.[0]}: ${obs.at(-1)?.[1]}\n${sampled.map(([d, v]) => `${d}: ${v}`).join("\n")}`),
+        output: clip(`${s.title || id} (${s.units}, ${s.frequency}). Source: ${def.source}\nLatest ${obs.at(-1)?.[0]}: ${obs.at(-1)?.[1]}\n${sampled.map(([d, v]) => `${d}: ${v}`).join("\n")}`),
         summary: `${id}, ${years}y`,
       };
     }

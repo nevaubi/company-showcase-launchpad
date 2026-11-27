@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { BOARD_DROP, BOARD_SETS, boardRows, boardSort, fitBoard, relativeSeries, sharedQuarter, signalShare, sortBoard, withoutTapeRow } from "./board";
 import { tapeIndex, type MemberTape } from "./breadth";
-import type { GroupSummary, Overview } from "./groups";
+import type { GroupFile, GroupSummary, Overview } from "./groups";
 import { byUnit, mult, pct, pts, ratio, usd } from "./format";
-import { fmtMetric, loadFailure } from "./groups";
+import { fmtMetric, loadFailure, valuationCohort, valuationHistory } from "./groups";
 import type { Member } from "./members";
 import { marketIndex } from "./risk";
 
@@ -49,18 +49,42 @@ describe("board", () => {
     expect(rows[0].excess["1M"]).toBeNull();
     expect(rows[0].n).toBe(3); // counted on the member list
   });
-  it("shows one P/E: today's multiple, the same figure the group page and the 10-year position use", () => {
+  it("shows one P/E: today's multiple, the same figure the group page and the historical rank use", () => {
     const [energy, utilities] = boardRows(ov, "sector", LIST, null);
     expect(energy.pe).toBe(10.5); // not the quarter-end 12
-    expect(energy.valQuarter).toBeNull();
-    expect(energy.valN).toBe(3);
+    expect(energy.valuation.pe.q).toBeNull();
+    expect(energy.valuation.pe.n).toBe(3);
     expect(energy.ps).toBe(1.4);
     expect(energy.fcfYield).toBeCloseTo(0.05); // 1 ÷ 20
     // an older file without current multiples: the latest quarter's stands in and says which quarter
     expect(utilities.pe).toBe(18);
-    expect(utilities.valQuarter).toBe("2026Q2");
+    expect(utilities.valuation.pe.q).toBe("2026Q2");
     expect(utilities.fcfYield).toBeNull();
   });
+  it("keeps separate current and quarter-end valuation cohorts when sources differ by metric", () => {
+    const group = G({ val_now: { pe: 10, ps: null, pfcf: 16, n: 117 }, latest: { ps: ["2026Q2", 2.5, 99] } });
+    const [r] = boardRows({ ...ov, groups: [group] }, "sector", []);
+    expect(r.valuation).toEqual({ pe: { v: 10, n: 117, q: null }, ps: { v: 2.5, n: 99, q: "2026Q2" }, pfcf: { v: 16, n: null, q: null } });
+  });
+
+  it("counts paired inputs per multiple and retains losses in aggregates only", () => {
+    const group: NonNullable<GroupFile["val_now"]> = { n: 4, rows: [
+      ["A", "2026Q3", 100, 15, 50, 4], ["B", "2026Q3", 40, -8, 20, null],
+      ["C", "2026Q3", 20, 0, null, -1], ["D", "2026Q3", 15, 1, 10, 0],
+    ] };
+    expect(valuationCohort(group,"pe")).toEqual({ aggregate: 4, median: 2 });
+    expect(valuationCohort(group,"ps")).toEqual({ aggregate: 3, median: 3 });
+    expect(valuationCohort(group,"pfcf")).toEqual({ aggregate: 3, median: 1 });
+    expect(valuationCohort(undefined,"ps")).toBeNull();
+    expect(valuationCohort({ n: 117, rows: [] },"ps")).toBeNull();
+  });
+
+  it("labels the count and actual calendar span of sparse valuation history", () => {
+    const sample = { n:16, from:"2008Q4", to:"2026Q3", min:2, med:10, max:40, pct:0.5 };
+    expect(valuationHistory(sample)).toBe("16 positive quarterly observations, Q4 2008–Q3 2026");
+    expect(valuationHistory({ ...sample, from:"" })).toBe("16 positive quarterly observations");
+  });
+
   it("carries each latest-quarter figure with its own quarter and company count", () => {
     const [energy] = boardRows(ov, "sector", LIST, null);
     expect(energy.f.rev_ttm).toEqual({ v: 5e11, q: "2026Q3", n: 3 });
