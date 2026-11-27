@@ -832,6 +832,116 @@ export type Database = {
         }
         Relationships: []
       }
+      call_documents: {
+        Row: {
+          built_at: string
+          call_date: string | null
+          call_id: string
+          fiscal_label: string | null
+          fiscal_quarter: number | null
+          fiscal_year: number | null
+          has_qa: boolean
+          kind: string
+          source_kind: string
+          source_name: string
+          source_url: string
+          ticker: string
+          title: string
+          turns: number
+          version: string
+          words: number
+        }
+        Insert: {
+          built_at?: string
+          call_date?: string | null
+          call_id: string
+          fiscal_label?: string | null
+          fiscal_quarter?: number | null
+          fiscal_year?: number | null
+          has_qa?: boolean
+          kind: string
+          source_kind: string
+          source_name: string
+          source_url: string
+          ticker: string
+          title?: string
+          turns?: number
+          version: string
+          words?: number
+        }
+        Update: {
+          built_at?: string
+          call_date?: string | null
+          call_id?: string
+          fiscal_label?: string | null
+          fiscal_quarter?: number | null
+          fiscal_year?: number | null
+          has_qa?: boolean
+          kind?: string
+          source_kind?: string
+          source_name?: string
+          source_url?: string
+          ticker?: string
+          title?: string
+          turns?: number
+          version?: string
+          words?: number
+        }
+        Relationships: []
+      }
+      call_passages: {
+        Row: {
+          call_date: string | null
+          call_id: string
+          firm: string | null
+          role: string | null
+          section: string
+          seq: number
+          speaker: string
+          speaker_kind: string
+          text: string
+          ticker: string
+          tsv: unknown
+          words: number
+        }
+        Insert: {
+          call_date?: string | null
+          call_id: string
+          firm?: string | null
+          role?: string | null
+          section: string
+          seq: number
+          speaker: string
+          speaker_kind: string
+          text: string
+          ticker: string
+          tsv?: unknown
+          words?: number
+        }
+        Update: {
+          call_date?: string | null
+          call_id?: string
+          firm?: string | null
+          role?: string | null
+          section?: string
+          seq?: number
+          speaker?: string
+          speaker_kind?: string
+          text?: string
+          ticker?: string
+          tsv?: unknown
+          words?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_passages_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "call_documents"
+            referencedColumns: ["call_id"]
+          },
+        ]
+      }
       company_visits: {
         Row: {
           last_seen_at: string
@@ -4609,6 +4719,36 @@ export type Database = {
           refreshed: string
           rows: number
           tickers: number
+        }[]
+      }
+      call_search: {
+        Args: {
+          _limit?: number
+          _offset?: number
+          _q: string
+          _section?: string
+          _since?: string
+          _speaker_kinds?: string[]
+          _tickers?: string[]
+        }
+        Returns: {
+          call_date: string
+          call_id: string
+          firm: string
+          fiscal_label: string
+          kind: string
+          rank: number
+          role: string
+          section: string
+          seq: number
+          snippet: string
+          source_kind: string
+          source_name: string
+          source_url: string
+          speaker: string
+          speaker_kind: string
+          ticker: string
+          total: number
         }[]
       }
       check_call_archive_evidence: { Args: never; Returns: number }
