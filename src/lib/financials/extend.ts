@@ -10,7 +10,7 @@
 // the new filing tagged (accession, concept, period) or a derived cell whose parts are such facts,
 // so click-to-source opens the filing like any other value.
 import { buildKpis, buildStatements, type CompanyFacts, type RawFact } from "./build";
-import { isBankIndustry } from "./dataset";
+import { statementOptions } from "./dataset";
 import type { Cell, CompanyDataset, Period, Row, Statement, StatementKey, Unit } from "./types";
 import { factValue, parseContexts, parseUnits } from "../xbrl/inline";
 
@@ -159,7 +159,8 @@ export interface Extension {
  * whose facts add no period is ignored.
  */
 export function extendStatements(d: CompanyDataset, reads: { filing: FiledReport; html: string }[]): Extension {
-  const bank = isBankIndustry(d.profile?.industry);
+  const options = statementOptions(d.profile);
+  const bank = !!options.bank;
   let cur = d;
   const added: Extension["added"] = [];
   // Facts of every filing read so far stay in the set: a 10-K's fourth quarter is the year minus the
@@ -169,7 +170,7 @@ export function extendStatements(d: CompanyDataset, reads: { filing: FiledReport
     const filings = cur.filings.some((f) => f.accn === filing.accn) ? cur.filings : [{ ...filing }, ...cur.filings];
     const base = { ...cur, filings };
     read = mergeFacts(read, factsFromInline(html, filing));
-    const fresh = buildStatements(mergeFacts(factsFromDataset(base), read), { bank });
+    const fresh = buildStatements(mergeFacts(factsFromDataset(base), read), options);
     const statements = { annual: { ...cur.statements.annual }, quarterly: { ...cur.statements.quarterly } };
     const got = { annual: [] as string[], quarterly: [] as string[] };
     for (const freq of ["annual", "quarterly"] as const) {

@@ -84,10 +84,13 @@ export interface DocFill {
   conflicts: FillConflict[];
   /**
    * Stored facts corrected for what the document prints at their own position, same id: a negative printed
-   * across two cells ("(32.5" then ")") stored positive (`locator.sign = "printed"`), or a figure stored under
-   * another column's period (`locator.moved` = the stored period end).
+   * across two cells ("(32.5" then ")") stored positive (`locator.sign = "printed"`), a figure stored under
+   * another column's period (`locator.moved` = the stored period end), or money figures stored at another scale
+   * than the one their table's printed scale line names (`locator.scale = "printed"`).
    */
   fixes: IrFact[];
+  /** every statement table the document prints (title or heads name a statement, at least 5 numeric rows) */
+  statements: PrintedStatement[];
 }
 
 export interface FillInput {
@@ -100,6 +103,21 @@ export interface FillInput {
   captions?: Map<number, { title?: string; unit?: string }>;
   /** table indexes to fill; default every table with at least two fact rows */
   only?: Set<number>;
+  /** filing date of the document (no printed period ends after it) */
+  filed?: string | null;
+  /** the company's fiscal quarter ends ("MM-DD", `quarterEnds`): heads may then name periods no fact uses yet */
+  calendar?: string[];
+  /** a document no stored fact points into: only its statement tables are read */
+  statementsOnly?: boolean;
+  /** document fields for filled facts when the document has no stored fact to copy them from */
+  meta?: { filed: string | null; kind: string | null; accn?: string | null; doc?: string | null };
+}
+
+/** A statement table the document prints: index, title, numeric rows. */
+export interface PrintedStatement {
+  t: number;
+  title: string;
+  rows: number;
 }
 
 interface Period {
@@ -240,11 +258,19 @@ function agreed(fs: IrFact[]): Period | null {
   return { end: [...ends][0], start, months, point: fs.some((f) => f.months === 0) };
 }
 
-interface KnownPeriods {
+export interface KnownPeriods {
   /** "<end>/<months>" → period start, for every flow period the document's facts use */
   flows: Map<string, string | null>;
   /** every period end the document's facts use */
   ends: Set<string>;
+  /**
+   * The company's fiscal quarter ends as "MM-DD" (from its stored facts and its 10-Q and 10-K report dates,
+   * each stepped by three months). With `filed`, a printed head may name a period the document's facts do
+   * not use yet, when its date lies within 7 days of one of these; without them, never.
+   */
+  calendar?: string[];
+  /** filing date of the document: no printed period ends after it */
+  filed?: string | null;
 }
 
 const MONTHS: Record<string, number> = {
@@ -262,24 +288,114 @@ const MONTHS: Record<string, number> = {
   dec: 12,
 };
 const LENGTH: [RegExp, number][] = [
-  [/\b(three|3)[- ]months?\b|\bquarters? ended\b|\bthirteen weeks\b|\b13 weeks\b/i, 3],
-  [/\b(six|6)[- ]months?\b|\btwenty[- ]six weeks\b|\b26 weeks\b/i, 6],
-  [/\b(nine|9)[- ]months?\b|\bthirty[- ]nine weeks\b|\b39 weeks\b/i, 9],
-  [
-    /\b(twelve|12)[- ]months?\b|\byears? ended\b|\bfiscal years?\b|\bfifty[- ]t(wo|hree) weeks\b|\b5[23] weeks\b/i,
-    12,
-  ],
+  [/\b(three|3)[- ]months?\b|\bquarters? ended\b/i, 3],
+  [/\b(six|6)[- ]months?\b/i, 6],
+  [/\b(nine|9)[- ]months?\b/i, 9],
+  [/\b(twelve|12)[- ]months?\b|\byears? ended\b|\bfiscal years?\b/i, 12],
 ];
+const WEEK_WORDS: Record<string, number> = {
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  "twenty-four": 24,
+  "twenty-five": 25,
+  "twenty-six": 26,
+  "twenty-seven": 27,
+  "twenty-eight": 28,
+  "thirty-six": 36,
+  "thirty-seven": 37,
+  "thirty-eight": 38,
+  "thirty-nine": 39,
+  forty: 40,
+  "fifty-two": 52,
+  "fifty-three": 53,
+};
+/** Months of a length printed in weeks: 12 to 14 weeks a quarter, 24 to 28 a half, 36 to 40 nine months, 52 or 53 a year. */
+export function weeksToMonths(weeks: number): number | null {
+  if (weeks >= 12 && weeks <= 14) return 3;
+  if (weeks >= 24 && weeks <= 28) return 6;
+  if (weeks >= 36 && weeks <= 40) return 9;
+  if (weeks >= 52 && weeks <= 53) return 12;
+  return null;
+}
+/** The distinct lengths (months) a text prints; a week count outside the mapped ranges is a length of its own (-1). */
+function lengthsIn(text: string): Set<number> {
+  const out = new Set<number>();
+  for (const [re, m] of LENGTH) if (re.test(text)) out.add(m);
+  // "Year to date" names no length of its own (it depends on the quarter): never a period from the head.
+  if (/\byear[- ]to[- ]date\b|\bytd\b/i.test(text)) out.add(-1);
+  for (const w of text.matchAll(/\b(\d{1,2}|[a-z]+(?:[- ][a-z]+)?)[- ]weeks?\b/gi)) {
+    const word = w[1].toLowerCase().replace(" ", "-");
+    const n = /^\d+$/.test(word)
+      ? Number(word)
+      : (WEEK_WORDS[word] ?? WEEK_WORDS[word.split("-").at(-1)!]);
+    if (n == null) continue;
+    out.add(weeksToMonths(n) ?? -1);
+  }
+  return out;
+}
+
+/** Heads of change, percent and comparison columns. */
+const NOT_PERIOD_HEAD = /\bchange\b|%|\bvs\.?(?=\s|$)|\bvariance\b|\bbps\b|\bbasis points\b/i;
+/** Names of opening balances. */
+const OPENING = /\bbeginning\b|\bopening\b|\bstart of\b/i;
+const BALANCE_TITLE = /\bbalance sheets?\b|\bfinancial (position|condition)\b/i;
+/** Day of the year of "MM-DD" (non-leap). */
+const dayOfYear = (md: string) => {
+  const [m, d] = md.split("-").map(Number);
+  return [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334][m - 1] + d;
+};
+const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+/**
+ * The four quarter ends of each fiscal calendar point ("MM-DD"), stepped by three months; a day at or past
+ * the 28th stays at its month's end.
+ */
+export function quarterEnds(points: string[]): string[] {
+  const out = new Set<string>();
+  for (const md of points) {
+    const [m, d] = md.split("-").map(Number);
+    if (!m || !d) continue;
+    for (const k of [0, 3, 6, 9]) {
+      const mm = ((m - 1 + k) % 12) + 1;
+      const dd =
+        d >= 28 && d >= MONTH_DAYS[m - 1] - 3
+          ? MONTH_DAYS[mm - 1]
+          : Math.min(d, MONTH_DAYS[mm - 1]);
+      out.add(`${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`);
+    }
+  }
+  return [...out].sort();
+}
+/** Whether a date lies within 7 days of a quarter end of the calendar. */
+export function nearQuarterEnd(date: string, calendar: string[]): boolean {
+  const x = dayOfYear(date.slice(5));
+  return calendar.some((md) => {
+    const dist = Math.abs(dayOfYear(md) - x);
+    return Math.min(dist, 365 - dist) <= 7;
+  });
+}
+
+/** A period read from a printed head; `fresh` when no fact of the document uses it. */
+interface HeadPeriod extends Period {
+  fresh?: boolean;
+}
 
 /**
  * A column's period from its printed head alone, strictly: one full date ("September 26, 2026", "Sep 30, | 2026")
- * and at most one length phrase in the head or the table's title. A flow column is accepted only when its end
- * and length are a period the document's facts already use; a column with no length phrase (or "as of") is a
- * balance column, accepted only when its date is a period end the facts use. Anything else is refused (null).
+ * and exactly one length (own head first, else the table's title lines). A period the document's facts use is
+ * accepted as before: a flow end and length the facts use, a balance (no length, or "as of") at a fact period
+ * end. Any other period only with `known.calendar` and `known.filed` and only for a statement table (`fresh`):
+ * its date not after the filing date and within 7 days of a fiscal quarter end; a balance column then also
+ * needs "as of" in its head or a balance sheet title. Anything else is refused (null).
  */
-export function printedHead(key: string, title: string, known: KnownPeriods): Period | null {
+export function printedHead(
+  key: string,
+  title: string,
+  known: KnownPeriods,
+  statement = false,
+): HeadPeriod | null {
   const head = key.replace(/\|/g, " ");
-  if (/\bchange\b|%|\bvs\.?\b|\bvariance\b/i.test(head)) return null;
+  if (NOT_PERIOD_HEAD.test(head)) return null;
   const dates = [
     ...head.matchAll(
       /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+((?:19|20)\d{2})\b/gi,
@@ -288,19 +404,146 @@ export function printedHead(key: string, title: string, known: KnownPeriods): Pe
   if (dates.length !== 1) return null;
   const [, mon, day, year] = dates[0];
   const end = `${year}-${String(MONTHS[mon.toLowerCase().slice(0, 3)]).padStart(2, "0")}-${day.padStart(2, "0")}`;
-  const own = LENGTH.filter(([re]) => re.test(head)).map(([, m]) => m);
-  if (own.length > 1) return null;
-  let months = own[0];
-  if (months == null && !/\bas of\b/i.test(head)) {
-    const wide = LENGTH.filter(([re]) => re.test(title)).map(([, m]) => m);
-    if (wide.length > 1) return null;
-    months = wide[0];
+  const asOf = /\bas of\b/i.test(head);
+  const own = lengthsIn(head);
+  if (own.size > 1) return null;
+  let months = [...own][0];
+  if (months == null && !asOf) {
+    const wide = lengthsIn(title);
+    if (wide.size > 1) return null;
+    months = [...wide][0];
   }
-  if (months == null || /\bas of\b/i.test(head))
-    return known.ends.has(end) ? { end, start: null, months: 0, point: true } : null;
-  const id = `${end}/${months}`;
-  if (!known.flows.has(id)) return null;
-  return { end, start: known.flows.get(id) ?? null, months, point: false };
+  if (months === -1) return null;
+  const balance = months == null || asOf;
+  if (balance && known.ends.has(end)) return { end, start: null, months: 0, point: true };
+  if (!balance && known.flows.has(`${end}/${months}`))
+    return { end, start: known.flows.get(`${end}/${months}`) ?? null, months, point: false };
+  // A period no fact of the document uses: statement tables only, by the filing date and the fiscal calendar.
+  if (!statement || !known.calendar?.length || !known.filed) return null;
+  if (end > known.filed || !nearQuarterEnd(end, known.calendar)) return null;
+  if (balance)
+    return asOf || BALANCE_TITLE.test(title)
+      ? { end, start: null, months: 0, point: true, fresh: true }
+      : null;
+  return { end, start: null, months, point: false, fresh: true };
+}
+
+/**
+ * The one full date a column head prints, with its own length (months; -1 a length that maps to none), or null
+ * when the head prints no full date, two dates, or a change or percent head.
+ */
+export function headDate(key: string): { end: string; months?: number } | null {
+  const head = key.replace(/\|/g, " ");
+  if (NOT_PERIOD_HEAD.test(head)) return null;
+  const dates = [
+    ...head.matchAll(
+      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+((?:19|20)\d{2})\b/gi,
+    ),
+  ];
+  if (dates.length !== 1) return null;
+  const [, mon, day, year] = dates[0];
+  const end = `${year}-${String(MONTHS[mon.toLowerCase().slice(0, 3)]).padStart(2, "0")}-${day.padStart(2, "0")}`;
+  const own = lengthsIn(head);
+  if (own.size > 1) return { end, months: -1 };
+  return own.size ? { end, months: [...own][0] } : { end };
+}
+
+/** Six months before a date ("YYYY-MM-DD"). */
+const sixMonthsBefore = (d: string) => {
+  const [y, m, day] = d.split("-").map(Number);
+  const mm = m - 6 <= 0 ? m + 6 : m - 6;
+  const yy = m - 6 <= 0 ? y - 1 : y;
+  return `${yy}-${String(mm).padStart(2, "0")}-${String(Math.min(day, 28)).padStart(2, "0")}`;
+};
+
+/**
+ * Periods of one table's column heads (`keys`: grid column → head text) by head text. Over `printedHead`, for the
+ * periods no fact of the document uses: the newest dated column of the table is at most 6 months before the
+ * filing date; two different heads never get the same period (both left out); the columns of one length run
+ * in one order of dates (all newer to older or all older to newer). A head that fails is left out (null).
+ */
+export function tableHeads(
+  keys: Map<number, string>,
+  title: string,
+  known: KnownPeriods,
+  statement = false,
+): Map<string, HeadPeriod | null> {
+  const out = new Map<string, HeadPeriod | null>();
+  const firstCol = new Map<string, number>();
+  for (const [g, k] of [...keys].sort((a, b) => a[0] - b[0])) {
+    if (!/\d/.test(k) || out.has(k)) continue;
+    out.set(k, printedHead(k, title, known, statement));
+    firstCol.set(k, g);
+  }
+  const got = [...out].filter((x): x is [string, HeadPeriod] => !!x[1]);
+  if (!got.some(([, p]) => p.fresh)) return out;
+  const refuse = (k: string) => out.get(k)?.fresh && out.set(k, null);
+  const newest = got.reduce((m, [, p]) => (p.end > m ? p.end : m), "");
+  if (known.filed && newest < sixMonthsBefore(known.filed)) for (const [k] of got) refuse(k);
+  const byId = new Map<string, string[]>();
+  for (const [k, p] of got) byId.set(periodId(p), [...(byId.get(periodId(p)) ?? []), k]);
+  // One printed column group spans grid columns whose heads extend one another ("... 2026" and "... 2026|amount");
+  // heads that do not are two printed columns of one period.
+  const parts = (k: string) => k.split("|");
+  const extends_ = (a: string, b: string) => {
+    const [x, y] = parts(a).length <= parts(b).length ? [parts(a), parts(b)] : [parts(b), parts(a)];
+    return x.every((p, i) => p === y[i]);
+  };
+  for (const ks of byId.values())
+    if (ks.some((a) => ks.some((b) => !extends_(a, b)))) for (const k of ks) refuse(k);
+  const byLength = new Map<number, [string, HeadPeriod][]>();
+  for (const [k, p] of got) byLength.set(p.months, [...(byLength.get(p.months) ?? []), [k, p]]);
+  for (const xs of byLength.values()) {
+    // Heads of one printed column group (grid columns side by side) give one date.
+    const ends = xs
+      .sort((a, b) => firstCol.get(a[0])! - firstCol.get(b[0])!)
+      .map(([, p]) => p.end)
+      .filter((e, i, all) => i === 0 || e !== all[i - 1]);
+    const down = ends.every((e, i) => i === 0 || e < ends[i - 1]);
+    const up = ends.every((e, i) => i === 0 || e > ends[i - 1]);
+    if (!down && !up) for (const [k] of xs) refuse(k);
+  }
+  return out;
+}
+
+const STATEMENT_TITLE =
+  /\bstatements?\s+of\s+(?:[a-z]+\s+){0,3}?(?:income|operations|earnings|cash\s+flows?|financial\s+(?:position|condition))\b|\b(?:income\s+statements?|balance\s+sheets?|cash\s+flows?\s+statements?)\b/i;
+const NOT_STATEMENT = /\breconcil|\bnon-?gaap\b|\bsegments?\b|\badjusted\b/i;
+/** A scale word without "in" ("(Millions)", "(Millions of dollars)", "(Dollars in millions)"). */
+const BARE_SCALE = /\b(thousands|millions|billions)\b/i;
+/**
+ * A scale line printed in parentheses in the last 160 characters before a table's figures ("(Millions except per
+ * share amounts)", "(In millions)"): the groups naming exactly one scale word, when they agree; else "".
+ */
+export function printedScaleLine(text: string): string {
+  const tail = text.replace(/\s+/g, " ").slice(-160);
+  const groups = [...tail.matchAll(/\(([^()]*)\)/g)]
+    .map((m) => m[1])
+    .filter((g) => (g.match(/\b(thousands|millions|billions)\b/gi) ?? []).length === 1);
+  const words = new Set(groups.map((g) => g.match(BARE_SCALE)![1].toLowerCase()));
+  return words.size === 1 ? `(${groups[0]})` : "";
+}
+
+/** Whether a table's title or the text printed above its first figures names a financial statement. */
+export function statementTitle(title: string, headText = ""): boolean {
+  // A printed title decides; the heads only speak for a table printing none.
+  const x = title.trim() ? title : headText;
+  return STATEMENT_TITLE.test(x) && !NOT_STATEMENT.test(x);
+}
+const LEAD_TITLE =
+  /(?:(?:condensed|consolidated|combined)\s+)*(?:statements?\s+of\s+(?:[a-z]+\s+){0,3}?(?:income|operations|earnings|cash\s+flows?|financial\s+(?:position|condition))|income\s+statements?|balance\s+sheets?|cash\s+flows?\s+statements?)\b/gi;
+/**
+ * A statement's title printed just before its table when the captions found none ("Walmart Inc. Condensed
+ * Consolidated Statements of Income (Unaudited)" → "Condensed Consolidated Statements of Income"): the last
+ * statement name in the last 120 characters of the lead text.
+ */
+export function leadTitle(lead: string | undefined): string {
+  const tail = (lead ?? "").replace(/\s+/g, " ").trim().slice(-120);
+  const hits = [...tail.matchAll(LEAD_TITLE)];
+  const last = hits.at(-1)?.[0]?.trim() ?? "";
+  return last && !NOT_STATEMENT.test(tail.slice(Math.max(0, tail.lastIndexOf(last) - 40)))
+    ? last
+    : "";
 }
 
 interface Located {
@@ -386,10 +629,32 @@ export function fillDocument(input: FillInput): DocFill {
     for (const g of cols) {
       const got = agreedMajority(g.fs);
       if (!got || g.rows.size < 2) continue;
-      const p = got.p;
+      // Figures the reader took from a change or percent column never give that column a period.
+      if (
+        NOT_PERIOD_HEAD.test(keys.get(g.s) ?? "") ||
+        NOT_PERIOD_HEAD.test(keys.get(g.e - 1) ?? "")
+      )
+        continue;
+      let p = got.p;
+      let wrong = got.outliers;
+      // The column's own printed head names one full date other than the stored one: the print wins (every stored
+      // figure of the column is moved to it), unless the head prints another length than the stored figures.
+      const k0 = keys.get(g.s);
+      const hd = k0 && k0 === keys.get(g.e - 1) ? headDate(k0) : null;
+      if (hd && hd.end !== p.end) {
+        if (hd.months != null && (hd.months < 0 || (p.months > 0 && hd.months !== p.months)))
+          continue;
+        p = { ...p, end: hd.end, start: null };
+        wrong = g.fs.filter((f) => f.period_end !== hd.end);
+      }
       // A stored figure in this column under another column's period: the column's period is the printed one.
-      for (const f of got.outliers)
-        if (f.months === 0 || f.months === p.months)
+      for (const f of wrong)
+        if (
+          (f.months === 0 || f.months === p.months) &&
+          // An opening balance is dated before its column (the day before the period starts): never a slip.
+          !OPENING.test(f.label) &&
+          !(f.months === 0 && f.period_end < p.end)
+        )
           fixes.push({
             ...f,
             period_end: p.end,
@@ -435,16 +700,68 @@ export function fillDocument(input: FillInput): DocFill {
   const facts: IrFact[] = [];
   const tables: TableFill[] = [];
   const conflicts: FillConflict[] = [];
-  const any = input.facts[0];
+  const any: Partial<IrFact> | undefined =
+    input.facts[0] ??
+    (input.meta
+      ? {
+          accn: input.meta.accn ?? null,
+          doc: input.meta.doc ?? null,
+          filed: input.meta.filed,
+          document_kind: input.meta.kind,
+        }
+      : undefined);
   // Periods the document's facts already use: a printed head may only name one of these.
-  const known: KnownPeriods = { flows: new Map(), ends: new Set() };
+  const known: KnownPeriods = {
+    flows: new Map(),
+    ends: new Set(),
+    calendar: input.calendar,
+    filed: input.filed ?? input.facts.find((f) => f.filed)?.filed ?? input.meta?.filed ?? null,
+  };
   for (const f of input.facts) {
     known.ends.add(f.period_end);
     if (f.months > 0) known.flows.set(`${f.period_end}/${f.months}`, f.period_start ?? null);
   }
   // Tables the facts cover in part, and tables no fact sits in whose column heads the document settles.
+  // A length phrase printed over the whole table (its title, or a head in the label column).
+  const lengthWordsOf = (table: GridTable, first: number) =>
+    [
+      input.captions?.get(table.index)?.title ?? "",
+      ...table.rows
+        .slice(0, first)
+        .flatMap((r) => r.cells.filter((c) => c.col === 0).map((c) => c.text)),
+    ].join(" ");
+  // Statement tables of the document, and each table's printed heads by head text.
+  const statements: PrintedStatement[] = [];
+  const isStatement = new Set<number>();
+  const headsOf = new Map<number, Map<string, HeadPeriod | null>>();
+  for (const table of grid) {
+    const first = firstFigureRow(table);
+    if (first < 0) continue;
+    const title = input.captions?.get(table.index)?.title || leadTitle(table.lead);
+    const headText = table.rows
+      .slice(0, first)
+      .flatMap((r) => r.cells.map((c) => c.text))
+      .join(" ");
+    const rows = table.rows.filter((r, i) => i >= first && !r.hidden && hasFigure(r)).length;
+    if (rows >= 5 && statementTitle(title, headText)) {
+      statements.push({ t: table.index, title: title || cleanLabel(headText).slice(0, 80), rows });
+      isStatement.add(table.index);
+    }
+    headsOf.set(
+      table.index,
+      tableHeads(
+        headerKeys(table, first),
+        lengthWordsOf(table, first),
+        known,
+        isStatement.has(table.index),
+      ),
+    );
+  }
+  // Tables the facts cover in part, and tables no fact sits in whose column heads the document settles; in a
+  // document no fact points into, its statement tables only.
   const want = (t: number) => {
     if (input.only && !input.only.has(t)) return false;
+    if (input.statementsOnly && !isStatement.has(t)) return false;
     const xs = byTable.get(t) ?? [];
     const rows = new Set(xs.map((x) => x.r)).size;
     if (rows >= 2) return true;
@@ -453,10 +770,10 @@ export function fillDocument(input: FillInput): DocFill {
     const first = firstFigureRow(table);
     if (first < 0) return false;
     const keys = headerKeys(table, first);
-    const words = input.captions?.get(t)?.title ?? "";
+    const heads = headsOf.get(t);
     const settled = new Set(
       [...keys.values()].filter(
-        (k) => /\d/.test(k) && (dict.get(k) || printedHead(k, words, known)),
+        (k) => /\d/.test(k) && !NOT_PERIOD_HEAD.test(k) && (dict.get(k) || heads?.get(k)),
       ),
     );
     return settled.size >= 2;
@@ -470,14 +787,7 @@ export function fillDocument(input: FillInput): DocFill {
     if (first < 0) continue;
     const keys = headerKeys(table, first);
     const own = colPeriods.get(t) ?? [];
-    const cap0 = input.captions?.get(t);
-    // A length phrase printed over the whole table (its title, or a head in the label column).
-    const lengthWords = [
-      cap0?.title ?? "",
-      ...table.rows
-        .slice(0, first)
-        .flatMap((r) => r.cells.filter((c) => c.col === 0).map((c) => c.text)),
-    ].join(" ");
+    const heads = headsOf.get(t);
     const factAt = new Map(xs.map((x) => [`${x.r}:${x.c}`, x]));
     const rowsWithFacts = new Set(xs.map((x) => x.r));
     const report: TableFill = {
@@ -506,7 +816,9 @@ export function fillDocument(input: FillInput): DocFill {
       // A column no fact of this table sits in: only by its head, and only when no own column shares that head.
       const k = keyOver(keys, c);
       if (!k) return null;
-      const p = dict.get(k) ?? printedHead(k, lengthWords, known);
+      // A change or percent column never takes a period, even where the reader put one under the same head elsewhere.
+      if (NOT_PERIOD_HEAD.test(k)) return null;
+      const p = dict.get(k) ?? heads?.get(k);
       if (!p) return null;
       if (own.some((g) => g.p.end === p.end && g.p.months === p.months)) return null;
       return p;
@@ -551,7 +863,16 @@ export function fillDocument(input: FillInput): DocFill {
       .map((x) => unitScale(x.f, x.cell.text))
       .filter((s): s is number => s != null);
     const cap = input.captions?.get(t);
-    const capWord = cap?.unit?.match(SCALE_WORD)?.[1]?.toLowerCase();
+    // The scale line: the caption's, else one printed in parentheses just above the table or in its heads.
+    const unitLine =
+      cap?.unit ||
+      printedScaleLine(
+        `${table.lead ?? ""} ${table.rows
+          .slice(0, first)
+          .flatMap((r) => r.cells.filter((c) => c.col === 0).map((c) => c.text))
+          .join(" ")}`,
+      );
+    const capWord = (unitLine.match(SCALE_WORD) ?? unitLine.match(BARE_SCALE))?.[1]?.toLowerCase();
     const capScale =
       capWord === "thousands"
         ? 1e3
@@ -562,7 +883,7 @@ export function fillDocument(input: FillInput): DocFill {
             : null;
     // Share counts: the scale the scale line gives them ("number of shares, which are reflected in thousands"),
     // none when it sets them apart without one ("except shares"), else the table's scale.
-    const capText = cap?.unit ?? "";
+    const capText = unitLine;
     const shareWord = capText
       .match(/(?<!per )\bshares?\b[^)]*?\b(thousands|millions|billions)\b/i)?.[1]
       ?.toLowerCase();
@@ -576,6 +897,41 @@ export function fillDocument(input: FillInput): DocFill {
         ? null
         : capScale;
     let moneyScale = mode(usdScales) ?? capScale;
+    const oneScaleWordLine =
+      (unitLine.match(/\b(thousands|millions|billions)\b/gi) ?? []).length === 1;
+    // The printed scale line, when it names one scale, is the table's money scale (rows printing their own scale in
+    // their name, "(in billions of dollars)", keep theirs).
+    if (oneScaleWordLine && capScale != null) moneyScale = capScale;
+    // Stored money figures all read at another scale than the table's printed scale line, which names one scale
+    // only ("(in thousands, except per share amounts)"): every one of at least three, none with cents, at one
+    // scale. The printed scale wins, for them and for the fill.
+    const wholeDollars = xs.filter(
+      (x) => x.f.unit === "usd" && Math.abs(numberOf(x.cell.text) ?? 0) >= 1,
+    );
+    const storedScales = new Set(wholeDollars.map((x) => unitScale(x.f, x.cell.text)));
+    const storedScale = storedScales.size === 1 ? [...storedScales][0] : null;
+    const oneScaleWord = oneScaleWordLine;
+    if (
+      capScale != null &&
+      oneScaleWord &&
+      storedScale != null &&
+      storedScale !== capScale &&
+      wholeDollars.length >= 3 &&
+      wholeDollars.every((x) => !/\.\d/.test(x.cell.text))
+    ) {
+      for (const x of wholeDollars) {
+        const f: IrFact = {
+          ...x.f,
+          value: (x.f.value / storedScale) * capScale,
+          locator: { ...(x.f.locator as object), scale: "printed" } as unknown as IrFact["locator"],
+        };
+        fixes.push(f);
+        // The rest of this table's reading (neighbour scales, part-read rows) sees the scaled figure.
+        x.f = f;
+      }
+      moneyScale = capScale;
+      for (let i = 0; i < usdScales.length; i++) usdScales[i] = capScale;
+    }
     // A table with no scale of its own (no money fact, no scale line found): the scale of the stored money facts
     // of this document that print the same figure for the same period, when at least two agree and none differ.
     if (moneyScale == null) {
@@ -599,7 +955,8 @@ export function fillDocument(input: FillInput): DocFill {
     const intOnly = xs.filter((x) => x.f.unit === "usd").every((x) => !/\.\d/.test(x.cell.text));
     // Table name of the filled lines: the readers' own name for the table, else its printed title.
     const bd =
-      mode(xs.map((x) => x.f.breakdown).filter((b): b is string => !!b)) ?? cap?.title ?? null;
+      mode(xs.map((x) => x.f.breakdown).filter((b): b is string => !!b)) ??
+      (cap?.title || statements.find((x) => x.t === t)?.title || null);
     const rowFacts = new Map<number, IrFact[]>();
     for (const x of xs) rowFacts.set(x.r, [...(rowFacts.get(x.r) ?? []), x.f]);
     const factRows = [...rowFacts.keys()].sort((a, b) => a - b);
@@ -647,6 +1004,8 @@ export function fillDocument(input: FillInput): DocFill {
     let prevUnit: string | undefined;
     let prevScale: number | null = null;
     let prevLabel = "";
+    // Heading of the block the last numeric row read sat under.
+    let prevHeading = "";
     let prevR = -1;
 
     for (let r = first; r < table.rows.length; r++) {
@@ -746,6 +1105,8 @@ export function fillDocument(input: FillInput): DocFill {
           const haveCells = new Set(own.map((f) => (f.locator as { c: number }).c));
           for (const u of usable) {
             if (haveCells.has(u.c) || factAt.has(`${r}:${u.c}`)) continue;
+            // A row of stored balances never takes a flow column's figure (a rollforward's builds) and the reverse.
+            if (own.every((f) => f.months === 0) && u.p.months > 0 && !u.p.point) continue;
             const months = own.every((f) => f.months === 0) ? 0 : u.p.months;
             if (months === 0 && !u.p.point && !own.every((f) => f.months === 0)) continue;
             if (have.has(periodId({ end: u.p.end, months }))) continue;
@@ -757,6 +1118,7 @@ export function fillDocument(input: FillInput): DocFill {
         }
         report.style.push([r, levelOf(lab.cell?.indent ?? 0), flags, names.get(r) ?? ""]);
         prevUnit = unitOfRow(r);
+        prevHeading = heading;
         prevScale =
           mode(
             own
@@ -891,12 +1253,16 @@ export function fillDocument(input: FillInput): DocFill {
       } else if (pctLike && prevUnit === "pct" && decimals && intOnly && usdScales.length) {
         unit = "pct";
         scale = 1;
+      } else if (prevUnit === "pct" && heading === prevHeading && !dollar) {
+        // Under a block whose rows print percentages, a row without its own sign is not certain: left out.
+        unit = null;
       } else if (
         moneyScale != null &&
         !(decimals && moneyScale > 1 && intOnly && usdScales.length)
       ) {
         unit = "usd";
-        scale = nbScale("usd") ?? moneyScale;
+        // The table's scale line, when it names one scale, outranks the stored neighbours' scale.
+        scale = oneScaleWord && capScale != null ? capScale : (nbScale("usd") ?? moneyScale);
       }
       // A scale printed in the row's own name ("Total payments transaction volume (in trillions)") wins for money and counts.
       const own = label
@@ -921,7 +1287,9 @@ export function fillDocument(input: FillInput): DocFill {
         let months = u.p.months;
         // The shared balance rule on the row's own name (a table titled "... balance sheet items" also prints flows).
         // An opening balance belongs to its column's period, never to the period's end date.
-        const opening = /\bbeginning\b|\bopening\b|\bstart of\b/i.test(name);
+        const opening = OPENING.test(name);
+        // An opening balance printed under a column of n months belongs to the period's start, not its end: left out.
+        if (opening && u.p.months > 0) continue;
         const kind = opening
           ? null
           : stockKind({ category: FILL_CATEGORY, metric: "other", label: name });
@@ -1017,6 +1385,7 @@ export function fillDocument(input: FillInput): DocFill {
         continue;
       }
       prevUnit = unit;
+      prevHeading = heading;
       prevScale = scale;
       prevLabel = name;
       prevR = r;
@@ -1083,7 +1452,13 @@ export function fillDocument(input: FillInput): DocFill {
       had
         ? {
             ...had,
-            value: Math.sign(f.value) < 0 ? f.value : had.value,
+            value:
+              (f.locator as { scale?: string }).scale || (had.locator as { scale?: string }).scale
+                ? Math.abs(Math.abs(f.value) > Math.abs(had.value) ? f.value : had.value) *
+                  (Math.sign(f.value) < 0 || Math.sign(had.value) < 0 ? -1 : 1)
+                : Math.sign(f.value) < 0
+                  ? f.value
+                  : had.value,
             period_end:
               had.period_end !== f.period_end && (f.locator as { moved?: string }).moved
                 ? f.period_end
@@ -1096,7 +1471,7 @@ export function fillDocument(input: FillInput): DocFill {
         : f,
     );
   }
-  return { facts, tables, conflicts, fixes: [...byId.values()] };
+  return { facts, tables, conflicts, fixes: [...byId.values()], statements };
 }
 
 function made(

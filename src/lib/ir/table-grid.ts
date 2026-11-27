@@ -30,6 +30,8 @@ export interface GridRow {
 export interface GridTable {
   index: number;
   rows: GridRow[];
+  /** plain text printed just before the table (after the previous table tag), at most its last 300 characters */
+  lead?: string;
 }
 
 const clean = (s: string) =>
@@ -159,14 +161,18 @@ export function parseGrid(html: string): GridTable[] {
     o.t.rows.push(o.row);
     o.col = 0;
   };
+  // End of the last table tag seen: the text between it and the next table is that table's lead.
+  let lastTable = 0;
   while ((m = re.exec(body))) {
     const closing = m[1] === "/";
     const tag = m[2].toLowerCase();
     const attrs = m[3] ?? "";
     const top = stack[stack.length - 1];
     if (tag === "table") {
+      const lead = closing ? "" : clean(body.slice(lastTable, m.index)).slice(-300);
+      lastTable = m.index + m[0].length;
       if (!closing) {
-        const t: GridTable = { index: tables.length, rows: [] };
+        const t: GridTable = { index: tables.length, rows: [], ...(lead ? { lead } : {}) };
         tables.push(t);
         stack.push({
           t,
@@ -199,6 +205,18 @@ export function parseGrid(html: string): GridTable[] {
     // A hidden cell in a hidden row stays hidden; a row hidden by its first cell reads as hidden too.
     if (top.row && top.row.cells.length === 0 && /display\s*:\s*none/i.test(styleOf(attrs)))
       top.row.hidden = true;
+  }
+  // A title printed in a small table of its own right above (no text between them): that table's text leads.
+  for (let i = 1; i < tables.length; i++) {
+    const t = tables[i];
+    if ((t.lead ?? "").length >= 10) continue;
+    const prev = tables[i - 1];
+    const text = prev.rows
+      .flatMap((r) => r.cells.map((c) => c.text))
+      .filter(Boolean)
+      .join(" ");
+    if (text && text.length <= 400)
+      t.lead = `${prev.lead ?? ""} ${text} ${t.lead ?? ""}`.trim().slice(-300);
   }
   return tables;
 }

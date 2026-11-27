@@ -419,6 +419,19 @@ function sameScale(a: PayloadSeries, b: PayloadSeries) {
   return da == null || db == null || da === db;
 }
 
+/** Two lines print the same figure (within 0.5 percent) for at least one common period. */
+function sharesFigure(a: PayloadSeries, b: PayloadSeries) {
+  for (const [x, y] of [
+    [a.q, b.q],
+    [a.y, b.y],
+  ] as const)
+    for (const [e, c] of Object.entries(x)) {
+      const o = y[e];
+      if (o && c.v !== 0 && Math.abs(o.v - c.v) <= 0.005 * Math.max(Math.abs(o.v), Math.abs(c.v))) return true;
+    }
+  return false;
+}
+
 /** Two lines never print different figures for the same period (within 0.5 percent). */
 function agree(a: PayloadSeries, b: PayloadSeries) {
   if (!sameScale(a, b)) return false;
@@ -468,7 +481,9 @@ export function sameRows(
   keys: string[],
   byKey: Map<string, PayloadSeries>,
   places: Map<string, Set<string>>,
+  extraKeys: Iterable<string> = [],
 ): string[][] {
+  const extra = new Set(extraKeys);
   const groups: { ks: string[]; at: Set<string> }[] = [];
   const pl = (s: PayloadSeries) => {
     const par = s.parent ? byKey.get(s.parent) : undefined;
@@ -514,7 +529,24 @@ export function sameRows(
           [...at].some((x) => [...g.at].some((y) => rowOfPlace(x) === rowOfPlace(y))) &&
           g.ks.every((k) => agree(byKey.get(k)!, s))
         );
-      });
+      }) ??
+      // A line only other copies print that prints the same figure as a row in a common period, under the same
+      // name and measure, with no figure in conflict, is that row's history, whatever table index or table name
+      // the older copies carry (DELL's operating income and net income across releases; filled printed rows
+      // and the reader's lines keyed apart).
+      (extra.has(k)
+        ? groups.find((g) => {
+            const o = byKey.get(g.ks[0])!;
+            return (
+              !extra.has(g.ks[0]) &&
+              sameName(o, s, byKey) &&
+              o.unit === s.unit &&
+              (o.met === s.met || o.cat === "statement" || s.cat === "statement") &&
+              g.ks.every((k2) => agree(byKey.get(k2)!, s)) &&
+              g.ks.some((k2) => sharesFigure(byKey.get(k2)!, s))
+            );
+          })
+        : undefined);
     if (hit) {
       hit.ks.push(k);
       for (const x of at) hit.at.add(x);
@@ -740,7 +772,7 @@ function assembleSections(p: IrPayload): Statement[] {
     const extra = dr.extra.filter((k) => byKey.has(k) && !set.has(k));
     // Second printings stay rows of their own; the other lines are grouped into printed rows. A group led by
     // an older copy's line (no row of the anchor table) is listed apart.
-    const grouped = sameRows([...keys, ...extra], byKey, dr.places);
+    const grouped = sameRows([...keys, ...extra], byKey, dr.places, extra);
     const groupOf = new Map(grouped.filter((g) => set.has(g[0])).map((g) => [g[0], g]));
     let gone = grouped.filter((g) => !set.has(g[0]));
     const groups: { slot: string; ks: string[] }[] = slots.flatMap((x) =>

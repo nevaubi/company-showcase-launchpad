@@ -3,7 +3,7 @@
 // is re-read from the parsed cell and scaled here, so a stored fact can never carry a number that
 // isn't printed in the source document.
 import { inFullUnits, printedScale, screenRows } from "@/lib/ir/scale-check";
-import { decodeHtml, parseNumber, parseRowCell, type ParsedTable } from "@/lib/ir/tables";
+import { decodeHtml, opensParenthesis, parseNumber, parseRowCell, tableAbove, type ParsedTable } from "@/lib/ir/tables";
 
 export const CATEGORIES = ["segment", "product", "geography", "customer", "channel", "cost", "kpi", "balance"] as const;
 export const METRICS = [
@@ -229,12 +229,154 @@ export const monthSpanOk = (per: { months: number; period_start: string; period_
   return d >= 27 && d <= 32;
 };
 const SCALES = new Set([1, 1e3, 1e6, 1e9]);
+/** Lines whose dollars are per share or per unit, which "except per share data" leaves unscaled. */
+const PER_SHARE = /\bper\b|\beps\b|^(basic|diluted)$|dividends? declared/i;
 const cleanLabel = (s: string) =>
   s
     .replace(/\s*\((\d|[a-z])\)\s*$/i, "")
     .replace(/[*†‡]+$/, "")
     .replace(/\s+/g, " ")
     .trim();
+
+/** A figure slot of a printed row: a number, an opened parenthesis, or a dash or mark standing for one ("—", "—%", "NP", "n/m"). */
+const isFigure = (c: string) => parseNumber(c) != null || opensParenthesis(c) || /^([—–-]+\s*%?|np|n\/?a|nm|n\.m\.?|nmf|nr|n\/m)$/i.test(c.trim());
+/** Cell index → ordinal among the row's figure cells: the printed column, whatever "$" or spacer cells precede it. */
+export function figureSlots(row: string[]): Map<number, number> {
+  const out = new Map<number, number>();
+  row.forEach((c, i) => {
+    if (c && isFigure(c)) out.set(i, out.size);
+  });
+  return out;
+}
+/** A column head that names a comparison, not a period: its cells are never money. */
+export const CHANGE_HEAD = /\b(change|growth|variance|var\.?|vs\.?|versus|increase|decrease|inc\.?\s*\/\s*\(?dec)\b|%|\bbps\b|basis points/i;
+
+/**
+ * Head of each printed column (slot), from the table's own head rows: the last row above the first
+ * figure row whose non-empty cells (after its label) are as many as the figures of a full row.
+ */
+export function slotHeads(table: ParsedTable, slots: number): string[] | null {
+  const first = table.rows.findIndex((r) => r.some((c, i) => i > 0 && c && isFigure(c) && !/^(19|20)\d{2}$/.test(c.trim())));
+  const heads = table.rows.slice(0, first < 0 ? 0 : first);
+  for (let i = heads.length - 1; i >= 0; i--) {
+    const cells = heads[i].filter((c) => c.trim());
+    const named = heads[i][0]?.trim() ? cells.slice(1) : cells;
+    if (named.length === slots) return named;
+  }
+  return null;
+}
+
+/**
+ * Cells a model row maps against the printed grid, to reject before storing (key "r:c"):
+ *   - a money row's cell under a comparison head ("Change", "%", "bps") or printed with "%";
+ *   - every cell of a row whose figures map to periods in an order that contradicts the grid: where the
+ *     head row prints a full date over each column, a cell dated as another column's date; otherwise a
+ *     cell dated differently from what the table's other full rows map the same printed column to (at
+ *     least three rows, three in four agreeing).
+ * Only rows with as many figures as the table's usual full row are compared.
+ */
+export function gridRejects(tb: ModelTable, table: ParsedTable): Set<string> {
+  const bad = new Set<string>();
+  const ends = new Map(tb.periods.map((p) => [p.p, p.period_end]));
+  const rowSlots = new Map(tb.rows.map((r) => [r.r, figureSlots(table.rows[r.r] ?? [])]));
+  const counts = new Map<number, number>();
+  for (const m of rowSlots.values()) if (m.size) counts.set(m.size, (counts.get(m.size) ?? 0) + 1);
+  const full = [...counts].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 0;
+  const heads = full ? slotHeads(table, full) : null;
+  // Votes: printed column → period end, one per full row.
+  const votes = new Map<number, Map<string, number>>();
+  // Only rows that spread over two or more periods say what the columns are: a table with the periods
+  // down the side (CAT's sales by region, one quarter a row) has columns that are not periods.
+  const spread = (row: ModelRow) => new Set(row.cells.map((c) => ends.get(c.p))).size >= 2;
+  for (const row of tb.rows) {
+    const slots = rowSlots.get(row.r)!;
+    if (slots.size !== full || !spread(row)) continue;
+    const seen = new Set<number>();
+    for (const cell of row.cells) {
+      const k = slots.get(cell.c);
+      const end = ends.get(cell.p);
+      if (k == null || end == null || seen.has(k)) continue;
+      seen.add(k);
+      const v = votes.get(k) ?? new Map<string, number>();
+      v.set(end, (v.get(end) ?? 0) + 1);
+      votes.set(k, v);
+    }
+  }
+  const settled = new Map<number, string>();
+  // Printed dates over the columns settle them; votes only where the heads print none.
+  const dated = heads?.map(headDate) ?? [];
+  // Quarter heads ("Q3 2026", "3Q26") name calendar quarters only when at least half of the cells the
+  // model mapped agree with them (a fiscal calendar off the calendar quarters agrees with none).
+  const quarters = heads?.map(headQuarter) ?? [];
+  const periodHeads = (h: (string | null)[]) => h.length > 0 && h.some(Boolean) && h.every((d, k) => d || (heads && CHANGE_HEAD.test(heads[k])));
+  const agreeing = (h: (string | null)[]) => {
+    let n = 0;
+    let ok = 0;
+    for (const row of tb.rows) {
+      const slots = rowSlots.get(row.r)!;
+      if (slots.size !== full) continue;
+      for (const cell of row.cells) {
+        const k = slots.get(cell.c);
+        const want = k == null ? null : h[k];
+        const end = ends.get(cell.p);
+        if (!want || !end) continue;
+        n++;
+        if (sameDay(end, want)) ok++;
+      }
+    }
+    return n > 0 && ok >= n / 2;
+  };
+  const byHead = periodHeads(dated) ? dated : periodHeads(quarters) && agreeing(quarters) ? quarters : null;
+  if (byHead) {
+    byHead.forEach((d, k) => d && settled.set(k, d));
+  } else for (const [k, v] of votes) {
+    const total = [...v.values()].reduce((a, b) => a + b, 0);
+    const [end, n] = [...v].sort((a, b) => b[1] - a[1])[0];
+    if (total >= 3 && n >= total * 0.75) settled.set(k, end);
+  }
+  for (const row of tb.rows) {
+    const slots = rowSlots.get(row.r)!;
+    const money = row.unit === "usd";
+    for (const cell of row.cells) {
+      const text = table.rows[row.r]?.[cell.c] ?? "";
+      const k = slots.get(cell.c);
+      if (money && (/%/.test(text) || (k != null && heads && slots.size === full && CHANGE_HEAD.test(heads[k])))) bad.add(`${row.r}:${cell.c}`);
+    }
+    if (slots.size !== full) continue;
+    const wrong = row.cells.some((cell) => {
+      const k = slots.get(cell.c);
+      const want = k == null ? undefined : settled.get(k);
+      const end = ends.get(cell.p);
+      return want != null && end != null && !sameDay(end, want);
+    });
+    if (wrong) for (const cell of row.cells) bad.add(`${row.r}:${cell.c}`);
+  }
+  return bad;
+}
+
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+/** "January 31, 2025" (also "Jan. 31, 2025", "31 January 2025") in a head → "2025-01-31"; null for any other head. */
+export function headDate(head: string): string | null {
+  const h = head.toLowerCase().replace(/\./g, "");
+  const m = h.match(/\b([a-z]{3,9}) (\d{1,2}),? (\d{4})\b/) ?? h.match(/\b(\d{1,2}) ([a-z]{3,9}),? (\d{4})\b/);
+  if (!m) return null;
+  const [mon, day] = /^\d/.test(m[1]) ? [m[2], m[1]] : [m[1], m[2]];
+  const i = MONTHS.findIndex((x) => x.startsWith(mon) && mon.length >= 3);
+  if (i < 0) return null;
+  return `${m[3]}-${String(i + 1).padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+const ORDINALS = ["first", "second", "third", "fourth"];
+/** "Q3 2026", "3Q26", "3Q 2026", "Third quarter 2026" → the calendar quarter's end ("2026-09-30"); null otherwise. */
+export function headQuarter(head: string): string | null {
+  const h = head.toLowerCase();
+  const m = h.match(/\bq([1-4])\s*'?(\d{4}|\d{2})\b/) ?? h.match(/\b([1-4])q\s*'?(\d{4}|\d{2})\b/) ?? h.match(/\b(first|second|third|fourth) quarter,? (\d{4})\b/);
+  if (!m || /\bfy|fiscal/.test(h)) return null;
+  const q = /^\d$/.test(m[1]) ? Number(m[1]) : ORDINALS.indexOf(m[1]) + 1;
+  const y = m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2]);
+  return `${y}-${["03-31", "06-30", "09-30", "12-31"][q - 1]}`;
+}
+/** Period ends within a week of each other are the same column (52/53-week calendars, "as of" dates). */
+const sameDay = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) <= 7 * DAY_MS;
 
 /** Validate the model's pointers against the parsed tables and turn them into fact rows. */
 export function factsFromModel(out: ModelOutput, tables: ParsedTable[], filed?: string | null): { rows: FactRow[]; rejected: number } {
@@ -250,14 +392,20 @@ export function factsFromModel(out: ModelOutput, tables: ParsedTable[], filed?: 
       continue;
     }
     const periods = new Map(tb.periods.map((p) => [p.p, p]));
+    const misplaced = gridRejects(tb, table);
     // The table's own evidence on its money scale: cells already in full units, else printed scale words.
-    const usdTexts = tb.rows.filter((r) => r.unit === "usd" && r.scale > 1).flatMap((r) => r.cells.map((c) => table.rows[r.r]?.[c.c] ?? ""));
-    const full = inFullUnits(usdTexts, Math.max(1, ...tb.rows.filter((r) => r.unit === "usd").map((r) => r.scale)));
-    const printed = printedScale(table);
+    // The table's own scale words first, else the scale line printed in the title lines just above it
+    // (NVDA prints "(In millions, except per share data)" above its income statement table); title
+    // lines are short, a sentence of the text before the table is never one.
+    const printed = printedScale(table) ?? printedScale({ index: table.index, rows: tableAbove(table).filter((l) => l.length <= 120).map((l) => [l]) });
+    const usdTexts = tb.rows.filter((r) => r.unit === "usd" && (r.scale > 1 || printed)).flatMap((r) => r.cells.map((c) => table.rows[r.r]?.[c.c] ?? ""));
+    const full = inFullUnits(usdTexts, Math.max(printed ?? 1, ...tb.rows.filter((r) => r.unit === "usd").map((r) => r.scale)));
     for (const row of tb.rows) {
       const label = cleanLabel(row.label);
       let unitScale = row.unit === "usd" || row.unit === "count" || row.unit === "other" ? row.scale : 1;
-      if (row.unit === "usd" && unitScale > 1) unitScale = full ? 1 : (printed ?? unitScale);
+      // A printed scale outranks the model's row scale, also a row scale of 1 (NVDA Q3 FY27: every usd row
+      // came back at scale 1 under "(In millions)"); per-share lines keep their printed value.
+      if (row.unit === "usd" && (unitScale > 1 || (printed && !PER_SHARE.test(label)))) unitScale = full ? 1 : (printed ?? unitScale);
       for (const cell of row.cells) {
         const key = `${tb.t}:${row.r}:${cell.c}`;
         if (seen.has(key)) continue;
@@ -266,7 +414,7 @@ export function factsFromModel(out: ModelOutput, tables: ParsedTable[], filed?: 
         const n = text == null ? null : parseRowCell(table.rows[row.r], cell.c);
         const per = periods.get(cell.p);
         const okPeriod = !!per && PERIOD_MONTHS.includes(per.months) && ISO.test(per.period_end) && Date.parse(per.period_end) <= latest && monthSpanOk(per);
-        if (n == null || !okPeriod || !SCALES.has(unitScale) || !label) {
+        if (n == null || !okPeriod || !SCALES.has(unitScale) || !label || misplaced.has(`${row.r}:${cell.c}`)) {
           rejected++;
           continue;
         }

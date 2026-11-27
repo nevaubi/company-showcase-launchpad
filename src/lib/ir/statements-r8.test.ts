@@ -18,6 +18,11 @@ import now from "@/lib/ir/fixtures/statements/now-sum.json";
 import crm from "@/lib/ir/fixtures/statements/crm-rpo.json";
 import intc2 from "@/lib/ir/fixtures/statements/intc-two.json";
 import ear from "@/lib/ir/fixtures/statements/jpm-ear.json";
+import bac from "@/lib/ir/fixtures/statements/bac-loans.json";
+import aaplEps from "@/lib/ir/fixtures/statements/aapl-eps.json";
+import dellRev from "@/lib/ir/fixtures/statements/dell-rev.json";
+import dellNi from "@/lib/ir/fixtures/statements/dell-ni.json";
+import wfc from "@/lib/ir/fixtures/statements/wfc-seg.json";
 import { buildPayload, type IrPayload, type PayloadSeries } from "@/lib/ir/payload";
 import type { IrFact } from "@/lib/ir/kpis";
 import type { TableCaption } from "@/lib/ir/table-captions";
@@ -327,5 +332,54 @@ describe("vera-02 JPM: rows that differ only by their sign", () => {
     expect(rows).toHaveLength(2);
     const v = rows.map((r) => rowCells(r.ks, by, "q", r.at).cells["2026-09-30"]?.v);
     expect(v).toEqual([1.4e9, -2.2e9]);
+  });
+});
+
+describe("vera-04 BAC: same-named lines of two tables of one document", () => {
+  it("residential mortgage loans outstanding and nonperforming stay two lines, each its own table's figure", async () => {
+    const p = await payloadOf(bac);
+    const v = p.series.filter((s) => s.label === "Residential mortgage" && s.unit === "usd").map((s) => s.q["2026-09-30"]?.v).sort();
+    expect(v).toContain(236522e6);
+    expect(v).toContain(2076e6);
+    for (const s of p.series) for (const c of Object.values(s.q)) expect(c.alt?.kind === "conflict" && c.alt.d === c.d && s.label === "Residential mortgage").toBe(false);
+  });
+});
+
+describe("verb-03: tidy never folds two printed rows into one line", () => {
+  it("AAPL: diluted EPS keeps its own figures beside basic", async () => {
+    const p = await payloadOf(aaplEps);
+    const dil = p.series.find((s) => s.label === "Diluted")!;
+    expect(dil).toBeDefined();
+    expect(dil.q["2025-12-27"]?.v).toBe(2.84);
+    expect(dil.q["2026-03-28"]?.v).toBe(2.01);
+  });
+  it("DELL: Products never takes the Services figures", async () => {
+    const p = await payloadOf(dellRev);
+    for (const s of p.series.filter((x) => x.label === "Services"))
+      for (const c of Object.values(s.q)) expect(c.v).toBeLessThan(10e9);
+  });
+});
+
+describe("verb-02 DELL: a printed row and its older printings keyed apart", () => {
+  it("net income carries the older releases' quarters on the newest release's row", async () => {
+    const p = await payloadOf(dellNi);
+    const by = new Map(p.series.map((x) => [x.k, x]));
+    const secs = assembleStatements(p);
+    const s = secs.find((x) => x.group === "main" && x.rows.some((r) => r.kind === "line" && rowLabel(r, by) === "Net income"))!;
+    const row = s.rows.find((r): r is Line => r.kind === "line" && rowLabel(r, by) === "Net income" && !r.old)!;
+    const cells = rowCells(row.ks, by, "q", row.at).cells;
+    expect(cells["2026-10-30"]?.v).toBe(5673e6);
+    expect(Object.keys(cells).length).toBeGreaterThanOrEqual(10);
+  });
+});
+
+describe("vera-09 WFC: segment pages printing the same rows under their own titles", () => {
+  it("each page keeps its lines, scoped by its printed title", async () => {
+    const { buildIrSeries } = await import("@/lib/ir/kpis");
+    const fx = wfc as unknown as { facts: IrFact[]; titles: Record<string, string> };
+    const { series } = buildIrSeries(fx.facts, { titles: new Map(Object.entries(fx.titles)) });
+    const nii = series.filter((s) => s.label === "Net interest income").map((s) => s.cells["2026-09-30"]?.v);
+    expect(nii).toContain(2134e6);
+    expect(nii.length).toBeGreaterThanOrEqual(5);
   });
 });

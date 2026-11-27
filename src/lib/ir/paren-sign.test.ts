@@ -88,3 +88,28 @@ describe("a parenthesis closed in the next cell", () => {
     expect(opensParenthesis("(")).toBe(false);
   });
 });
+
+// Caterpillar Q2 2013 release, Supplemental Consolidating Data, table 11 (rows as parseTables reads them):
+// https://www.sec.gov/Archives/edgar/data/18230/000110465913056080/a13-17022_1ex99d1.htm
+// The consolidating adjustments column prints a footnote number after the closing parenthesis: "(7" | ") 3".
+describe("a closing parenthesis followed by a footnote marker (CAT 2Q13)", () => {
+  const t11 = {
+    5: ["Revenues of Financial Products", "", "735", "", "", "", "823", "", "(88", ") 2"],
+    10: ["Selling, general and administrative expenses", "", "1,421", "", "1,278", "", "150", "", "(7", ") 3"],
+    12: ["Interest expense of Financial Products", "", "185", "", "", "", "187", "", "(2", ") 4"],
+    13: ["Other operating (income) expenses", "", "137", "", "(100", ")", "245", "", "(8", ") 3"],
+  };
+  it("closes the parenthesis: (88, (7, (2 and (8 are negative", () => {
+    expect([5, 10, 12, 13].map((r) => parseRowCell(t11[r as 5], 8))).toEqual([-88, -7, -2, -8]);
+    expect(parseRowCell(t11[13], 4)).toBe(-100);
+  });
+  it("accepts one marker only: up to two digits, asterisks or a letter in parentheses", () => {
+    expect(parseRowCell(["x", "(7", ")*"], 1)).toBe(-7);
+    expect(parseRowCell(["x", "(7", ") (a)"], 1)).toBe(-7);
+    expect(parseRowCell(["x", "(7", "%) 12"], 1)).toBe(-7);
+    expect(parseRowCell(["x", "(7", ") 123"], 1)).toBeNull();
+    expect(parseRowCell(["x", "(7", ") 3 4"], 1)).toBeNull();
+    expect(parseRowCell(["x", "(7", ") 1,234"], 1)).toBeNull();
+  });
+});
+

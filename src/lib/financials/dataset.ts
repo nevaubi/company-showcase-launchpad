@@ -2,12 +2,19 @@
 // without the KPI statement (rebuilt here from the sourced lines) and without
 // SourceRef values that equal the cell value. `hydrateDataset` restores both, so
 // every consumer sees the full shape. Pure: shared by the app, ingest and tests.
-import { buildKpis } from "./build";
+import { buildKpis, type BuildOptions } from "./build";
+import { statementSector } from "./statement-layout";
 import { rederiveQuarters, restateBalanceForSplits, restateIncomeForSplits, shareBasis, splitEvents } from "./splits";
 import type { Cell, CompanyDataset, Row, Statement, StatementKey } from "./types";
 
 const BANK_INDUSTRY = /bank|brokerage|consumer finance/i;
 export const isBankIndustry = (industry: string | undefined) => BANK_INDUSTRY.test(industry ?? "");
+
+/** Statement builder options for a company, from its coverage sector and industry (statement-layout.ts). */
+export function statementOptions(c: { sector?: string; industry?: string } | undefined): BuildOptions {
+  const sector = statementSector(c);
+  return { bank: sector === "bank", sector };
+}
 
 type Freq = "annual" | "quarterly";
 type StoredStatements = Record<Freq, Partial<Record<StatementKey, Statement>>>;

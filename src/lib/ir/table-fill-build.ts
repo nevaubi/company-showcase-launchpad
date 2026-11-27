@@ -7,7 +7,13 @@
 import type { IrFact } from "@/lib/ir/kpis";
 import type { IrPayload, IrQuality, PayloadFillConflict } from "@/lib/ir/payload";
 import { assembleStatements, lineDiv, rowLabel } from "@/lib/ir/statements";
-import { fillDocument, FILL_METHOD, type DocFill, type MissReason } from "@/lib/ir/table-fill";
+import {
+  fillDocument,
+  FILL_METHOD,
+  quarterEnds,
+  type DocFill,
+  type MissReason,
+} from "@/lib/ir/table-fill";
 import { tableCaptions, type TableCaption } from "@/lib/ir/table-captions";
 
 /** A stored document's row: filing date, stored kind, title. */
@@ -74,14 +80,27 @@ export interface FillRun {
   signs: number;
   /** stored figures moved to the period of the printed column they sit in */
   moved: number;
+  /** stored money figures read at another scale than their table's printed scale line, rescaled */
+  scaled: number;
+  /** filing date and kind of each document read */
+  docs: Map<string, { filed: string | null; kind: string | null }>;
   /** documents chosen, read and not readable */
   chosen: number;
   read: number;
   failed: number;
 }
 
-/** Documents with table facts, newest filing first (ties: more table facts first), at most `max`. */
-export function fillDocs(facts: IrFact[], max = FILL_DOCS): string[] {
+/** A stored table document by its document row: id, filing date, kind, title. */
+export interface TableDoc extends DocMeta {
+  id: string;
+}
+
+/**
+ * Documents to fill, newest filing first (ties: more table facts first), at most `max`: those with table facts,
+ * and the company's table documents by their rows (`rows`: releases, supplements and other HTML exhibits), read
+ * even when no stored fact points into them.
+ */
+export function fillDocs(facts: IrFact[], max = FILL_DOCS, rows: TableDoc[] = []): string[] {
   const by = new Map<string, { filed: string; n: number }>();
   for (const f of facts) {
     if (!f.document_id || typeof (f.locator as { t?: unknown }).t !== "number") continue;
@@ -89,8 +108,13 @@ export function fillDocs(facts: IrFact[], max = FILL_DOCS): string[] {
     d.n++;
     by.set(f.document_id, d);
   }
+  for (const r of rows) {
+    const d = by.get(r.id);
+    if (d) d.filed = d.filed || r.filed || "";
+    else by.set(r.id, { filed: r.filed ?? "", n: -1 });
+  }
   return [...by.entries()]
-    .filter(([, d]) => d.n >= 2)
+    .filter(([, d]) => d.n >= 2 || d.n === -1)
     .sort(
       (a, b) => b[1].filed.localeCompare(a[1].filed) || b[1].n - a[1].n || a[0].localeCompare(b[0]),
     )
@@ -105,11 +129,21 @@ export function fillDocs(facts: IrFact[], max = FILL_DOCS): string[] {
 export async function fillCompany(
   facts: IrFact[],
   read: (id: string) => Promise<string | null>,
-  opts: { maxDocs?: number; company?: string } = {},
+  opts: {
+    maxDocs?: number;
+    company?: string;
+    /** the company's table documents by their rows (read even with no stored fact) */
+    docs?: TableDoc[];
+    /** period ends of the company's 10-Q and 10-K reports ("YYYY-MM-DD"), for its fiscal calendar */
+    reports?: string[];
+  } = {},
 ): Promise<FillRun> {
   // Facts a previous fill wrote are never inputs (the build is from stored facts only).
   const stored = facts.filter((f) => f.method !== FILL_METHOD);
-  const ids = fillDocs(stored, opts.maxDocs ?? FILL_DOCS);
+  const rows = new Map((opts.docs ?? []).map((d) => [d.id, d]));
+  const ids = fillDocs(stored, opts.maxDocs ?? FILL_DOCS, opts.docs);
+  const calendar = fiscalCalendar(stored, opts.reports);
+  const docMeta = new Map<string, { filed: string | null; kind: string | null }>();
   const byDoc = new Map<string, IrFact[]>();
   for (const f of stored)
     if (f.document_id) byDoc.set(f.document_id, [...(byDoc.get(f.document_id) ?? []), f]);
@@ -129,11 +163,20 @@ export async function fillCompany(
     texts.set(id, html.slice(0, 60_000));
     const caps = tableCaptions(html, opts.company);
     captions.set(id, caps);
+    const own = byDoc.get(id) ?? [];
+    const row = rows.get(id);
+    const tableFacts = own.filter((f) => typeof (f.locator as { t?: unknown }).t === "number");
+    const filed = own.find((f) => f.filed)?.filed ?? row?.filed ?? null;
+    docMeta.set(id, { filed, kind: own[0]?.document_kind ?? row?.kind ?? null });
     const fill = fillDocument({
       doc: id,
       html,
-      facts: byDoc.get(id) ?? [],
+      facts: own,
       captions: new Map(caps.map((c) => [c.t, { title: c.title, unit: c.unit }])),
+      filed,
+      calendar,
+      statementsOnly: tableFacts.length < 2,
+      meta: row ? { filed: row.filed, kind: row.kind, accn: null, doc: null } : undefined,
     });
     fills.set(id, fill);
     added.push(...fill.facts);
@@ -150,10 +193,70 @@ export async function fillCompany(
     texts,
     signs: fx.filter((f) => (f.locator as { sign?: string }).sign === "printed").length,
     moved: fx.filter((f) => (f.locator as { moved?: string }).moved).length,
+    scaled: fx.filter((f) => (f.locator as { scale?: string }).scale === "printed").length,
+    docs: docMeta,
     chosen: ids.length,
     read: read_,
     failed,
   };
+}
+
+/** Kinds of document whose tables the fill reads without a stored fact. */
+export const TABLE_DOC_KINDS = ["press-release", "supplement", "other"];
+/** How far back a document no fact points into is still read (months). */
+export const TABLE_DOC_MONTHS = 15;
+
+/** A document row as the store keeps it, for `tableDocRows`. */
+export interface StoredDocRow {
+  id: string;
+  kind: string | null;
+  ext: string | null;
+  filed: string | null;
+  title: string | null;
+  bytes: number | null;
+  extract_status: string | null;
+}
+
+/**
+ * The company's table documents by their rows: releases, supplements and other exhibits stored as HTML, filed
+ * within the last 15 months of `today`, within the reader's size bound, not marked "no tables" by the table
+ * reader, and not refused; newest first.
+ */
+export function tableDocRows(
+  rows: StoredDocRow[],
+  today: string,
+  opts: { maxBytes?: number; refused?: Set<string> } = {},
+): TableDoc[] {
+  const [y, m, d] = today.slice(0, 10).split("-").map(Number);
+  const back = new Date(Date.UTC(y, m - 1 - TABLE_DOC_MONTHS, d)).toISOString().slice(0, 10);
+  return rows
+    .filter(
+      (r) =>
+        !!r.filed &&
+        r.filed >= back &&
+        r.filed <= today &&
+        TABLE_DOC_KINDS.includes(r.kind ?? "") &&
+        /^html?$/i.test(r.ext ?? "") &&
+        (r.bytes ?? 0) <= (opts.maxBytes ?? Infinity) &&
+        r.extract_status !== "no tables" &&
+        !opts.refused?.has(r.id),
+    )
+    .sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? "") || a.id.localeCompare(b.id))
+    .map((r) => ({ id: r.id, filed: r.filed, kind: r.kind, title: r.title }));
+}
+
+/**
+ * The company's fiscal quarter ends ("MM-DD"): the month and day of every period end at least two of its stored
+ * flow facts use, and of its 10-Q and 10-K report dates, each stepped through the year by three months.
+ */
+export function fiscalCalendar(facts: IrFact[], reports: string[] = []): string[] {
+  const n = new Map<string, number>();
+  for (const f of facts)
+    if ([3, 6, 9, 12].includes(f.months) && /^\d{4}-\d{2}-\d{2}$/.test(f.period_end ?? ""))
+      n.set(f.period_end.slice(5), (n.get(f.period_end.slice(5)) ?? 0) + 1);
+  const points = [...n].filter(([, k]) => k >= 2).map(([md]) => md);
+  for (const r of reports) if (/^\d{4}-\d{2}-\d{2}$/.test(r)) points.push(r.slice(5));
+  return quarterEnds(points);
 }
 
 /**
@@ -203,6 +306,30 @@ export function withFill(p: IrPayload, run: FillRun): IrPayload {
 
 const REASONS: MissReason[] = ["period", "unit", "label", "duplicate"];
 
+/** Why printed rows of a statement table are not shown, beyond the row reasons: the table became no section. */
+export type TableMissReason = MissReason | "section";
+
+/**
+ * The main document for the quality counts: of the documents read, the newest filing that prints a statement
+ * table (ties: more statement tables, then a supplement).
+ */
+export function qualityDoc(run: FillRun): string | null {
+  let best: { id: string; filed: string; n: number; sup: boolean } | null = null;
+  for (const [id, fill] of run.fills) {
+    const n = fill.statements.length;
+    if (!n) continue;
+    const m = run.docs.get(id);
+    const cur = { id, filed: m?.filed ?? "", n, sup: m?.kind === "supplement" };
+    if (
+      !best ||
+      cur.filed > best.filed ||
+      (cur.filed === best.filed && (cur.n > best.n || (cur.n === best.n && cur.sup && !best.sup)))
+    )
+      best = cur;
+  }
+  return best?.id ?? null;
+}
+
 /**
  * The quality summary of a built payload (stats.quality); `run` is absent when no document was read.
  * - v: version of this summary (1).
@@ -213,12 +340,17 @@ const REASONS: MissReason[] = ["period", "unit", "label", "duplicate"];
  *   document; after = before + filled; missing = printed rows still not shown, by reason (period: no column of the
  *   row has a certain period; unit: unit or scale not certain; label: no printed name; duplicate: a name printed
  *   twice under one heading).
- * - main: the same counts for the main document's tables only (the figure to rank companies by).
+ * - main: the same counts over every statement table of the main document for quality (`qualityDoc`: the newest
+ *   document read that prints a statement table), so percent shown is percent of the document's statements:
+ *   tables {printed, shown}; a statement table that became no section counts all its printed rows as missing,
+ *   by their row reasons where the fill read the table, the rows it read under "section", and every row under
+ *   "period" where no column head of the table could be settled; doc = that document's filing date and kind.
  * - fill: docs chosen (newest table documents, at most FILL_DOCS), read, failed (not readable from markup within
  *   the bounds: no rendition or HTML, too large, timed out; image-only files count here), tables filled, cells
  *   written, shownCells (filled cells the payload shows in quarter, year or month columns), conflicts (stored fact
  *   text unlike the document at its own position), signs (stored positives printed as two-cell negatives, given
- *   the printed sign), moved (stored figures put under another column's period, moved to their column's period).
+ *   the printed sign), moved (stored figures put under another column's period, moved to their column's period),
+ *   scaled (stored money figures read as whole dollars in a table printing "in thousands" and the like, scaled).
  * - dupLabels: sections showing one row name twice; mixedScale: sections whose money lines are at two printed
  *   scales; orphanHeads: headings with no line under them before the next spacer or the end.
  * - latest: newest quarter column; newest: filing date and kind of the newest document; ties: quarter tie-outs (ok/total).
@@ -239,7 +371,10 @@ export function qualityOf(p: IrPayload, run?: FillRun): IrQuality {
   let conflicts = 0;
   let tablesRead = 0;
   const missing: Partial<Record<MissReason, number>> = {};
-  const mainMissing: Partial<Record<MissReason, number>> = {};
+  const mainMissing: Partial<Record<TableMissReason, number>> = {};
+  const add = (into: Partial<Record<string, number>>, r: string, n: number) => {
+    if (n) into[r] = (into[r] ?? 0) + n;
+  };
   for (const [id, fill] of run?.fills ?? []) {
     const d = index.get(id);
     conflicts += fill.conflicts.length;
@@ -251,13 +386,33 @@ export function qualityOf(p: IrPayload, run?: FillRun): IrQuality {
       printed += t.printed;
       before += t.covered;
       filled += t.filled;
-      for (const r of REASONS) if (t.missing[r]) missing[r] = (missing[r] ?? 0) + t.missing[r]!;
-      if (d === main) {
+      for (const r of REASONS) add(missing, r, t.missing[r] ?? 0);
+    }
+  }
+  // The main document's statement tables, shown or not.
+  const qDoc = run ? qualityDoc(run) : null;
+  let mainTables = 0;
+  let mainShown = 0;
+  if (run && qDoc) {
+    const fill = run.fills.get(qDoc)!;
+    const d = index.get(qDoc);
+    for (const st of fill.statements) {
+      mainTables++;
+      const t = fill.tables.find((x) => x.t === st.t);
+      const shown = d != null && anchors.has(`${d}:${st.t}`);
+      if (shown && t) {
+        mainShown++;
         mainPrinted += t.printed;
         mainBefore += t.covered;
         mainFilled += t.filled;
-        for (const r of REASONS)
-          if (t.missing[r]) mainMissing[r] = (mainMissing[r] ?? 0) + t.missing[r]!;
+        for (const r of REASONS) add(mainMissing, r, t.missing[r] ?? 0);
+      } else if (t) {
+        mainPrinted += t.printed;
+        for (const r of REASONS) add(mainMissing, r, t.missing[r] ?? 0);
+        add(mainMissing, "section", t.covered + t.filled);
+      } else {
+        mainPrinted += st.rows;
+        add(mainMissing, "period", st.rows);
       }
     }
   }
@@ -301,7 +456,7 @@ export function qualityOf(p: IrPayload, run?: FillRun): IrQuality {
     0,
   );
   return {
-    v: 1,
+    v: 2,
     sections: sections.length,
     mainSections: sections.filter((s) => s.group === "main").length,
     mainDoc:
@@ -314,6 +469,8 @@ export function qualityOf(p: IrPayload, run?: FillRun): IrQuality {
       before: mainBefore,
       after: mainBefore + mainFilled,
       missing: mainMissing,
+      tables: { printed: mainTables, shown: mainShown },
+      doc: qDoc ? (run?.docs.get(qDoc) ?? null) : null,
     },
     fill: {
       docs: run?.chosen ?? 0,
@@ -325,6 +482,7 @@ export function qualityOf(p: IrPayload, run?: FillRun): IrQuality {
       conflicts,
       signs: run?.signs ?? 0,
       moved: run?.moved ?? 0,
+      scaled: run?.scaled ?? 0,
     },
     dupLabels,
     mixedScale,

@@ -325,8 +325,9 @@ describe("period-end counts next to net additions", () => {
       f("Customer relationships", "2021-06-30", 3, 277_000, kpi),
     ];
     const { series } = buildIrSeries(facts);
-    const stock = series.find((x) => x.label === "Customer relationships")!;
-    const flow = series.find((x) => x.label === "Customer relationships: net change")!;
+    // Printed rows keep their printed name; the change is kept apart by its scope (verb-13).
+    const stock = series.find((x) => x.label === "Customer relationships" && !x.scope)!;
+    const flow = series.find((x) => x.label === "Customer relationships" && x.scope === "change")!;
     expect(Object.values(stock.cells).map((c) => c.v)).toEqual([31_062_000, 31_339_000]);
     expect(Object.values(flow.cells).map((c) => c.v)).toEqual([370_000, 277_000]);
   });
@@ -559,5 +560,24 @@ describe("dates read from running text", () => {
   it("keep their own column when no printed column is near", () => {
     const facts = [f("Net sales", "2025-11-23", 3, 67_300), f("Backlog", "2026-06-30", 3, 12, { category: "kpi", metric: "backlog", parent: null, method: "text", locator: { q: "Backlog of $12" } })];
     expect(buildIrSeries(facts).quarters).toEqual(["2025-11-23", "2026-06-30"]);
+  });
+});
+
+// vera-10, verb-13: BAC's 3Q26 supplement prints residential mortgage loans at period end (t44, 236,522) and
+// as a quarterly average (t14, 236,433); Apple prints "Accounts payable" in its balance sheet and its cash flows.
+describe("printed rows keep their printed names beside a balance of the same name", () => {
+  it("an average balance and a cash-flow change keep their names, kept apart by scope", () => {
+    const bal = { category: "balance", metric: "loans", parent: "Total consumer" } as const;
+    const facts = [
+      f("Residential mortgage", "2026-09-30", 0, 236_522e6, { ...bal, breakdown: "Outstanding loans by type", locator: { t: 44, r: 6, c: 1 } }),
+      f("Residential mortgage", "2026-09-30", 3, 236_433e6, { ...bal, breakdown: "Quarterly average balances and interest rates", locator: { t: 14, r: 13, c: 1 } }),
+      f("Accounts payable", "2026-09-26", 0, 69_860e6, { category: "statement", metric: "other", parent: null, locator: { t: 1, r: 20, c: 1 } }),
+      f("Accounts payable", "2026-09-26", 3, 7_200e6, { category: "statement", metric: "other", parent: null, locator: { t: 2, r: 16, c: 1 } }),
+    ];
+    const { series } = buildIrSeries(facts);
+    expect(series.some((s) => /net change/.test(s.label))).toBe(false);
+    const rm = series.filter((s) => s.label === "Residential mortgage");
+    expect(rm.map((s) => s.scope ?? "")).toEqual(expect.arrayContaining(["", "average"]));
+    expect(series.filter((s) => s.label === "Accounts payable").map((s) => s.scope ?? "")).toEqual(expect.arrayContaining(["", "change"]));
   });
 });

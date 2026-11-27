@@ -133,7 +133,7 @@ export type PayloadAt = [number, number, number] | [number, number, number, Prin
  * fill conflicts and `stats.quality`. A stored payload with a lower `build` (or none) still lays out, with the
  * rows and figures of its own build: the worker should rebuild it.
  */
-export const BUILD_FORMAT = 3;
+export const BUILD_FORMAT = 4;
 
 /** Whether a stored payload predates the current build format (the worker rebuilds such companies first). */
 export const needsRebuild = (p: Pick<IrPayload, "build">) => (p.build ?? 1) < BUILD_FORMAT;
@@ -210,7 +210,7 @@ export interface PayloadFillConflict {
  * ir_company_series. Field meanings: `qualityOf` in table-fill-build.ts.
  */
 export interface IrQuality {
-  v: 1;
+  v: 2;
   sections: number;
   mainSections: number;
   mainDoc: { filed: string | null; kind: string | null } | null;
@@ -226,6 +226,10 @@ export interface IrQuality {
     before: number;
     after: number;
     missing: Partial<Record<string, number>>;
+    /** statement tables the main document prints, and those shown as sections */
+    tables: { printed: number; shown: number };
+    /** filing date and kind of the document these counts are of */
+    doc: { filed: string | null; kind: string | null } | null;
   };
   fill: {
     docs: number;
@@ -237,6 +241,8 @@ export interface IrQuality {
     conflicts: number;
     signs: number;
     moved: number;
+    /** stored money figures given their table's printed scale */
+    scaled?: number;
   };
   dupLabels: number;
   mixedScale: number;

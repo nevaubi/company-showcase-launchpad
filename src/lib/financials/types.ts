@@ -58,6 +58,8 @@ export interface Row {
   indent?: number;
   bold?: boolean;
   kind?: "reported" | "kpi";
+  /** A calculated row: the formula every cell follows (each cell also carries its own `derived` parts). */
+  calc?: string;
 }
 
 export interface Statement {

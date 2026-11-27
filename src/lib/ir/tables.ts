@@ -19,9 +19,26 @@ export function decodeHtml(s: string) {
 
 const clean = (s: string) => decodeHtml(s.replace(/<[^>]+>/g, " ")).replace(/[\s\u00a0\u200b]+/g, " ").trim();
 
+/**
+ * The printed lines between a table and the table tag before it (title, scale line such as
+ * "(In millions, except per share data)", "(Unaudited)"), at most `ABOVE_LINES`, last line nearest the
+ * table. Kept beside the parsed tables (a WeakMap), so `parseTables` returns the same tables and indexes.
+ */
+const ABOVE = new WeakMap<ParsedTable, string[]>();
+export const ABOVE_LINES = 6;
+export const tableAbove = (t: ParsedTable): string[] => ABOVE.get(t) ?? [];
+const linesOf = (html: string): string[] =>
+  html
+    .replace(/<(br|hr)\b[^>]*>|<\/(p|div|h[1-6]|li|font|span|center)>/gi, "\n")
+    .split("\n")
+    .map(clean)
+    .filter(Boolean);
+
 export function parseTables(html: string): ParsedTable[] {
   const body = html.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "");
   const tables: ParsedTable[] = [];
+  /** End of the last table tag seen: the text between it and a table's opening tag is printed above it. */
+  let lastTableTag = 0;
   interface Open {
     t: ParsedTable;
     row: string[] | null;
@@ -45,11 +62,15 @@ export function parseTables(html: string): ParsedTable[] {
         // A nested table's text belongs to the outer cell only up to here.
         const t: ParsedTable = { index: tables.length, rows: [] };
         tables.push(t);
+        // Text inside another table's cell is that table's, not a title of this one.
+        if (!top) ABOVE.set(t, linesOf(body.slice(lastTableTag, m.index).slice(-4000)).slice(-ABOVE_LINES));
+        lastTableTag = m.index + m[0].length;
         stack.push({ t, row: null, cellStart: -1 });
       } else if (top) {
         closeCell(top, m.index);
         stack.pop();
       }
+      lastTableTag = m.index + m[0].length;
       continue;
     }
     if (!top) continue;
@@ -109,8 +130,12 @@ export function opensParenthesis(text: string): boolean {
   return /^[$€£]*\([$€£]*\d+(?:\.\d+)?%?$/.test(t.replace(/[\s,]/g, ""));
 }
 
-/** A cell that only closes a parenthesis: ")", "%)", ")%", ") %". */
-const CLOSES = /^%?\)%?$/;
+/**
+ * A cell that only closes a parenthesis: ")", "%)", ")%", ") %", optionally followed by one footnote
+ * marker: one or two digits, one to three asterisks, or one letter or digit in parentheses (CAT's
+ * consolidating adjustments print "(7" | ") 3").
+ */
+const CLOSES = /^\s*%?\s*\)\s*%?\s*(?:\d{1,2}|\*{1,3}|\([a-z0-9]\))?\s*$/i;
 
 /**
  * The number of cell `c` of a parsed row. Same as `parseNumber`, except a cell that opens a
@@ -122,9 +147,8 @@ export function parseRowCell(row: string[], c: number): number | null {
   if (text == null) return null;
   if (!opensParenthesis(text)) return parseNumber(text);
   for (let j = c + 1; j < row.length; j++) {
-    const next = row[j].replace(/\s+/g, "");
-    if (!next) continue;
-    if (!CLOSES.test(next)) return null;
+    if (!row[j].trim()) continue;
+    if (!CLOSES.test(row[j])) return null;
     const n = parseNumber(text.replace("(", ""));
     return n == null ? null : -Math.abs(n);
   }

@@ -16,7 +16,10 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { buildStatements, type CompanyFacts, type RawFact } from "../src/lib/financials/build";
 import { ALL_LINES } from "../src/lib/financials/schema";
-import { isBankIndustry, slimDataset } from "../src/lib/financials/dataset";
+import { CLASS_CONCEPTS, classFactsFromInline, tickerShareClass, type ShareClass } from "../src/lib/financials/share-class";
+import { factsFromInline } from "../src/lib/financials/extend";
+import { filingsMissingFromFacts, mergeFactsInto } from "../src/lib/financials/ingest-facts";
+import { statementOptions, slimDataset } from "../src/lib/financials/dataset";
 import { form4XmlPath, parseForm4 } from "../src/lib/financials/form4";
 import { cagr, latest, latestYoY, rowCells, ttm } from "../src/lib/financials/metrics";
 import type {
@@ -37,7 +40,7 @@ import type {
   UniverseEntry,
   UniverseFundamentals,
 } from "../src/lib/financials/types";
-import { COVERAGE, historyCik, isBundled, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
+import { COVERAGE, companyCiks, historyCik, isBundled, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
 import { coverageDetails } from "../src/lib/coverage-details.server";
 import { sicDescription } from "../src/lib/sec/sic";
 import { summarize, type MacroSummary } from "../src/lib/macro";
@@ -349,6 +352,8 @@ function extractInlineSegments(html: string, labels: Map<string, string>, filing
     const f = segmentFact(a.name, contexts.get(a.contextRef), value, labels, filing, a.id);
     if (f) out.push(f);
   }
+  const cls = shareClassOf.get(cik);
+  if (cls) for (const [name, facts] of classFactsFromInline(html, cls, filing)) for (const f of facts) addExtFact(cik, name, f);
   return out;
 }
 
@@ -379,14 +384,21 @@ const coverShares = new Map<string, number>();
  * Company-extension concepts used by statement lines (e.g. "cop:CapitalExpendituresAndInvestments").
  * SEC's companyfacts API only carries standard taxonomies, so these are read from each filing's own XBRL.
  */
-const EXT_CONCEPTS = new Set(ALL_LINES.flatMap((l) => l.concepts.filter((c) => c.includes(":"))));
+const EXT_CONCEPTS = new Set(ALL_LINES.flatMap((l) => [...l.concepts, ...(l.components ?? [])].filter((c) => c.includes(":") && !/^class[ABC]:/.test(c))));
 /** cik → qualified concept → facts found in the filings parsed for segments. */
 const extFacts = new Map<string, Map<string, RawFact[]>>();
+
+/** cik → the share class its covered ticker trades as, for EPS tagged by class only (share-class.ts). */
+const shareClassOf = new Map<string, ShareClass>();
 
 function collectExtension(cik: string, name: string, ctx: Ctx | undefined, value: number, filing: Filing) {
   if (!ctx || ctx.dims.length || !Number.isFinite(value)) return;
   const fact: RawFact = { ...(ctx.start ? { start: ctx.start } : {}), end: (ctx.end ?? ctx.instant)!, val: value, accn: filing.accn, form: filing.form, filed: filing.filed };
   if (!fact.end) return;
+  addExtFact(cik, name, fact);
+}
+
+function addExtFact(cik: string, name: string, fact: RawFact) {
   const byConcept = extFacts.get(cik) ?? new Map<string, RawFact[]>();
   extFacts.set(cik, byConcept);
   const list = byConcept.get(name) ?? [];
@@ -398,8 +410,10 @@ function collectExtension(cik: string, name: string, ctx: Ctx | undefined, value
 function mergeExtensions(cf: CompanyFacts, cik: string) {
   for (const [qname, facts] of extFacts.get(cik) ?? []) {
     const [ns, local] = qname.split(":");
+    // Per-share and share-count concepts in the units the statement builder reads them in.
+    const unit = CLASS_CONCEPTS[local] ?? (/PerShare/.test(local) ? "USD/shares" : "USD");
     cf.facts[ns] ??= {};
-    cf.facts[ns][local] = { label: qname, units: { USD: facts } };
+    cf.facts[ns][local] = { label: qname, units: { [unit]: facts } };
   }
 }
 
@@ -424,11 +438,17 @@ async function labelsFor(cik: string, accn: string, items: IndexItem[]) {
   }
 }
 
-async function segmentsFor(cik: string, filing: Filing): Promise<RawSegment[]> {
-  const items = await filingIndex(cik, filing.accn);
-  const labels = await labelsFor(cik, filing.accn, items);
+/** Accessions whose figures companyfacts lacks, read from the filing's own inline XBRL (ingest-facts.ts). */
+const readForFacts = new Set<string>();
+/** cik → facts read from those filings, merged before the statements are built. */
+const inlineFacts = new Map<string, CompanyFacts[]>();
+
+async function segmentsFor(cik: string, filing: Filing, archiveCik = cik): Promise<RawSegment[]> {
+  const items = await filingIndex(archiveCik, filing.accn);
+  const labels = await labelsFor(archiveCik, filing.accn, items);
   if (filing.ixbrl) {
-    const html = await secText(archive(cik, filing.accn, filing.doc));
+    const html = await secText(archive(archiveCik, filing.accn, filing.doc));
+    if (readForFacts.has(filing.accn)) inlineFacts.set(cik, [...(inlineFacts.get(cik) ?? []), factsFromInline(html, filing)]);
     const shares = extractCoverShares(html);
     if (shares && !coverShares.has(cik)) coverShares.set(cik, shares);
     return extractInlineSegments(html, labels, filing, cik);
@@ -438,7 +458,7 @@ async function segmentsFor(cik: string, filing: Filing): Promise<RawSegment[]> {
     .filter((i) => /\.xml$/i.test(i.name) && !/(_cal|_def|_lab|_pre|_ref)\.xml$/i.test(i.name) && !/^FilingSummary|^R\d+/i.test(i.name))
     .sort((a, b) => Number(b.size ?? 0) - Number(a.size ?? 0))[0];
   if (!instance) return [];
-  return extractInstanceSegments(await secText(archive(cik, filing.accn, instance.name)), labels, filing, cik);
+  return extractInstanceSegments(await secText(archive(archiveCik, filing.accn, instance.name)), labels, filing, cik);
 }
 
 const normLabel = (l: string) => l.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(segment|member|net sales|revenue|revenues)\b/g, "").trim();
@@ -602,12 +622,38 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
     const older = await secJson<RecentFilings>(`https://data.sec.gov/submissions/${file.name}`);
     all = all.concat(rowsOf(older));
   }
+  // A company that changed registrant files under its other CIK too (XOM's Q3 2026 10-Q, 0002115436-26-000020):
+  // those filings are listed and read from the CIK whose index holds them.
+  const archiveCikOf = new Map<string, string>();
+  for (const other of companyCiks(cfg).filter((c) => c !== cik)) {
+    try {
+      const os = await secJson<Submissions>(`https://data.sec.gov/submissions/CIK${pad(other)}.json`);
+      const known = new Set(all.map((f) => f.accn));
+      for (const f of rowsOf(os.filings.recent))
+        if (!known.has(f.accn)) {
+          all.push(f);
+          archiveCikOf.set(f.accn, other);
+        }
+    } catch (e) {
+      log("other registrant's submissions unavailable", other, (e as Error).message);
+    }
+  }
+  all.sort((a, b) => (a.filed < b.filed ? 1 : a.filed > b.filed ? -1 : 0));
   const filings: Filing[] = all.filter((f) => LIST_FORMS.has(f.form) || f.form === "4");
 
   const cf = await secJson<CompanyFacts & { facts: Record<string, any> }>(
     `https://data.sec.gov/api/xbrl/companyfacts/CIK${pad(cik)}.json`,
   );
-  const bank = isBankIndustry(cfg.industry);
+  // Statement facts of every CIK the company files under.
+  for (const other of companyCiks(cfg).filter((c) => c !== cik)) {
+    try {
+      mergeFactsInto(cf, await secJson<CompanyFacts>(`https://data.sec.gov/api/xbrl/companyfacts/CIK${pad(other)}.json`));
+    } catch (e) {
+      log("other registrant's company facts unavailable", other, (e as Error).message);
+    }
+  }
+  const options = statementOptions(cfg);
+  shareClassOf.set(cik, tickerShareClass(cfg.ticker));
 
   // Shares outstanding (sum classes reported on the same cover page)
   const so: { end: string; val: number; accn: string; filed: string }[] =
@@ -622,20 +668,26 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
   const ixK = periodic.filter((f) => f.form === "10-K" && f.ixbrl);
   const ixQ = periodic.filter((f) => f.form === "10-Q" && f.ixbrl).slice(0, 12);
   const legacyK = periodic.filter((f) => f.form === "10-K" && !f.ixbrl && f.filed >= "2009-06-01").filter((_, i) => i % 2 === 0).slice(0, 6);
-  const targets = [...ixK, ...ixQ, ...legacyK];
+  // Periodic filings of the last two years with no fact in companyfacts (combined filings of co-registrants, a new
+  // registrant's 10-Q): read from their own inline XBRL along with their segments.
+  const missing = filingsMissingFromFacts(periodic, cf, new Date().toISOString().slice(0, 10));
+  for (const f of missing) readForFacts.add(f.accn);
+  if (missing.length) log("filings without company facts, read from the filing:", missing.map((f) => f.accn).join(", "));
+  const targets = [...new Map([...ixK, ...ixQ, ...missing, ...legacyK].map((f) => [f.accn, f])).values()];
   const raw: RawSegment[] = [];
   let failed = 0;
   for (const f of targets) {
     try {
-      raw.push(...(await segmentsFor(cik, f)));
+      raw.push(...(await segmentsFor(cik, f, archiveCikOf.get(f.accn) ?? cik)));
     } catch (e) {
       failed++;
       console.warn(`  [${cfg.ticker}] segments failed`, f.form, f.accn, (e as Error).message);
     }
   }
   const segments = dedupeSegments(raw);
+  for (const read of inlineFacts.get(cik) ?? []) mergeFactsInto(cf, read);
   mergeExtensions(cf, cik);
-  const statements = buildStatements(cf, { bank });
+  const statements = buildStatements(cf, options);
 
   const coverFromHtml = coverShares.get(cik) ?? null;
   if (coverFromHtml && (!sharesOutstanding || cover[0]?.filed < (ixQ[0]?.filed ?? ""))) sharesOutstanding = coverFromHtml;

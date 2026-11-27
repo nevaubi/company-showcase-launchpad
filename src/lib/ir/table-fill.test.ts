@@ -198,11 +198,13 @@ describe("Apple Q4 FY26 release", () => {
     expect([bs.printed, bs.filled]).toEqual([28, 28]);
     expect(at(row(out.facts, 1, 18), "2026-09-26", 0)?.label).toBe("Total assets");
     const cf = out.tables.find((x) => x.t === 2)!;
-    expect(cf.filled).toBe(28);
+    expect(cf.filled).toBe(27);
     const ops = row(out.facts, 2, 18);
     expect(ops.every((f) => f.months === 12)).toBe(true);
-    // The opening balance belongs to the year's column, not to its end date.
-    expect(row(out.facts, 2, 3).every((f) => f.months === 12)).toBe(true);
+    // The opening balance of a twelve-month column belongs to the year's start, never to its end: left out
+    // (verb-09: it showed under the fourth quarter).
+    expect(row(out.facts, 2, 3)).toEqual([]);
+    expect(cf.misses).toContainEqual([3, "period"]);
   });
 });
 
@@ -331,8 +333,12 @@ describe("build with table fill", () => {
       "Income tax expense",
     ]);
     expect(ni![1]).toBeGreaterThan(tax![1]);
-    expect(q.main).toMatchObject({ printed: 203, before: 62 });
-    expect(q.main.after).toBeGreaterThanOrEqual(200);
+    // Main counts are over the supplement's statement tables (income statement, balance sheet and the like).
+    expect(q.v).toBe(2);
+    expect(q.main.tables.printed).toBeGreaterThanOrEqual(2);
+    expect(q.main.tables.shown).toBe(q.main.tables.printed);
+    expect(q.main.printed).toBe(157);
+    expect(q.main.after).toBeGreaterThanOrEqual(155);
     expect(q.fill).toMatchObject({ docs: 1, read: 1, failed: 0, conflicts: 0 });
     expect(q.latest).toBe("2026-09-30");
   });

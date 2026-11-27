@@ -19,7 +19,7 @@ import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 import { holdSuspects } from "@/lib/ir/suspect";
 import { splitTrailing, trailingLine } from "@/lib/ir/ttm";
 
-export const TIDY_VERSION = 11;
+export const TIDY_VERSION = 12;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -214,6 +214,14 @@ type Verdict = "same" | "clash" | "different";
 function sameLine(a: PayloadSeries, ka: string, b: PayloadSeries, kb: string, roles: { aRoot: boolean; bRoot: boolean }): Verdict {
   if (a.unit !== b.unit || !!a.pit !== !!b.pit) return "different";
   const cmp = compare(a, b);
+  // Two lines whose own names differ, neither holding the other's words ("Products" and "Services", "Basic" and
+  // "Diluted"), are one line only on identical printed figures in two periods, even when their table's name
+  // carries both words and the keys come out equal (DELL's "Net revenue by product and service").
+  const own = (s: PayloadSeries) => new Set(labelTokens(s.label, false, true));
+  const oa = own(a);
+  const ob = own(b);
+  const holds = (x: Set<string>, y: Set<string>) => [...y].every((w) => x.has(w));
+  if (oa.size && ob.size && !holds(oa, ob) && !holds(ob, oa)) return cmp.exact >= 2 && !cmp.conflict ? "same" : "different";
   if (ka === kb) {
     // Both nameless after context: only "the total" lines of two tables are the same line.
     if (!ka && !(roles.aRoot && roles.bRoot) && !(a.total && b.total)) return cmp.exact >= 2 && !cmp.conflict ? "same" : "different";
@@ -383,6 +391,29 @@ function subjectContext(title: string, g: PayloadGroup) {
 }
 
 /** Lines under the same parent of one table that are one line under drifting names. */
+/** Printed rows of a line, by "<doc>:<table>" (cells read from table cells and the stored printing positions). */
+function printedRowsOf(s: PayloadSeries): Map<string, Set<number>> {
+  const out = new Map<string, Set<number>>();
+  const add = (d: number | undefined, t: number, r: number) => {
+    if (d == null) return;
+    const k = `${d}:${t}`;
+    (out.get(k) ?? out.set(k, new Set()).get(k)!).add(r);
+  };
+  for (const m of [s.q, s.y, s.mo ?? {}]) for (const c of Object.values(m)) if (Array.isArray(c.l)) add(c.d, c.l[0], c.l[1]);
+  for (const x of s.at ?? []) add(x[0], x[1], x[2]);
+  return out;
+}
+
+/** Whether two lines are printed at different rows of one table of one document, and never at one row there. */
+function printedApart(a: PayloadSeries, b: PayloadSeries): boolean {
+  const rb = printedRowsOf(b);
+  for (const [k, xs] of printedRowsOf(a)) {
+    const ys = rb.get(k);
+    if (ys && ![...xs].some((x) => ys.has(x))) return true;
+  }
+  return false;
+}
+
 function mergeSiblings(c: Ctx, g: PayloadGroup, ctx: Set<string>) {
   const rows = g.rows.map((r) => c.byKey.get(r.k)).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
   const byParent = new Map<string, PayloadSeries[]>();
@@ -423,6 +454,9 @@ function mergeSiblings(c: Ctx, g: PayloadGroup, ctx: Set<string>) {
         last = j;
         const b = sibs[j];
         if (c.removed.has(b.k)) continue;
+        // Two rows printed at different positions of one table of one document are two lines, whatever their
+        // figures (Apple's basic and diluted EPS agree in some quarters).
+        if (printedApart(a, b)) continue;
         // Siblings both printed in one period are two lines of that table unless they carry the same numbers.
         if (sameLine(a, ka, b, memberKey(b, ctx), { aRoot: false, bRoot: false }) !== "same") continue;
         if (overlaps(periodsOf(a), periodsOf(b)) && compare(a, b).agree === 0) continue;

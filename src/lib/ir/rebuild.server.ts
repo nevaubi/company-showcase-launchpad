@@ -11,10 +11,13 @@ import {
   FILL_DOCS,
   fillCompany,
   qualityOf,
+  tableDocRows,
   withDocMeta,
   withFill,
   type DocMeta,
   type FillRun,
+  type StoredDocRow,
+  type TableDoc,
 } from "@/lib/ir/table-fill-build";
 
 export const FACT_COLUMNS =
@@ -201,6 +204,47 @@ export async function documentMeta(ids: string[]): Promise<Map<string, DocMeta>>
   return out;
 }
 
+/**
+ * The company's table documents by their rows (releases, supplements, other HTML exhibits of the last 15 months,
+ * newest first), so a release no stored fact points into is still read; refused documents left out.
+ */
+export async function tableDocuments(ticker: string, refused: Set<string>): Promise<TableDoc[]> {
+  const { data, error } = await retry(() =>
+    supabaseAdmin
+      .from("ir_documents")
+      .select("id, kind, ext, filed, title, bytes, extract_status")
+      .eq("ticker", ticker)
+      .in("kind", ["press-release", "supplement", "other"])
+      .order("filed", { ascending: false })
+      .limit(200)
+      .abortSignal(AbortSignal.timeout(60_000)),
+  );
+  if (error) throw new Error(error.message);
+  return tableDocRows((data ?? []) as StoredDocRow[], new Date().toISOString().slice(0, 10), {
+    maxBytes: READ_LIMITS.bytes,
+    refused,
+  });
+}
+
+/** Period ends of the company's 10-Q and 10-K reports, for its fiscal calendar. */
+export async function reportDates(ticker: string): Promise<string[]> {
+  const { data, error } = await retry(() =>
+    supabaseAdmin
+      .from("sec_filings")
+      .select("report")
+      .eq("ticker", ticker)
+      .in("form", ["10-Q", "10-K"])
+      .not("report", "is", null)
+      .order("report", { ascending: false })
+      .limit(12)
+      .abortSignal(AbortSignal.timeout(60_000)),
+  );
+  if (error) return [];
+  return ((data ?? []) as { report: string | null }[])
+    .map((r) => r.report)
+    .filter((x): x is string => !!x);
+}
+
 export async function rebuildCompany(
   ticker: string,
   opts: { dry?: boolean; captions?: boolean; fill?: boolean } = {},
@@ -212,7 +256,12 @@ export async function rebuildCompany(
   ]);
   // Figures read from files of another company (reviewed list, source-guard.ts) never enter the series.
   let facts = withoutGuardedFacts(stored, refused);
-  if (!facts.length) return null;
+  const wantFill = opts.fill !== false && opts.captions !== false;
+  // A company with no stored fact is still built when its documents print statements the fill can read.
+  const [tableDocs, reports] = wantFill
+    ? await Promise.all([tableDocuments(ticker, refused), reportDates(ticker)])
+    : [[] as TableDoc[], [] as string[]];
+  if (!facts.length && !tableDocs.length) return null;
   // STORED-FACT FIXES: pure corrections of stored facts, before table fill and buildPayload.
   // A figure whose printed text opens a parenthesis closed in the next cell was stored positive (sign-fix.ts).
   const signed = fixPrintedSigns(facts);
@@ -223,14 +272,21 @@ export async function rebuildCompany(
   const meta = await documentMeta([
     ...new Set(facts.map((f) => f.document_id).filter((x): x is string => !!x)),
   ]);
+  for (const d of tableDocs) if (!meta.has(d.id)) meta.set(d.id, d);
   for (const f of facts) {
     const m = f.document_id ? meta.get(f.document_id) : undefined;
     if (m?.filed && !f.filed) f.filed = m.filed;
   }
   // Table fill: printed rows the readers left out, read from the stored documents (no model call).
   let run: FillRun | undefined;
-  if (opts.fill !== false && opts.captions !== false)
-    run = await fillCompany(facts, read, { company, maxDocs: READ_LIMITS.docs });
+  if (wantFill)
+    run = await fillCompany(facts, read, {
+      company,
+      maxDocs: READ_LIMITS.docs,
+      docs: tableDocs,
+      reports,
+    });
+  if (!(run?.facts ?? facts).length) return null;
   let payload = buildPayload(ticker, run?.facts ?? facts, map);
   // Printed titles of the tables the statement view is laid out from (documents already read come from the cache).
   if (opts.captions !== false) {
@@ -243,7 +299,16 @@ export async function rebuildCompany(
   payload = withDocMeta(payload, meta, run);
   const quality = qualityOf(payload, run);
   // Signs corrected before the fill count with the ones the fill corrected from the document.
-  payload = { ...payload, stats: { ...payload.stats, quality: { ...quality, fill: { ...quality.fill, signs: quality.fill.signs + signed.fixed.length } } } };
+  payload = {
+    ...payload,
+    stats: {
+      ...payload.stats,
+      quality: {
+        ...quality,
+        fill: { ...quality.fill, signs: quality.fill.signs + signed.fixed.length },
+      },
+    },
+  };
   if (!opts.dry) {
     // Payloads for banks run to several MB: keep them in storage, with stats in the table.
     const body = JSON.stringify(payload);

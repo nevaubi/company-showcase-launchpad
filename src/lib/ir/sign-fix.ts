@@ -18,8 +18,10 @@ const cellText = (locator: object): string | null => {
 
 /**
  * A fact read from a table cell whose own printed text opens a parenthesis around one number and
- * does not close it ("(32.5", "$ (1,234"), stored positive. Measured on 51 production facts of 12
- * companies against the SEC documents: every one has the closing ")" or "%)" in the next cell.
+ * does not close it ("(32.5", "$ (1,234"), stored positive. Measured against the SEC documents on
+ * 51 production facts of 12 companies and 1,745 facts in 40 documents of 23 companies: the next
+ * non-empty cell closes it (")" or "%)", in 8 cells followed by a footnote number, ") 3"); no
+ * counter-example.
  * Derived, text (prose) and page (vision) facts and texts with letters are never touched.
  */
 export function needsSignFix(f: SignFixFact): boolean {

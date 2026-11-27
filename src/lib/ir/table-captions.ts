@@ -64,7 +64,9 @@ function titleLike(s: string, company?: string) {
   // A sentence introducing the table ("The following table summarizes our financial results ...").
   if (/^(the following|below|the table below|this table)\b/i.test(s) || /\b(summarizes|sets forth|presents|shows)\b/i.test(s)) return false;
   // A clause ending a paragraph ("Our summary results, and forecast for Q4, are below.") is running text.
-  if (/[a-z]\.\s*$/.test(s) && s.split(/\s+/).length >= 4) return false;
+  if (/[a-z][.!?]["”’']?\s*$/.test(s) && s.split(/\s+/).length >= 4) return false;
+  // A headline of the release ("Announces establishment of new class C common stock") starts with its verb.
+  if (/^(announces?|reports?|declares?|completes?|launches?|names?|appoints?|expands?|raises?|delivers?|achieves?)\b/i.test(s)) return false;
   // A bullet or a sentence carrying figures names a highlight, not the table.
   if (/^[•·▪◦‣*]/.test(s) || /\d\s*%|\$\s*\d/.test(s)) return false;
   if (/[.;]\s+\S/.test(s) && s.split(" ").length > 14) return false;
@@ -100,7 +102,7 @@ function captionOf(t: ParsedTable, before: string[], company?: string): TableCap
       (c) =>
         MONTH.test(c) ||
         /\b(19|20)\d{2}\b/.test(c) ||
-        /months? ended|\bf?q[1-4]\b|\b[1-4]q\b/i.test(c) ||
+        /months? ended|\bf?q[1-4]\b|\b[1-4]q\b|\b[1-4]q\d{2}\b/i.test(c) ||
         (filled(r).length > 1 && /quarterly/i.test(c)),
     ),
   );
@@ -109,7 +111,15 @@ function captionOf(t: ParsedTable, before: string[], company?: string): TableCap
     if (f.length !== 1) continue;
     const s = f[0];
     if (!out.unit && SCALE.test(s)) out.unit = s.match(SCALE)![0].trim();
-    else if (!out.title && titleLike(s, company)) out.title = s;
+    // A title sits in the first columns (the label column, or the one after an empty spacer); a lone cell over the figure columns is a
+    // column head (Citigroup's "3Q26 Increase/" over "(Decrease) from").
+    else if (!out.title && r.findIndex((c) => c.trim()) <= 1 && titleLike(s, company)) out.title = s;
+  }
+  // A title printed in the label cell of the period-heads row (Texas Instruments: "Consolidated Statements of
+  // Income" beside "For Three Months Ended September 30,").
+  if (!out.title && heads0 >= 0) {
+    const c0 = top[heads0][0]?.trim() ?? "";
+    if (c0 && !SCALE.test(c0) && titleLike(c0, company)) out.title = c0;
   }
   // A title printed in the label cell of the period-heads row (Texas Instruments: "Consolidated Statements of
   // Income" beside "For Three Months Ended September 30,").

@@ -200,7 +200,10 @@ export function findSuspects(p: IrPayload): SuspectMap {
         (printed.get(id) ?? printed.set(id, []).get(id)!).push({ s, k, e, v: c.v });
       }
   }
-  const same = (a: number, b: number) => Math.abs(a - b) <= Math.max(Math.abs(a), Math.abs(b)) * 5e-4;
+  // The same printed figure: equal to the coarser printing's precision ("104.1" billion and 104,129
+  // million agree; 104,129 and 104,143 million are two figures, AMZN's North America operating expenses
+  // and net sales). The search window stays the old 0.05%, a superset of what this accepts.
+  const same = (a: number, b: number) => Math.abs(a - b) <= Math.min(Math.max(printedStep(a), printedStep(b)) / 2, Math.max(Math.abs(a), Math.abs(b)) * 5e-4);
   for (const list of printed.values()) {
     if (list.length < 3) continue;
     // Indexed by period and by value, so a label printed many times in one document stays near linear.

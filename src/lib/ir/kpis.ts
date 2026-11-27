@@ -405,7 +405,7 @@ export function splitGeoColumns(facts: IrFact[]): IrFact[] {
  * ("Customer relationships": 31,339 and net additions 370). The period-end value is the line;
  * flows under the same label become their own ": net change" line so the two never mix.
  */
-export function splitStockAndFlow(facts: IrFact[]): IrFact[] {
+export function splitStockAndFlow(facts: IrFact[], scoped?: Map<IrFact, string>): IrFact[] {
   const lk = (f: IrFact, label: string) => `${f.category}|${f.metric}|${f.unit}|${normLabel(label)}`;
   const stock = new Set<string>();
   const flow = new Set<string>();
@@ -420,6 +420,13 @@ export function splitStockAndFlow(facts: IrFact[]): IrFact[] {
     const own = mixed.has(lk(f, f.label));
     const par = !!f.parent && mixed.has(lk(f, f.parent));
     if (!own && !par) return f;
+    // A row printed in a table keeps its printed name (a cash-flow "Accounts payable", an average balance
+    // "Residential mortgage"): it is kept apart from the balance of the same name by its scope instead.
+    if (scoped && typeof (f.locator as { t?: unknown } | null)?.t === "number") {
+      const avg = /\baverage\b/i.test(`${f.breakdown ?? ""} ${f.label} ${f.parent ?? ""}`);
+      scoped.set(f, avg ? "average" : "change");
+      return f;
+    }
     return { ...f, ...(own ? { label: `${f.label}: net change` } : {}), ...(par ? { parent: `${f.parent}: net change` } : {}) };
   });
 }
@@ -458,11 +465,47 @@ const tableOf = (f: IrFact) => {
  * When the breakdown name doesn't tell them apart, keep the table with the largest values — the
  * consolidated one — so subsidiaries' numbers never mix into the company series.
  */
-export function dropRepeatedTables(facts: IrFact[]): IrFact[] {
+/** Printed titles of stored tables, by "<document id>:<table>" (`tableCaptions`), when the build has read them. */
+export type TableTitles = Map<string, string>;
+const titleOf = (titles: TableTitles | undefined, f: IrFact) => {
+  const t = tableOf(f);
+  return t == null || !titles ? undefined : titles.get(`${docOf(f)}:${t}`);
+};
+
+/**
+ * Tables of one document that print the same rows under different printed titles are segment pages (Wells
+ * Fargo's "COMMERCIAL BANKING SEGMENT" beside "CONSUMER BANKING AND LENDING SEGMENT"), not repeated subsidiary
+ * tables: each is kept, its lines scoped by its title, so no segment's figures mix into another's.
+ */
+export function titleScopes(facts: IrFact[], titles: TableTitles | undefined): Map<IrFact, string> {
+  const out = new Map<IrFact, string>();
+  if (!titles?.size) return out;
+  const groups = new Map<string, Map<string, IrFact[]>>();
+  for (const f of facts) {
+    const title = titleOf(titles, f);
+    if (!title) continue;
+    const g = `${docOf(f)}|${f.category}|${f.metric}|${f.unit}|${scopeName(f.breakdown)}`;
+    let m = groups.get(g);
+    if (!m) groups.set(g, (m = new Map()));
+    const key = normLabel(title);
+    m.set(key, [...(m.get(key) ?? []), f]);
+  }
+  for (const m of groups.values()) {
+    if (m.size < 2) continue;
+    // Only where two titled tables print a line under one name: those are the pages that would mix.
+    const names = new Map<string, number>();
+    for (const list of m.values()) for (const n of new Set(list.map((f) => normLabel(f.label)))) names.set(n, (names.get(n) ?? 0) + 1);
+    if (![...names.values()].some((n) => n > 1)) continue;
+    for (const [, list] of m) for (const f of list) out.set(f, titleOf(titles, f)!);
+  }
+  return out;
+}
+
+export function dropRepeatedTables(facts: IrFact[], keep: Map<IrFact, string> = new Map()): IrFact[] {
   const groups = new Map<string, Map<string | number, IrFact[]>>();
   for (const f of facts) {
     const t = tableOf(f);
-    if (t == null) continue;
+    if (t == null || keep.has(f)) continue;
     const g = `${docOf(f)}|${f.category}|${f.metric}|${f.unit}|${scopeName(f.breakdown)}`;
     let m = groups.get(g);
     if (!m) groups.set(g, (m = new Map()));
@@ -588,9 +631,12 @@ function fillYearToDateQuarters(all: Iterable<IrSeries>, quarters: string[], six
 
 export function buildIrSeries(
   input: IrFact[],
-  opts: { labelMap?: Record<string, LabelMapEntry>; fyEndMonth?: number | null; unlink?: Set<string> } = {},
+  opts: { labelMap?: Record<string, LabelMapEntry>; fyEndMonth?: number | null; unlink?: Set<string>; titles?: TableTitles } = {},
 ): { series: IrSeries[]; quarters: string[]; years: string[]; months: string[]; checks: ReconcileCheck[] } {
-  const mapped = dropRepeatedTables(splitStockAndFlow(splitGeoColumns(qualifyGenericLines(applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value))))));
+  const flowScope = new Map<IrFact, string>();
+  const prepared = splitStockAndFlow(splitGeoColumns(qualifyGenericLines(applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value)))), flowScope);
+  const titled = titleScopes(prepared, opts.titles);
+  const mapped = dropRepeatedTables(prepared, titled);
   // Trailing-twelve-month columns ending mid-year are not fiscal years.
   const fyEnd = opts.fyEndMonth ?? fiscalYearEndMonth(mapped);
   const facts = fyEnd ? mapped.filter((f) => f.months !== 12 || monthNear(f.period_end, fyEnd)) : mapped;
@@ -659,7 +705,13 @@ export function buildIrSeries(
   // One document printing a line under two bases (Coca-Cola's reported and comparable revenue by segment):
   // two lines even in a period where the figures agree.
   for (const k of basisSplits(facts)) conflicts.add(k);
-  const scopeOf = (f: IrFact) => (conflicts.has(seriesKey(f)) ? scopeName(f.breakdown) || "unscoped" : null);
+  const scopeOf = (f: IrFact) => {
+    const t = titled.get(f);
+    if (t) return scopeName(t) || "unscoped";
+    const fl = flowScope.get(f);
+    if (fl) return conflicts.has(seriesKey(f)) ? `${scopeName(f.breakdown) || "unscoped"} ${fl}` : fl;
+    return conflicts.has(seriesKey(f)) ? scopeName(f.breakdown) || "unscoped" : null;
+  };
   for (const f of facts) {
     const scope = scopeOf(f);
     const key = scope ? `${seriesKey(f)}|@${scope}` : seriesKey(f);
@@ -963,6 +1015,20 @@ function mergeFlattened(bySeries: Map<string, IrSeries>, qv: Map<string, Map<str
         if (flat === deep || !bySeries.has(flat.key) || !bySeries.has(deep.key)) continue;
         // deep.parent must itself roll into flat.parent
         if (!parentsOf(dim(deep), deep.parent).has(normLabel(flat.parent ?? ""))) continue;
+        // Never two lines one document prints with different figures for one period (BAC prints residential
+        // mortgage loans outstanding and nonperforming in two tables of its supplement): they are two lines.
+        const clash = [qv, fv].some((m) => {
+          const a = m.get(flat.key);
+          const b = m.get(deep.key);
+          if (!a || !b) return false;
+          for (const [end, vs] of a)
+            for (const v of vs) {
+              const o = (b.get(end) ?? []).find((x) => x.doc === v.doc && !x.synthetic && !v.synthetic);
+              if (o && Math.abs(o.v - v.v) > Math.max(Math.abs(o.v) * 0.001, 1)) return true;
+            }
+          return false;
+        });
+        if (clash) continue;
         for (const m of [qv, fv]) {
           const src = m.get(flat.key);
           if (!src) continue;

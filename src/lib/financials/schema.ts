@@ -1,3 +1,5 @@
+import { classConcepts } from "./share-class";
+import type { StatementSector } from "./statement-layout";
 import type { Unit } from "./types";
 
 export interface LineDef {
@@ -14,6 +16,8 @@ export interface LineDef {
   bank?: boolean;
   /** When none of `concepts` is reported, sum these component concepts for the same period. */
   components?: string[];
+  /** Only for companies of these statement sectors (statement-layout.ts). */
+  sectors?: StatementSector[];
 }
 
 const usd = (
@@ -45,16 +49,92 @@ export const INCOME_LINES: LineDef[] = [
     "flow",
     { bold: true },
   ),
+  // Banks' interest lines above net interest income (statement-layout.ts orders them): JPMorgan's "Interest income"
+  // $53,056M and "Interest expense" $26,020M, Q3 2026 (InterestIncomeOperating, InterestExpenseOperating); Bank of
+  // America's $34,257M (InterestAndDividendIncomeOperating).
+  usd("bankInterestIncome", "Interest income", ["InterestAndDividendIncomeOperating", "InterestIncomeOperating"], "flow", { indent: 1, bank: true }),
+  usd("bankInterestExpense", "Interest expense", ["InterestExpenseOperating", "InterestExpense"], "flow", { indent: 1, bank: true }),
   usd("netInterestIncome", "Net interest income", ["InterestIncomeExpenseNet", "InterestIncomeExpenseAfterProvisionForLoanLoss"], "flow", { indent: 1, bank: true }),
   usd("nonInterestIncome", "Noninterest revenue", ["NoninterestIncome"], "flow", { indent: 1, bank: true }),
   usd(
     "provisionCreditLosses",
     "Provision for credit losses",
-    ["ProvisionForLoanLeaseAndOtherLosses", "ProvisionForLoanAndLeaseLosses", "ProvisionForCreditLosses"],
+    // The newer taxonomy's credit loss expense concepts after the older ones, and Bank of America's own "Provision for
+    // credit losses" $1,269M Q3 2026 (10-Q 0000070858-26-000548).
+    [
+      "ProvisionForLoanLeaseAndOtherLosses",
+      "ProvisionForLoanAndLeaseLosses",
+      "ProvisionForCreditLosses",
+      "FinancingReceivableExcludingAccruedInterestAndOffBalanceSheetCreditLossExpenseReversal",
+      "CreditLossExpenseReversal",
+      "ProvisionForLoanLossesExpensed",
+      "bac:FinancingReceivableExcludingAccruedInterestAndOffBalanceSheetLiabilityCreditLossProvisionReversal",
+    ],
     "flow",
     { indent: 1, bank: true },
   ),
   usd("nonInterestExpense", "Noninterest expense", ["NoninterestExpense"], "flow", { indent: 1, bank: true }),
+  // Insurers (statement-layout.ts): Progressive Q3 2026 net premiums earned $21,869.0M, investment income $1,035.0M,
+  // total net realized gains on securities −$170.0M, losses and loss adjustment expenses $14,904.0M, policy
+  // acquisition costs $1,607.0M, other underwriting expenses $3,196.0M, total expenses $19,956.0M (10-Q
+  // 0000080661-26-000379).
+  usd("premiumsEarned", "Premiums earned", ["PremiumsEarnedNet"], "flow", { indent: 1, sectors: ["insurer"] }),
+  usd("investmentIncome", "Investment income", ["NetInvestmentIncome", "InterestAndDividendIncomeOperating", "InvestmentIncomeInterestAndDividend"], "flow", {
+    indent: 1,
+    sectors: ["insurer"],
+  }),
+  usd("investmentGains", "Investment gains (losses)", ["GainLossOnInvestments", "DebtAndEquitySecuritiesGainLoss", "RealizedInvestmentGainsLosses"], "flow", {
+    indent: 1,
+    sectors: ["insurer"],
+  }),
+  usd(
+    "lossesBenefits",
+    "Losses, claims and benefits",
+    ["PolicyholderBenefitsAndClaimsIncurredNet", "LiabilityForUnpaidClaimsAndClaimsAdjustmentExpenseIncurredClaims1", "IncurredClaimsPropertyCasualtyAndLiability"],
+    "flow",
+    { indent: 1, sectors: ["insurer"] },
+  ),
+  usd("policyAcquisition", "Policy acquisition costs", ["DeferredPolicyAcquisitionCostAmortizationExpense"], "flow", { indent: 1, sectors: ["insurer"] }),
+  usd("otherUnderwriting", "Other underwriting expenses", ["OtherUnderwritingExpense"], "flow", { indent: 1, sectors: ["insurer"] }),
+  usd("insuranceExpenses", "Total expenses", ["BenefitsLossesAndExpenses", "CostsAndExpenses"], "flow", { sectors: ["insurer"] }),
+  // Managed care: UnitedHealth Q3 2026 premiums $87,078M and medical costs $76,982M (10-Q 0000731766-26-000266).
+  usd("premiums", "Premiums", ["PremiumsEarnedNet", "HealthCareOrganizationPremiumRevenue"], "flow", { indent: 1, sectors: ["managedCare"] }),
+  usd("medicalCosts", "Medical costs", ["PolicyholderBenefitsAndClaimsIncurredNet", "HealthCareOrganizationMedicalCosts"], "flow", { indent: 1, sectors: ["managedCare"] }),
+  // Real estate trusts: Prologis' rental revenues and rental expenses (its revenue line is its own concept, read from
+  // the filing at ingest), American Tower's "Property" costs $724.9M Q3 2026.
+  usd("rentalRevenue", "Rental revenue", ["OperatingLeaseLeaseIncome", "OperatingLeasesIncomeStatementLeaseRevenue", "pld:RentalRevenue"], "flow", {
+    indent: 1,
+    sectors: ["reit"],
+  }),
+  usd("propertyExpenses", "Property operating expenses", ["DirectCostsOfLeasedAndRentedPropertyOrEquipment", "CostOfOtherPropertyOperatingExpense"], "flow", {
+    indent: 1,
+    sectors: ["reit"],
+  }),
+  usd("reitDna", "Depreciation & amortization", ["DepreciationAndAmortization", "DepreciationAmortizationAndAccretionNet", "DepreciationDepletionAndAmortization"], "flow", {
+    indent: 1,
+    sectors: ["reit"],
+  }),
+  // Utilities: NextEra Q3 2026 fuel, purchased power and interchange $1,699M (its own concept), other operations and
+  // maintenance $1,428M, depreciation and amortization $1,651M, taxes other than income taxes $713M.
+  usd("fuelPower", "Fuel & purchased power", ["nee:FuelPurchasedPowerAndInterchangeExpense", "FuelCosts", "CostOfPurchasedPower"], "flow", {
+    indent: 1,
+    sectors: ["utility"],
+  }),
+  usd(
+    "operationsMaintenance",
+    "Operations & maintenance",
+    ["UtilitiesOperatingExpenseMaintenanceAndOperations", "UtilitiesOperatingExpenseMaintenanceOperationsAndOtherCostsAndExpenses"],
+    "flow",
+    { indent: 1, sectors: ["utility"] },
+  ),
+  usd(
+    "utilityDna",
+    "Depreciation & amortization",
+    ["nee:DepreciationAndAmortizationExcludingNuclearFuel", "UtilitiesOperatingExpenseDepreciationAndAmortization", "DepreciationAndAmortization"],
+    "flow",
+    { indent: 1, sectors: ["utility"] },
+  ),
+  usd("taxesOther", "Taxes other than income taxes", ["TaxesExcludingIncomeAndExciseTaxes", "UtilitiesOperatingExpenseTaxes"], "flow", { indent: 1, sectors: ["utility"] }),
   usd(
     "costOfRevenue",
     "Cost of revenue",
@@ -88,7 +168,15 @@ export const INCOME_LINES: LineDef[] = [
   usd("generalAdmin", "General & administrative", ["GeneralAndAdministrativeExpense"], "flow", {
     indent: 1,
   }),
-  usd("opex", "Total operating expenses", ["OperatingExpenses", "CostsAndExpenses"], "flow"),
+  // Prologis' "Total expenses" $1,450.8M Q3 2026 is its own concept; the OperatingExpenses it tags is a note figure.
+  usd("opex", "Total operating expenses", ["OperatingExpenses", "CostsAndExpenses", "pld:OperatingExpensesBeforeGainsOnRealEstateTransactionsNet"], "flow", { bold: true }),
+  // Gains printed between operating expenses and operating income, kept only where they close that gap
+  // (dropUntiedOpex in build.ts): NextEra's "Gains on disposal of businesses/assets – net" $44M Q3 2026 (8,090 − 5,510
+  // + 44 = 2,624); Prologis' gains on dispositions of development properties and of other real estate.
+  usd("operatingGains", "Gains on disposals", ["DisposalGroupNotDiscontinuedOperationGainLossOnDisposal", "GainLossOnSaleOfRealEstateInvestmentPropertyNet"], "flow", {
+    indent: 1,
+    components: ["pld:GainsOnDispositionsOfDevelopmentPropertiesAndLandNet", "pld:GainsOnOtherDispositionsOfInvestmentsInRealEstateNet"],
+  }),
   usd("operatingIncome", "Operating income", ["OperatingIncomeLoss"], "flow", { bold: true }),
   // Shown only for a period where interest income, interest expense and the other line add up to the non-operating
   // total, so that they are that total's printed lines (splitNonOperating in build.ts): Amazon Q3 2026 1,187 − 1,691
@@ -99,7 +187,7 @@ export const INCOME_LINES: LineDef[] = [
   usd(
     "interestExpense",
     "Interest expense",
-    ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt", "InterestAndDebtExpense", "InterestExpenseOperating"],
+    ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt", "InterestAndDebtExpense", "InterestExpenseOperating", "nee:InterestExpenseAggregateExpenses"],
     "flow",
     { indent: 1 },
   ),
@@ -133,7 +221,8 @@ export const INCOME_LINES: LineDef[] = [
   usd(
     "nciIncome",
     "Less: noncontrolling interests",
-    ["NetIncomeLossAttributableToNoncontrollingInterest", "MinorityInterestInNetIncomeLossOfConsolidatedEntities"],
+    // NextEra: "Net loss attributable to noncontrolling interests" (the nonredeemable interests' concept).
+    ["NetIncomeLossAttributableToNoncontrollingInterest", "MinorityInterestInNetIncomeLossOfConsolidatedEntities", "NetIncomeLossAttributableToNonredeemableNoncontrollingInterest"],
     "flow",
     { indent: 1 },
   ),
@@ -156,7 +245,16 @@ export const INCOME_LINES: LineDef[] = [
     // The continuing-operations figure only where the statement has no discontinued operations, so that it is the
     // statement's own EPS line (dropContinuingEpsBesideDiscontinued in build.ts): Freeport-McMoRan, Exelon,
     // Halliburton and Airbnb tag their only EPS lines with it.
-    concepts: ["EarningsPerShareBasic", "IncomeLossFromContinuingOperationsPerBasicShare"],
+    // Goldman Sachs prints "Basic" EPS $17.24 Q3 2026 under its own concept, earnings excluding those attributed to
+    // participating securities (10-Q 0000886982-26-000532). Last, the ticker's share class's EPS where the filer tags
+    // EPS by class only (Berkshire's Class B $10.33 Q3 2026; share-class.ts).
+    concepts: [
+      "EarningsPerShareBasic",
+      "IncomeLossFromContinuingOperationsPerBasicShare",
+      "gs:EarningsPerShareExcludingNetEarningsAttributedToParticipatingSecuritiesBasic",
+      ...classConcepts("EarningsPerShareBasic"),
+      ...classConcepts("EarningsPerShareBasicAndDiluted"),
+    ],
     unit: "usdPerShare",
     kind: "flow",
     additive: true,
@@ -166,7 +264,13 @@ export const INCOME_LINES: LineDef[] = [
     label: "EPS, diluted",
     // Freeport-McMoRan's "Diluted" $1.52 FY2025 (10-K 0000831259-26-000012), Airbnb's "Diluted" $4.03 FY2025
     // (10-K 0001559720-26-000004): IncomeLossFromContinuingOperationsPerDilutedShare, no discontinued operations.
-    concepts: ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted", "IncomeLossFromContinuingOperationsPerDilutedShare"],
+    concepts: [
+      "EarningsPerShareDiluted",
+      "EarningsPerShareBasicAndDiluted",
+      "IncomeLossFromContinuingOperationsPerDilutedShare",
+      ...classConcepts("EarningsPerShareDiluted"),
+      ...classConcepts("EarningsPerShareBasicAndDiluted"),
+    ],
     unit: "usdPerShare",
     kind: "flow",
     additive: true,
@@ -183,7 +287,7 @@ export const INCOME_LINES: LineDef[] = [
   {
     key: "sharesBasic",
     label: "Weighted avg. shares, basic",
-    concepts: ["WeightedAverageNumberOfSharesOutstandingBasic"],
+    concepts: ["WeightedAverageNumberOfSharesOutstandingBasic", ...classConcepts("WeightedAverageNumberOfSharesOutstandingBasic")],
     unit: "shares",
     kind: "flow",
     additive: false,
@@ -191,7 +295,7 @@ export const INCOME_LINES: LineDef[] = [
   {
     key: "sharesDiluted",
     label: "Weighted avg. shares, diluted",
-    concepts: ["WeightedAverageNumberOfDilutedSharesOutstanding"],
+    concepts: ["WeightedAverageNumberOfDilutedSharesOutstanding", ...classConcepts("WeightedAverageNumberOfDilutedSharesOutstanding")],
     unit: "shares",
     kind: "flow",
     additive: false,
@@ -202,7 +306,10 @@ export const BALANCE_LINES: LineDef[] = [
   usd(
     "cash",
     "Cash & equivalents",
-    ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
+    // Chevron's balance sheet line "Cash and cash equivalents" $12,804M at 30 Sep 2026 is tagged
+    // CashAndCashEquivalentsExcludingTimeDeposits (10-Q 0000093410-26-000200). The restricted-cash total comes last
+    // and is named for itself where it stands alone (cashLabel in build.ts).
+    ["CashAndCashEquivalentsAtCarryingValue", "CashAndCashEquivalentsExcludingTimeDeposits", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
     "stock",
   ),
   usd(
@@ -234,6 +341,8 @@ export const BALANCE_LINES: LineDef[] = [
     ],
     "stock",
   ),
+  // Real estate trusts' main asset: Prologis' "Net investments in real estate properties" $82,400.1M at 30 Sep 2026.
+  usd("realEstate", "Real estate investments, net", ["RealEstateInvestmentPropertyNet"], "stock", { sectors: ["reit"] }),
   usd("goodwill", "Goodwill", ["Goodwill"], "stock"),
   usd(
     "intangibles",

@@ -52,7 +52,27 @@ const TXN = `<p>TEXAS INSTRUMENTS INCORPORATED AND SUBSIDIARIES</p>
 const NFLX = `<p>Our summary results, and forecast for Q4, are below.</p>
 <table><tr><td>(in millions except per share data)</td><td>Q3'25</td><td>Q3'26</td></tr><tr><td>Revenue</td><td>$</td><td>11,510</td><td>12,874</td></tr></table>`;
 
+// Citigroup's 3Q26 supplement: the page heading before the table, a change-column head alone in the table's
+// first row over the figure columns, quarter heads written "3Q26" (vera-08).
+const CITI = `<p>CITIGROUP CONSOLIDATED BALANCE SHEET</p><p>(In millions of dollars)</p>
+<table><tr><td></td><td></td><td></td><td></td><td>3Q26 Increase/</td></tr><tr><td></td><td>September 30,</td><td>June 30,</td><td>(Decrease) from</td></tr>
+<tr><td></td><td>2026</td><td>2026</td><td>2Q26</td></tr><tr><td>Assets</td></tr><tr><td>Cash and due from banks</td><td>$</td><td>23,451</td><td>24,663</td></tr></table>`;
+
+// Alphabet's and Meta's Q3 2026 releases: a closing quotation and a headline bullet above the first table (verb-12).
+const GOOGL = `<p>“... We’re excited by the range of big opportunities ahead of us.”</p>
+<table><tr><td></td><td>Quarter Ended September 30,</td></tr><tr><td></td><td>2025</td><td>2026</td></tr><tr><td>Revenues</td><td>$</td><td>102,346</td><td>$</td><td>115,000</td></tr></table>`;
+const META = `<p>Third Quarter 2026 Financial Highlights</p><p>Announces establishment of new class C common stock</p>
+<table><tr><td></td><td>Three Months Ended September 30,</td></tr><tr><td></td><td>2026</td><td>2025</td></tr><tr><td>Revenue</td><td>$</td><td>64,601</td><td>$</td><td>51,242</td></tr></table>`;
+
 describe("tableCaptions: titles inside the table", () => {
+  it("GOOGL, META: a quotation and a headline are not titles; the heading before them is", () => {
+    expect(tableCaptions(GOOGL, "Alphabet")[0].title).toBeUndefined();
+    expect(tableCaptions(META, "Meta")[0].title).toBe("Third Quarter 2026 Financial Highlights");
+  });
+  it("C: a lone cell over the figure columns is a column head, not the title", () => {
+    const [c] = tableCaptions(CITI, "Citigroup");
+    expect(c.title).toBe("CITIGROUP CONSOLIDATED BALANCE SHEET");
+  });
   it("NFLX: a paragraph's closing sentence is not a title", () => {
     const [c] = tableCaptions(NFLX, "Netflix");
     expect(c.title).toBeUndefined();

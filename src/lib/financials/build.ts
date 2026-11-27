@@ -2,6 +2,8 @@
 // annual and quarterly statements. Pure functions: used by the ingest script
 // and covered by unit tests.
 import { BALANCE_LINES, CASHFLOW_LINES, DEBT_EVIDENCE_CONCEPTS, INCOME_LINES, TOTAL_DEBT_CONCEPTS, type LineDef } from "./schema";
+import { classOfConcept } from "./share-class";
+import { calculatesGrossProfit, layoutIncome, showsEbitda, type StatementSector } from "./statement-layout";
 import type { Cell, DerivedPart, Period, Row, SourceRef, Statement, StatementKey } from "./types";
 
 export interface RawFact {
@@ -618,6 +620,8 @@ function ratioRow(
 export interface BuildOptions {
   /** Banks and brokerages: keep bank-only lines, skip industrial-style debt and margin metrics. */
   bank?: boolean;
+  /** The statement layout of the company's sector (statement-layout.ts); a bank also when `bank` is set. */
+  sector?: StatementSector;
 }
 
 const periodDays = (p: Period) => (p.start ? durationDays(p.start, p.end) + 1 : 365);
@@ -1387,6 +1391,16 @@ function attributableNetIncome(cf: CompanyFacts, income: Row[], periods: Period[
   if (incl.cells.some(Boolean)) ni.label = "Net income attributable to shareholders";
 }
 
+/** EPS and share lines read from the ticker's share class say which class ("EPS, basic (Class B)"). */
+function labelShareClass(income: Row[]) {
+  for (const key of ["epsBasic", "epsDiluted", "sharesBasic", "sharesDiluted"]) {
+    const r = rowOf(income, key);
+    const c = r && [...r.cells].reverse().find(Boolean);
+    const cls = c && classOfConcept(conceptOf(c) ?? "");
+    if (r && cls) r.label = `${r.label} (Class ${cls})`;
+  }
+}
+
 /** The cash flow statement's first line includes noncontrolling interests: say so where it differs from net income. */
 function labelCashNetIncome(cash: Row[], income: Row[]) {
   const cfn = rowOf(cash, "cfNetIncome");
@@ -1442,17 +1456,24 @@ function splitNonOperating(income: Row[]) {
 
 /**
  * "Total operating expenses" only where it is the statement's total: not negative, and revenue less it (or less cost
- * of revenue and it) comes within 2% of revenue to operating income. Prologis tags OperatingExpenses for a note
- * subtotal ($612.9M Q3 2026 against its printed "Total expenses" $1,450.8M) and for a reconciling item (−$2,280.7M
- * FY2025, 10-K 0001193125-26-051453).
+ * of revenue and it) comes within 2% of revenue to operating income, with the gains printed between them where they
+ * close the gap (NextEra Q3 2026: 8,090 − 5,510 + 44 = 2,624; Prologis: 2,387.5 − 1,450.8 + 51.5 + 56.4 = 1,044.7).
+ * Prologis also tags OperatingExpenses for a note subtotal ($612.9M Q3 2026) and a reconciling item (−$2,280.7M
+ * FY2025, 10-K 0001193125-26-051453): left out. The gains row stands only where it closes that gap.
  */
 function dropUntiedOpex(income: Row[]) {
   const opex = rowOf(income, "opex");
   const rev = rowOf(income, "revenue");
   const cost = rowOf(income, "costOfRevenue");
   const oi = rowOf(income, "operatingIncome");
-  if (!opex) return;
+  const gains = rowOf(income, "operatingGains");
+  if (!opex) {
+    if (gains) gains.cells = gains.cells.map(() => null);
+    return;
+  }
   opex.cells = opex.cells.map((c, i) => {
+    const g = gains?.cells[i] ?? null;
+    if (gains) gains.cells[i] = null;
     if (!c) return c;
     if (c.v < 0) return null;
     const r = rev?.cells[i];
@@ -1460,9 +1481,37 @@ function dropUntiedOpex(income: Row[]) {
     if (!r || !o || !r.v) return c;
     const tol = Math.abs(r.v) * 0.02;
     const k = cost?.cells[i];
-    const ties = Math.abs(r.v - c.v - o.v) <= tol || (!!k && Math.abs(r.v - k.v - c.v - o.v) <= tol);
-    return ties ? c : null;
+    const gap = (extra: number) => Math.min(Math.abs(r.v - c.v + extra - o.v), k ? Math.abs(r.v - k.v - c.v + extra - o.v) : Infinity);
+    const withGains = g ? gap(g.v) : Infinity;
+    if (g && gains && withGains <= tol && withGains < gap(0)) {
+      gains.cells[i] = g;
+      return c;
+    }
+    return gap(0) <= tol ? c : null;
   });
+}
+
+/**
+ * Sales and marketing and general and administrative beside an SG&A line are its breakdown from a note, not lines of
+ * the statement: Apple prints "Selling, general and administrative" $29,774M for FY2026 and tags $21,134M and $8,640M
+ * of its parts in a note (10-K 0000320193-26-000026). Shown beside it they read as counted twice, so for a period with
+ * an SG&A figure they are left out; a filer that prints the two lines and no SG&A keeps them.
+ */
+function dropSgaParts(income: Row[]) {
+  const sga = rowOf(income, "sga");
+  if (!sga) return;
+  for (const key of ["salesMarketing", "generalAdmin"]) {
+    const r = rowOf(income, key);
+    if (r) r.cells = r.cells.map((c, i) => (sga.cells[i] ? null : c));
+  }
+}
+
+/** Managed care: medical costs as a share of premiums, calculated with its formula. */
+function medicalCostRatio(income: Row[]): Row {
+  const row = ratioRow("medicalCostRatio", "Medical cost ratio", rowOf(income, "medicalCosts"), rowOf(income, "premiums"), ["Medical costs", "Premiums"], "pct", {
+    positiveDen: true,
+  });
+  return { ...row, indent: 1, calc: "Medical costs ÷ Premiums" };
 }
 
 /**
@@ -1544,30 +1593,150 @@ export function dropSegmentOperatingIncome(income: Row[], totalExpenses: Row) {
   });
 }
 
+/**
+ * The quarterly columns that hold a whole balance sheet (five lines or more), each a 10-Q's or 10-K's balance sheet
+ * date. A column with fewer is no evidence either way.
+ */
+function balanceSheetDates(balance: Row[], periods: Period[]): number[] {
+  return periods.filter((_, i) => balance.filter((r) => r.cells[i]).length >= 5).map((p) => toTime(p.end));
+}
+
+function recordFilled(filled: Map<string, Set<string>>, rows: Row[], periods: Period[]) {
+  for (const r of rows) filled.set(r.key, new Set(periods.filter((_, i) => r.cells[i]).map((p) => p.end)));
+}
+
+const NEIGHBOUR_DAYS = 100;
+const YEAR_WINDOW_DAYS = 400;
+
+/** Lines a balance sheet keeps from one date to the next once they exist; debt and borrowings can be nil for a quarter. */
+const PERSISTENT_LINES = new Set([
+  "cash",
+  "shortTermInvestments",
+  "receivables",
+  "inventory",
+  "ppe",
+  "goodwill",
+  "intangibles",
+  "accountsPayable",
+  "deferredRevenue",
+  "operatingLeases",
+  "sharesOutstanding",
+]);
+
+const DEBT_LINES = ["shortTermDebt", "longTermDebt"];
+const QUARTER_DEBT_EVIDENCE = ["SecuredDebt", "UnsecuredDebt", "LineOfCredit", "LongTermLineOfCredit", "NotesPayable", "SeniorNotes", "ConvertibleNotesPayable", "LongTermDebt", "DebtCurrent", "LongTermDebtNoncurrent", "ShortTermBorrowings", "CommercialPaper"];
+
+/**
+ * A balance sheet line is shown from the statement's own lines for every period or not at all. The balance sheet is
+ * in every 10-Q and 10-K, so what it prints is tagged at each of their dates. Two tests leave a note's figure out:
+ * - a line that persists once it exists (cash, receivables, property, goodwill, intangibles, leases, payables) filled
+ *   at a date while the whole balance sheet before or after it (within a quarter) lacks it: Apple's "Intangible assets,
+ *   net" $13,301M at 27 Sep 2025, Prologis' property and intangibles at 31 Dec 2025, none on their balance sheets;
+ * - debt at a fiscal year end when no 10-Q balance sheet within a year of it has any debt line: Caterpillar's
+ *   short-term borrowings and long-term debt totals at 31 Dec 2025 come from its 10-K's notes (its balance sheets
+ *   print debt by business only, which SEC's company facts do not carry). A debt line nil for a quarter is no such
+ *   case (Autodesk's short-term borrowings at 31 Jan and 31 Jul 2026, none at 30 Apr): its other quarters have debt.
+ */
+function dropUnstatedBalanceCells(
+  cf: CompanyFacts,
+  rows: Row[],
+  periods: Period[],
+  filled: Map<string, Set<string>>,
+  dates: number[],
+  quarterEnds: number[],
+) {
+  const filledNear = (set: Set<string> | undefined, t: number) => !!set && [...set].some((e) => Math.abs(toTime(e) - t) <= 4 * DAY);
+  const debtInQuarters = (t: number) => {
+    const qs = quarterEnds.filter((q) => Math.abs(q - t) <= YEAR_WINDOW_DAYS * DAY && dates.includes(q));
+    if (!qs.length) return true;
+    if (qs.some((q) => [...DEBT_LINES, "totalDebt"].some((k) => filledNear(filled.get(k), q)))) return true;
+    // Debt lines the rows do not read (a trust's secured and unsecured debt and credit line, Equity LifeStyle).
+    return qs.some((q) => QUARTER_DEBT_EVIDENCE.some((c) => factsFor(cf, c, "USD").some((f) => !f.start && f.form.startsWith("10-Q") && Math.abs(toTime(f.end) - q) <= 4 * DAY)));
+  };
+  const isYearEnd = (end: string) => !quarterEnds.some((q) => Math.abs(q - toTime(end)) <= 4 * DAY);
+  for (const r of rows) {
+    const set = filled.get(r.key);
+    r.cells = r.cells.map((c, i) => {
+      if (!c) return c;
+      const t = toTime(periods[i].end);
+      if ((DEBT_LINES.includes(r.key) || r.key === "totalDebt") && isYearEnd(periods[i].end) && !debtInQuarters(t)) return null;
+      if (!PERSISTENT_LINES.has(r.key)) return c;
+      const prev = [...dates].reverse().find((d) => d < t - 4 * DAY && d >= t - NEIGHBOUR_DAYS * DAY);
+      const next = dates.find((d) => d > t + 4 * DAY && d <= t + NEIGHBOUR_DAYS * DAY);
+      return (prev === undefined || filledNear(set, prev)) && (next === undefined || filledNear(set, next)) ? c : null;
+    });
+  }
+}
+
+const RESTRICTED_CASH = "us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents";
+
+/**
+ * The cash line falls back to the cash flow statement's total of cash, cash equivalents and restricted cash where no
+ * cash and equivalents line is tagged (GE prints that total on its balance sheet; Chevron's balance sheet line is
+ * tagged under a concept SEC's company facts do not carry, so its total of $13,919M stands for 30 Sep 2026 beside a
+ * printed $12,804M). The two are never mixed in one row: the newest cell decides what "cash" holds and how it is
+ * named, and cells of the other kind move to a row of their own beside it.
+ */
+function cashLabel(balance: Row[]) {
+  const cash = rowOf(balance, "cash");
+  if (!cash) return;
+  const newest = [...cash.cells].reverse().find(Boolean);
+  if (!newest) return;
+  const restricted = conceptOf(newest) === RESTRICTED_CASH;
+  const isOther = (c: Cell | null) => !!c && (conceptOf(c) === RESTRICTED_CASH) !== restricted;
+  const moved = cash.cells.map((c) => (isOther(c) ? c : null));
+  cash.cells = cash.cells.map((c) => (isOther(c) ? null : c));
+  if (restricted) cash.label = "Cash, cash equivalents & restricted cash";
+  if (!moved.some(Boolean)) return;
+  const other: Row = {
+    ...cash,
+    key: restricted ? "cashOnly" : "cashRestricted",
+    label: restricted ? "Cash & equivalents" : "Cash, cash equivalents & restricted cash",
+    cells: moved,
+  };
+  balance.splice(balance.indexOf(cash) + 1, 0, other);
+}
+
 export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
   const years = detectFiscalYears(cf);
   const periods = buildPeriods(years);
-  const keepLine = (d: LineDef) => !!opts.bank || !d.bank;
+  const sector: StatementSector = opts.bank ? "bank" : (opts.sector ?? "general");
+  const bank = sector === "bank";
+  const keepLine = (d: LineDef) => (bank || !d.bank) && (!d.sectors || d.sectors.includes(sector));
   const out = {} as Record<"annual" | "quarterly", Record<StatementKey, Statement>>;
-  for (const freq of ["annual", "quarterly"] as const) {
+  // Quarterly first: which balance sheet dates each line is filled at decides what the annual columns keep.
+  const filledAt = new Map<string, Set<string>>();
+  let balanceDates: number[] = [];
+  const quarterEnds = periods.quarterly.filter((p) => p.fq !== 4).map((p) => toTime(p.end));
+  for (const freq of ["quarterly", "annual"] as const) {
     const ps = periods[freq];
-    const income = buildStatement(cf, INCOME_LINES.filter(keepLine), ps, years, freq);
+    let income = buildStatement(cf, INCOME_LINES.filter(keepLine), ps, years, freq);
     const balance = buildStatement(cf, BALANCE_LINES.filter(keepLine), ps, years, freq);
+    if (freq === "quarterly") {
+      recordFilled(filledAt, balance, ps);
+      balanceDates = balanceSheetDates(balance, ps);
+    }
+    dropUnstatedBalanceCells(cf, balance, ps, filledAt, balanceDates, quarterEnds);
+    cashLabel(balance);
     const cash = buildStatement(cf, CASHFLOW_LINES.filter(keepLine), ps, years, freq);
-    if (opts.bank) dropBankFeeRevenue(cf, income);
-    fillDerived(income, "grossProfit", "revenue", "costOfRevenue", ["Revenue", "Cost of revenue"]);
+    if (bank) dropBankFeeRevenue(cf, income);
+    if (calculatesGrossProfit(sector)) fillDerived(income, "grossProfit", "revenue", "costOfRevenue", ["Revenue", "Cost of revenue"]);
     dropSegmentOperatingIncome(income, buildStatement(cf, [TOTAL_EXPENSES], ps, years, freq)[0]);
     dropContinuingEpsBesideDiscontinued(cf, income);
     attributableNetIncome(cf, income, ps);
     netIncomeAvailableOnly(cf, cash, "cfNetIncome");
     labelCashNetIncome(cash, income);
+    labelShareClass(income);
     splitNonOperating(income);
     dropUntiedOpex(income);
+    dropSgaParts(income);
     dropEpsAgainstNetLoss(cf, income, ps);
     fixShareScale(income);
+    if (sector === "managedCare") insertAfter(income, "medicalCosts", medicalCostRatio(income));
+    income = layoutIncome(income, sector);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
     dropLoneNotesPayable(balance);
-    if (opts.bank) dropBankOtherShortTermInvestments(balance);
+    if (bank) dropBankOtherShortTermInvestments(balance);
     dropUnprovenCapitalImprovements(cf, cash);
     const cfo = rowOf(cash, "cfo");
     const capex = rowOf(cash, "capex");
@@ -1577,10 +1746,11 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
       unit: "usd",
       bold: true,
       kind: "kpi",
+      calc: "Cash from operations − Capex",
       cells: ps.map((_, i) => combine(cfo?.cells[i] ?? null, capex?.cells[i] ?? null, "sub", ["Cash from operations", "Capex"])),
     };
     cash.push(fcf);
-    if (!opts.bank) {
+    if (showsEbitda(sector)) {
       const oi = rowOf(income, "operatingIncome");
       const dna = rowOf(cash, "dna");
       const pretax = rowOf(income, "pretaxIncome");
@@ -1590,6 +1760,7 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
         label: "EBITDA",
         unit: "usd",
         kind: "kpi",
+        calc: "Operating income + D&A (or income before taxes + interest expense + D&A)",
         cells: ps.map((_, i) => {
           const d = dna?.cells[i] ?? null;
           const fromOi = combine(oi?.cells[i] ?? null, d, "add", ["Operating income", "D&A"]);
@@ -1601,7 +1772,11 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
       };
       if (oi?.cells.some(Boolean)) insertAfter(income, "operatingIncome", ebitdaRow);
       else insertAfter(income, "pretaxIncome", ebitdaRow);
+    }
+    if (!bank) {
       const debt = totalDebtRow(cf, balance, ps);
+      if (freq === "quarterly") recordFilled(filledAt, [debt], ps);
+      dropUnstatedBalanceCells(cf, [debt], ps, filledAt, balanceDates, quarterEnds);
       const cashRow = rowOf(balance, "cash");
       const sti = rowOf(balance, "shortTermInvestments");
       const netDebt: Row = {
@@ -1609,17 +1784,19 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
         label: "Net debt (cash)",
         unit: "usd",
         kind: "kpi",
+        calc: "Total debt − cash (and short-term investments)",
         cells: ps.map((_, i) => {
           const d = debt.cells[i];
           const c = cashRow?.cells[i] ?? null;
           if (!d || !c) return null;
-          const liquid = sti?.cells[i] ? combine(c, sti.cells[i], "add", ["Cash", "Short-term investments"])! : c;
-          return combine(d, liquid, "sub", ["Total debt", sti?.cells[i] ? "(cash + short-term investments)" : "Cash"]);
+          const name = cashRow?.label === "Cash & equivalents" ? "Cash" : "Cash incl. restricted cash";
+          const liquid = sti?.cells[i] ? combine(c, sti.cells[i], "add", [name, "Short-term investments"])! : c;
+          return combine(d, liquid, "sub", ["Total debt", sti?.cells[i] ? `(${name.toLowerCase()} + short-term investments)` : name]);
         }),
       };
       insertAfter(balance, "operatingLeases", debt, netDebt);
     }
-    const kpis = buildKpis(income, balance, cash, ps, freq, opts);
+    const kpis = buildKpis(income, balance, cash, ps, freq, { ...opts, bank });
 
     // Keep periods with a headline figure (revenue, net income, operating cash flow) or at
     // least three income / cash-flow lines; a lone comparative fact from an old 10-K (e.g. a

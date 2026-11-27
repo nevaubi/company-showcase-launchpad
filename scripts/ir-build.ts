@@ -9,7 +9,8 @@ import { loadFacts, rebuildCompany } from "@/lib/ir/rebuild.server";
 import { args, dbGate, log } from "./lib/supa";
 
 export { loadFacts };
-export const buildCompany = (ticker: string, dry = false, fill = true) => rebuildCompany(ticker, { dry, fill });
+export const buildCompany = (ticker: string, dry = false, fill = true) =>
+  rebuildCompany(ticker, { dry, fill });
 
 if (import.meta.main) {
   const want = args.tickers?.split(",");
@@ -27,10 +28,13 @@ if (import.meta.main) {
     const bad = p.checks.filter((x) => !x.ok && !x.partial);
     const ql = s.quality;
     log(
-      `${c.ticker.padEnd(5)} ${String(s.facts).padStart(6)} facts ${String(s.series).padStart(4)} series ${String(s.groups).padStart(3)} groups  Q ${s.checksQ.ok}/${s.checksQ.total}${s.checksQ.partial ? ` (+${s.checksQ.partial} partial)` : ""}  FY ${s.checksFY.ok}/${s.checksFY.total}  ${s.firstPeriod}→${s.lastPeriod}  ${(JSON.stringify(p).length / 1e6).toFixed(2)}MB${ql ? `  main rows ${ql.main.before}→${ql.main.after}/${ql.main.printed} docs ${ql.fill.read}/${ql.fill.docs}` : ""}`,
+      `${c.ticker.padEnd(5)} ${String(s.facts).padStart(6)} facts ${String(s.series).padStart(4)} series ${String(s.groups).padStart(3)} groups  Q ${s.checksQ.ok}/${s.checksQ.total}${s.checksQ.partial ? ` (+${s.checksQ.partial} partial)` : ""}  FY ${s.checksFY.ok}/${s.checksFY.total}  ${s.firstPeriod}→${s.lastPeriod}  ${(JSON.stringify(p).length / 1e6).toFixed(2)}MB${ql ? `  main rows ${ql.main.before}→${ql.main.after}/${ql.main.printed} statements ${ql.main.tables?.shown ?? 0}/${ql.main.tables?.printed ?? 0} docs ${ql.fill.read}/${ql.fill.docs}` : ""}`,
       bad
         .slice(0, 2)
-        .map((b) => `${p.series.find((x) => x.k === b.k)?.label}@${b.e} ${(b.sum / 1e6).toFixed(0)}≠${(b.total / 1e6).toFixed(0)}`)
+        .map(
+          (b) =>
+            `${p.series.find((x) => x.k === b.k)?.label}@${b.e} ${(b.sum / 1e6).toFixed(0)}≠${(b.total / 1e6).toFixed(0)}`,
+        )
         .join("; "),
     );
   }

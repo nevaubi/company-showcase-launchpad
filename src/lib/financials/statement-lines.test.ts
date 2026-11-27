@@ -10,6 +10,10 @@ import nvda from "./fixtures/dps-nvda-facts.json";
 import amzn from "./fixtures/nonop-amzn-facts.json";
 import wmt from "./fixtures/nonop-wmt-facts.json";
 import jpm from "./fixtures/q4-concept-jpm-facts.json";
+import aaplBs from "./fixtures/bs-aapl-facts.json";
+import catBs from "./fixtures/bs-cat-facts.json";
+import cvxBs from "./fixtures/bs-cvx-facts.json";
+import geBs from "./fixtures/bs-ge-facts.json";
 
 const M = 1e6;
 const at = (s: Statement, key: string, label: string) => {
@@ -106,5 +110,56 @@ describe("operating expenses and the non-operating section", () => {
     const label = inc.periods.at(-1)!.label;
     expect(at(inc, "otherIncome", label)?.src?.concept).toBe("us-gaap:NonoperatingIncomeExpense");
     expect(at(inc, "nonOperatingTotal", label)).toBeNull();
+  });
+});
+
+describe("balance sheet lines from the statement itself (finaud-05)", () => {
+  it("leaves out Apple's intangibles where the quarters beside them are empty, and keeps a line of every balance sheet", () => {
+    const st = buildStatements(aaplBs as CompanyFacts);
+    // 10-K FY2026 (0000320193-26-000026): no intangible line on the balance sheet; accounts payable is printed.
+    // Tagged at 27 Sep 2025 and 28 Mar 2026 with the quarters beside them empty. (The 10-Qs of the next two quarters
+    // tag it as well, so those columns stay: the rule cannot tell their notes from a balance sheet line.)
+    expect(at(st.annual.balance, "intangibles", "FY2025")).toBeNull();
+    expect(at(st.quarterly.balance, "intangibles", "Q2 FY26")).toBeNull();
+    expect(at(st.annual.balance, "accountsPayable", "FY2026")?.src?.concept).toBe("us-gaap:AccountsPayableCurrent");
+  });
+
+  it("leaves out Caterpillar's year-end debt note totals, its balance sheet prints debt by business only", () => {
+    const st = buildStatements(catBs as CompanyFacts);
+    expect(at(st.annual.balance, "shortTermDebt", "FY2025")).toBeNull();
+    expect(at(st.annual.balance, "longTermDebt", "FY2025")).toBeNull();
+    expect(at(st.annual.balance, "totalDebt", "FY2025")).toBeNull();
+    expect(at(st.quarterly.balance, "netDebt", "Q4 FY25")).toBeNull();
+  });
+
+  it("names a cash row made of the cash, equivalents and restricted cash total for what it is (GE)", () => {
+    const b = buildStatements(geBs as CompanyFacts).quarterly.balance;
+    expect(row(b, "cash")?.label).toBe("Cash, cash equivalents & restricted cash");
+    expect(row(b, "cashOnly")).toBeUndefined();
+  });
+
+  it("never mixes cash and equivalents with the restricted-cash total in one row (Chevron)", () => {
+    const b = buildStatements(cvxBs as CompanyFacts).quarterly.balance;
+    const cash = row(b, "cash")!;
+    expect(cash.label).toBe("Cash, cash equivalents & restricted cash");
+    expect(new Set(cash.cells.filter(Boolean).map((c) => c!.src?.concept))).toEqual(new Set(["us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"]));
+    expect(at(b, "cashOnly", "Q1 FY24")?.src?.concept).toBe("us-gaap:CashAndCashEquivalentsAtCarryingValue");
+  });
+});
+
+describe("parts of a printed line (finaud-10)", () => {
+  it("leaves out Apple's note breakdown of SG&A where the statement prints SG&A", () => {
+    const facts = structuredClone(aaplBs) as CompanyFacts;
+    // 10-K 0000320193-26-000026: SG&A 29,774; its parts in a note, sales and marketing 21,134 and G&A 8,640.
+    const fy = (val: number) => [{ start: "2025-09-28", end: "2026-09-26", val, accn: "0000320193-26-000026", form: "10-K", filed: "2026-11-03" }];
+    facts.facts["us-gaap"].SellingGeneralAndAdministrativeExpense = { units: { USD: fy(29_774 * M) } };
+    facts.facts["us-gaap"].SellingAndMarketingExpense = { units: { USD: fy(21_134 * M) } };
+    facts.facts["us-gaap"].GeneralAndAdministrativeExpense = { units: { USD: fy(8_640 * M) } };
+    const inc = buildStatements(facts).annual.income;
+    expect(at(inc, "sga", "FY2026")?.v).toBe(29_774 * M);
+    expect(row(inc, "salesMarketing")).toBeUndefined();
+    expect(row(inc, "generalAdmin")).toBeUndefined();
+    delete facts.facts["us-gaap"].SellingGeneralAndAdministrativeExpense;
+    expect(at(buildStatements(facts).annual.income, "salesMarketing", "FY2026")?.v).toBe(21_134 * M);
   });
 });
