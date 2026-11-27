@@ -4,7 +4,7 @@
 // lags by nature and a future period end (federal fiscal year 2027) never ages.
 import { nonTradingHours } from "./trading-days";
 
-export interface DataCadence { key: string; label: string; maxAgeHours: number; /** dates are trading days: allow weekends/holidays */ trading?: boolean }
+export interface DataCadence { key: string; label: string; maxAgeHours: number; /** dates are trading days: allow weekends/holidays */ trading?: boolean; /** the lane (job_state row) that feeds it: while the owner holds that lane the dataset is held, not stale */ heldBy?: string }
 
 const H = 1, D = 24;
 export const DATA_CADENCE: DataCadence[] = [
@@ -39,7 +39,7 @@ export const DATA_CADENCE: DataCadence[] = [
   { key: "filing_redlines", label: "Filing redlines", maxAgeHours: 2 * D },
   { key: "reports", label: "Reports (ready runs)", maxAgeHours: 2 * D },
   { key: "ai_cache", label: "AI cache", maxAgeHours: 1 * D },
-  { key: "vendor_backfill", label: "Vendor backfill", maxAgeHours: 2 * H },
+  { key: "vendor_backfill", label: "Vendor backfill", maxAgeHours: 2 * H, heldBy: "vendor-backfill" },
   { key: "worker_heartbeat", label: "Render worker heartbeat", maxAgeHours: 1 * H },
   { key: "analytics_markets", label: "Markets & returns file", maxAgeHours: 3 * D },
   { key: "analytics_auctions", label: "Treasury auctions file", maxAgeHours: 2 * D },
@@ -48,25 +48,37 @@ export const DATA_CADENCE: DataCadence[] = [
   { key: "analytics_hq", label: "Head-office positions (supply globe)", maxAgeHours: 9 * D },
 ];
 
-export type DataStatus = "fresh" | "stale" | "missing";
-export interface DataFreshness { key: string; label: string; newest: string | null; ageHours: number | null; maxAgeHours: number; status: DataStatus }
+/** `held`: the owner stopped the lane that feeds the dataset (lane-hold.ts). It is neither on time nor a fault. */
+export type DataStatus = "fresh" | "stale" | "missing" | "held";
+export interface DataFreshness { key: string; label: string; newest: string | null; ageHours: number | null; maxAgeHours: number; status: DataStatus; /** the owner's reason, for a held dataset */ note?: string }
 
 /** Limit for one dataset at `now`: trading-day data also gets 24 h for each weekend day or market holiday since its newest record. */
 export function effectiveLimitHours(c: DataCadence, newestMs: number, nowMs: number): number {
   return c.trading ? c.maxAgeHours + nonTradingHours(newestMs, nowMs) : c.maxAgeHours;
 }
 
-export function dataFreshness(rows: { key: string; newest: string | null }[], now = new Date()): DataFreshness[] {
+/** Late and missing datasets first, then held ones, then those on time. */
+const STATUS_ORDER: Record<DataStatus, number> = { stale: 0, missing: 0, held: 1, fresh: 2 };
+
+/**
+ * `holds`: lanes under an owner hold (`ownerHolds` in lane-hold.ts), job → reason. A dataset fed by a
+ * held lane is `held` whatever its age, with the reason as its note.
+ */
+export function dataFreshness(rows: { key: string; newest: string | null }[], now = new Date(), holds: ReadonlyMap<string, string> = new Map()): DataFreshness[] {
   const by = new Map(rows.map((r) => [r.key, r.newest]));
-  return DATA_CADENCE.map((c) => {
+  return DATA_CADENCE.map((c): DataFreshness => {
     const newest = by.get(c.key) ?? null;
     const t = newest ? Date.parse(newest) : NaN;
     const ageHours = Number.isFinite(t) ? (now.getTime() - t) / 3_600_000 : null;
     const limit = ageHours == null ? c.maxAgeHours : effectiveLimitHours(c, t, now.getTime());
-    const status: DataStatus = ageHours == null ? "missing" : ageHours > limit ? "stale" : "fresh";
-    return { key: c.key, label: c.label, newest, ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10, maxAgeHours: Math.round(limit), status };
-  }).sort((a, b) => (a.status === b.status ? 0 : a.status === "fresh" ? 1 : b.status === "fresh" ? -1 : 0));
+    const hold = c.heldBy ? holds.get(c.heldBy) : undefined;
+    const status: DataStatus = hold !== undefined ? "held" : ageHours == null ? "missing" : ageHours > limit ? "stale" : "fresh";
+    return { key: c.key, label: c.label, newest, ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10, maxAgeHours: Math.round(limit), status, ...(hold !== undefined ? { note: hold } : {}) };
+  }).sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
 }
+
+/** Datasets that need attention: late or missing. A held dataset is the owner's choice. */
+export const needsAttention = (f: { status: DataStatus }): boolean => f.status === "stale" || f.status === "missing";
 
 /**
  * Rows in job_state that are bookkeeping, not pauses a person acts on: per-item receipts, provider

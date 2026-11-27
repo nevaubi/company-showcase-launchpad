@@ -9,6 +9,7 @@ import { issuerLink } from '../src/lib/company/issuer-directory';
 import { dbGate, sb, sleep, selectAll } from './lib/supa';
 import contracts from './vendor/contracts.json';
 import { phaseB, phaseC } from './vendor/phases';
+import { isOwnerHold } from '../src/lib/jobs/lane-hold';
 import { staticRegistry } from '../src/lib/alt/collect.server';
 import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, PHASE_C_CREDIT_LIMIT, PHASE_A_FISCAL_CAPABILITIES, pageRecords, primaryDomain, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, HourlyBudget, PACING_REASON, INTERRUPTED_REASON, type Json } from './vendor/core';
 
@@ -73,10 +74,21 @@ async function ledger(detail: Json, ok = true) {
   const r = await sb.from('job_runs').insert({ job: JOB, started_at: detail.started_at ?? now(), finished_at: now(), ok, items: Number(detail.records ?? (detail.file ? 1 : 0)), detail });
   if (r.error) throw new Error(r.error.message);
 }
+/** True while the owner holds this lane (src/lib/jobs/lane-hold.ts): no lease is taken and no call is made. */
+let held = false;
+/** How often a held collector looks again; a waiting one asks for the lease every 30 s. */
+const HELD_POLL_MS = 5 * 60_000;
 async function acquire() {
   await dbGate(JOB);
   const existing = await sb.from('job_state').select('*').eq('job', JOB).maybeSingle();
   if (existing.error) throw existing.error;
+  if (isOwnerHold(existing.data?.paused_reason)) {
+    if (!held) console.log(now(), 'held by owner, not collecting:', existing.data?.paused_reason);
+    held = true;
+    return false;
+  }
+  if (held) console.log(now(), 'owner hold released');
+  held = false;
   const lease = new Date(Date.now() + 180000).toISOString();
   if (!existing.data) {
     const r = await sb.from('job_state').insert({ job: JOB, cursor: 0, updated_at: now(), lease_until: lease, paused_reason: null });
@@ -324,7 +336,7 @@ async function cleanup(companies: (typeof COVERAGE)) {
   await ledger({stage:'withdrawals-cleaned',ratings:ratings.size});
 }
 async function main() {
-  while (!stopped && !await acquire()) await sleep(30000);
+  while (!stopped && !await acquire()) await sleep(held ? HELD_POLL_MS : 30000);
   if (stopped) return;
   leaseTimer = setInterval(()=>{ void heartbeat().catch(()=>{stopped=true;}); },45000);
   const universe = await remote('universe.json');

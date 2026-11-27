@@ -4,7 +4,8 @@
 // in epoch s), so restarts and the loop's hourly call never run it more than about once an hour.
 // `--force` ignores the gate.
 import { log, sb } from "./lib/supa";
-import { dataFreshness, groupPaused, pausedJobs } from "@/lib/jobs/data-freshness";
+import { dataFreshness, groupPaused, needsAttention, pausedJobs } from "@/lib/jobs/data-freshness";
+import { ownerHolds } from "@/lib/jobs/lane-hold";
 import { checkDue, episodeOf, INTEL_REQUEST_KEY, loopRequestKey, planRemedies, readReceipts, remedyKey } from "@/lib/jobs/remediation";
 import { providerKey, routeDecision, routeOf, PROVIDER_IDS, type CircuitRow } from "@/lib/jobs/provider-health";
 
@@ -23,12 +24,14 @@ await sb.from("job_state").upsert({ job: "freshness", cursor: nowS, updated_at: 
 
 const { data, error } = await sb.rpc("data_freshness");
 if (error) throw new Error(error.message);
-const report = dataFreshness((data ?? []) as { key: string; newest: string | null }[]);
 const { data: st, error: stError } = await sb.from("job_state").select("job,cursor,paused_reason,updated_at").or('paused_reason.not.is.null,job.like."remedy:*",job.like."provider:*"').limit(5000);
 if (stError) throw new Error(stError.message);
 const rows = (st ?? []) as { job: string; cursor: number | null; paused_reason: string | null; updated_at: string }[];
+// A lane the owner stopped (lane-hold.ts) leaves its datasets held: reported, never remedied or counted late.
+const report = dataFreshness((data ?? []) as { key: string; newest: string | null }[], new Date(nowMs), ownerHolds(rows));
 const paused = pausedJobs(rows);
-const bad = report.filter((r) => r.status !== "fresh");
+const bad = report.filter(needsAttention);
+const held = report.filter((r) => r.status === "held");
 
 // Remedies. AI steps run only while the reasoning route is healthy.
 const receipts = readReceipts(rows);
@@ -69,6 +72,7 @@ await sb.from("job_runs").insert({
   items: bad.length,
   detail: {
     stale: bad.map(({ key, label, newest, ageHours, maxAgeHours, status }) => ({ key, label, newest, ageHours, maxAgeHours, status })),
+    held: held.map(({ key, label, newest, note }) => ({ key, label, newest, note })),
     paused: groups.map((g) => ({ job: g.job, count: g.count, reason: g.reason.slice(0, 160), since: g.since })),
     remedies: actions.map((a) => ({ key: a.key, apply: a.apply, why: a.why })),
     applied,

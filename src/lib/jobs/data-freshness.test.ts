@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { dataFreshness, groupPaused, pausedJobs } from "./data-freshness";
+import { dataFreshness, groupPaused, needsAttention, pausedJobs } from "./data-freshness";
+import { ownerHolds } from "./lane-hold";
 
 describe("data freshness", () => {
   const now = new Date("2026-11-19T12:00:00Z");
@@ -15,6 +16,29 @@ describe("data freshness", () => {
     expect(fri.status).toBe("fresh");
     expect(fri.maxAgeHours).toBe(78);
     expect(dataFreshness([{ key: "market_bars", newest: "2026-11-18T21:30:00Z" }], mon).find((x) => x.key === "market_bars")!.status).toBe("stale");
+  });
+  it("a dataset whose collector the owner stopped is held, not stale or missing, and says why", () => {
+    const holds = ownerHolds([{ job: "vendor-backfill", paused_reason: "owner: hold. Vendor collection stopped at the owner's request (since 2026-11-27)" }]);
+    const silent = [{ key: "vendor_backfill", newest: "2026-11-18T12:00:00Z" }, { key: "macro", newest: "2026-11-17T12:00:00Z" }];
+    // without the hold: a day of silence against a two-hour limit is stale
+    expect(dataFreshness(silent, now).find((x) => x.key === "vendor_backfill")!.status).toBe("stale");
+    const r = dataFreshness(silent, now, holds);
+    const vendor = r.find((x) => x.key === "vendor_backfill")!;
+    expect(vendor.status).toBe("held");
+    expect(vendor.note).toBe("Vendor collection stopped at the owner's request (since 2026-11-27)");
+    expect(needsAttention(vendor)).toBe(false);
+    // a collector that never stored anything is held too, not "no data"
+    expect(dataFreshness([], now, holds).find((x) => x.key === "vendor_backfill")!.status).toBe("held");
+    // the hold covers only what that lane feeds: another late dataset is still late
+    const macro = r.find((x) => x.key === "macro")!;
+    expect(macro.status).toBe("stale");
+    expect(macro.note).toBeUndefined();
+    expect(needsAttention(macro)).toBe(true);
+    // late first, then held, then on time
+    const order = dataFreshness([...silent, { key: "ir_kpi_facts", newest: "2026-11-19T11:00:00Z" }], now, holds).map((x) => x.status);
+    expect(order.indexOf("held")).toBeGreaterThan(order.lastIndexOf("stale"));
+    expect(order.indexOf("held")).toBeGreaterThan(order.lastIndexOf("missing"));
+    expect(order.indexOf("held")).toBeLessThan(order.indexOf("fresh"));
   });
   it("lists real pauses but not receipts, provider circuits, alert episodes, slice rows or routine reasons", () => {
     const p = pausedJobs([

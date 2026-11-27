@@ -35,6 +35,18 @@ describe("watchdog run", () => {
     expect(second.emailed).toEqual([]);
     expect(mocks.queueEmailRecorded).not.toHaveBeenCalled();
   });
+  it("sends nothing for a collector the owner stopped, and does once the hold is released", async () => {
+    const fresh = { rpc: { data_freshness: () => [{ key: "worker_heartbeat", newest: ago(1) }, { key: "vendor_backfill", newest: ago(26 * 60) }], job_health: () => [] } };
+    mocks.db = fakeSupabase({ job_state: [{ job: "vendor-backfill", cursor: 300, paused_reason: "owner: hold. Vendor collection stopped at the owner's request (since 2026-11-27)", lease_until: "2099-12-31T00:00:00.000Z", updated_at: ago(26 * 60) }] }, fresh);
+    const held = await runWatchdog(1500);
+    expect(held.error).toBeUndefined();
+    expect(held.emailed).not.toContain("stale:vendor_backfill");
+    expect(mocks.db.state("alert:stale:vendor_backfill")).toBeUndefined();
+    // released: the same silence is a fault again
+    mocks.db = fakeSupabase({ job_state: [{ job: "vendor-backfill", cursor: 300, paused_reason: null, lease_until: null, updated_at: ago(26 * 60) }] }, fresh);
+    const released = await runWatchdog(1500);
+    expect(released.emailed).toContain("stale:vendor_backfill");
+  });
   it("holds the episode when the heartbeat is back, and ends it after a clear hour", async () => {
     mocks.db = fakeSupabase(
       { job_state: [{ job: "alert:worker-heartbeat", cursor: 1, paused_reason: "sent: x", updated_at: ago(30) }] },

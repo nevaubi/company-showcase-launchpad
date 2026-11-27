@@ -5,6 +5,7 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dataFreshness } from "@/lib/jobs/data-freshness";
+import { OWNER_HOLD_PREFIX, ownerHolds } from "@/lib/jobs/lane-hold";
 import { readJobHealth, type HealthClient } from "@/lib/jobs/job-health.server";
 import { REMEDY_KEYS } from "@/lib/jobs/remediation";
 import { alerts, dbDownKey, dbReadFailure, digestSubject, planAlerts, DIGEST_KEY, type JobHealthRow, type StateRow } from "@/lib/jobs/watchdog";
@@ -26,7 +27,7 @@ export async function runWatchdog(budgetMs = 1500): Promise<Record<string, unkno
     Promise.all([
       rpc("data_freshness"),
       readJobHealth({ rpc, from: (t: string) => supabaseAdmin.from(t as never) } as HealthClient, { hours: 24, budgetMs: readMs - 100 }),
-      supabaseAdmin.from("job_state").select("job, cursor, paused_reason, updated_at").or('job.like."provider:*",job.like."alert:*",job.like."remedy:*",job.like."registrant-drift:*",job.eq.options-backoff,job.eq.alert-digest').limit(1000),
+      supabaseAdmin.from("job_state").select("job, cursor, paused_reason, updated_at").or(`job.like."provider:*",job.like."alert:*",job.like."remedy:*",job.like."registrant-drift:*",job.eq.options-backoff,job.eq.alert-digest,paused_reason.like."${OWNER_HOLD_PREFIX}*"`).limit(1000),
     ]),
     readMs,
     "watchdog reads",
@@ -38,7 +39,8 @@ export async function runWatchdog(budgetMs = 1500): Promise<Record<string, unkno
   const now = Date.now();
   const rows = (states.data ?? []) as StateRow[];
   const jobs: JobHealthRow[] = health.rows;
-  const active = alerts({ freshness: dataFreshness((fresh.data ?? []) as { key: string; newest: string | null }[], new Date(now)), jobs, states: rows, unread: health.unread }, now, REMEDY_KEYS);
+  // Lanes the owner stopped: the datasets they feed are held, and raise nothing.
+  const active = alerts({ freshness: dataFreshness((fresh.data ?? []) as { key: string; newest: string | null }[], new Date(now), ownerHolds(rows)), jobs, states: rows, unread: health.unread }, now, REMEDY_KEYS);
   const plan = planAlerts(active, rows, now);
 
   // Send first. Episodes are marked sent only when the digest reached the outbox: an email_log row

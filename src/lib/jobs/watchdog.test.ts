@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { alerts, planAlerts, alertKey, DIGEST_KEY, type JobHealthRow, type StateRow, type WatchdogInput } from "./watchdog";
 import { dataFreshness } from "./data-freshness";
+import { ownerHolds } from "./lane-hold";
 import { REMEDY_KEYS } from "./remediation";
 
 const NOW = Date.parse("2026-11-20T15:00:00Z"); // a Friday, market hours
@@ -21,6 +22,14 @@ describe("watchdog rules", () => {
   it("reports a silent managed call importer and native verification independently", () => {
     const jobs = SCHEDULED.filter(j => !j.job.startsWith("call-archive"));
     expect(keys(input({ jobs })).sort()).toEqual(["job-silent:call-archive", "job-silent:call-archive-evidence"]);
+  });
+  it("a collector the owner stopped raises nothing; the same silence without the hold does", () => {
+    const silent = [{ key: "vendor_backfill", newest: iso(26 * 60) }];
+    expect(keys(input({}, silent))).toEqual(["stale:vendor_backfill"]);
+    const holds = ownerHolds([{ job: "vendor-backfill", paused_reason: "owner: hold. Stopped (since 2026-11-19)" }]);
+    const held = dataFreshness([{ key: "worker_heartbeat", newest: iso(2) }, ...silent], new Date(NOW), holds).map((f) => (f.key === "vendor_backfill" || f.key === "worker_heartbeat" ? f : { ...f, status: "fresh" as const }));
+    expect(held.find((f) => f.key === "vendor_backfill")!.status).toBe("held");
+    expect(keys({ freshness: held, jobs: SCHEDULED, states: [] })).toEqual([]);
   });
   it("worker heartbeat older than 20 minutes", () => {
     expect(keys(input({}, [{ key: "worker_heartbeat", newest: iso(25) }]))).toEqual(["worker-heartbeat"]);

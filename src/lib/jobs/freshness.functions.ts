@@ -5,6 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { dataFreshness, groupPaused, pausedJobs } from "@/lib/jobs/data-freshness";
+import { OWNER_HOLD_PREFIX, ownerHolds } from "@/lib/jobs/lane-hold";
 import { coverageOrder, jobStatus, openAlerts, providerStatus, stalledCursors, unfinishedRate, type CoverageRow } from "@/lib/jobs/status";
 import type { StateRow } from "@/lib/jobs/watchdog";
 
@@ -25,7 +26,7 @@ export const getDataFreshness = createServerFn({ method: "GET" })
       supabaseAdmin
         .from("job_state")
         .select("job,cursor,paused_reason,updated_at")
-        .or(`job.like."provider:*",job.like."alert:*",job.in.(${[...cursorJobs, ...cursorJobs.map((j) => `${j}-slice`)].join(",")})`)
+        .or(`job.like."provider:*",job.like."alert:*",job.in.(${[...cursorJobs, ...cursorJobs.map((j) => `${j}-slice`)].join(",")}),paused_reason.like."${OWNER_HOLD_PREFIX}*"`)
         .limit(1000),
     ]);
     if (fresh.error) throw new Error(fresh.error.message);
@@ -34,7 +35,9 @@ export const getDataFreshness = createServerFn({ method: "GET" })
     const jobsRows = health.rows;
     return {
       at: new Date(now).toISOString(),
-      datasets: dataFreshness((fresh.data ?? []) as { key: string; newest: string | null }[], new Date(now)),
+      // A lane the owner stopped shows its datasets as held with the reason, not as stale. Holds are read
+      // by name with the special rows as well, so the 1,000-row cap on the paused read cannot hide one.
+      datasets: dataFreshness((fresh.data ?? []) as { key: string; newest: string | null }[], new Date(now), ownerHolds([...((paused.data ?? []) as { job: string; paused_reason: string | null }[]), ...states])),
       paused: groupPaused(pausedJobs((paused.data ?? []) as { job: string; paused_reason: string | null; updated_at: string }[])),
       providers: special.error ? null : providerStatus(states, now),
       alerts: special.error ? null : openAlerts(states),

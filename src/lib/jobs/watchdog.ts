@@ -179,7 +179,8 @@ export function alerts(input: WatchdogInput, nowMs: number, remedies: RemedyKeys
 
   const receipts = new Map(input.states.filter((r) => r.job.startsWith("remedy:")).map((r) => [r.job.slice("remedy:".length), r]));
   for (const f of input.freshness) {
-    if (f.status === "fresh" || f.key === "worker_heartbeat") continue;
+    // On time, or silent because the owner stopped its lane (lane-hold.ts): neither is a fault.
+    if (f.status === "fresh" || f.status === "held" || f.key === "worker_heartbeat") continue;
     const has = remedies.has(f.key);
     const receipt = receipts.get(f.key);
     const triedAt = receipt?.cursor ? receipt.cursor * 1000 : null;

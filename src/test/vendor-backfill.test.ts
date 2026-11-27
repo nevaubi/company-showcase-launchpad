@@ -61,6 +61,19 @@ describe('owner vendor collection rules', () => {
     expect(phaseACanCall(100, 60, PHASE_C_CREDIT_LIMIT)).toBe(false);
     expect(phaseACanCall(100, 50, PHASE_C_CREDIT_LIMIT)).toBe(true);
   });
+  it('an owner hold is checked before the lease is touched, and a held collector looks again every five minutes', () => {
+    const src = readFileSync('scripts/vendor-backfill.ts','utf8');
+    const acquire = src.slice(src.indexOf('async function acquire()'), src.indexOf('async function state('));
+    const hold = acquire.indexOf('isOwnerHold(existing.data?.paused_reason)');
+    expect(hold).toBeGreaterThan(-1);
+    // the hold returns before any write to job_state: no lease, no ledger row, no provider call
+    expect(hold).toBeLessThan(acquire.indexOf(".insert("));
+    expect(hold).toBeLessThan(acquire.indexOf(".update("));
+    expect(hold).toBeLessThan(acquire.indexOf("ledger("));
+    expect(acquire.slice(hold, acquire.indexOf(".insert(")).includes('return false')).toBe(true);
+    expect(src).toMatch(/const HELD_POLL_MS = 5 \* 60_000;/);
+    expect(src).toContain('await sleep(held ? HELD_POLL_MS : 30000)');
+  });
   it('hourly budget: 12000 by default, env override', () => {
     expect(MAX_CREDITS_PER_HOUR).toBe(12000);
     expect(hourlyCreditLimit({})).toBe(12000);

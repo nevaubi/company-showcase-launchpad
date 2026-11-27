@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { getDataFreshness } from "@/lib/jobs/freshness.functions";
-import type { DataStatus } from "@/lib/jobs/data-freshness";
+import { needsAttention, type DataStatus } from "@/lib/jobs/data-freshness";
 import { DATASET_LABEL, type ProviderStatus } from "@/lib/jobs/status";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +29,8 @@ export const freshnessQuery = {
 
 export type FreshnessData = Awaited<ReturnType<typeof getDataFreshness>>;
 
-const LABEL: Record<DataStatus, string> = { fresh: "On time", stale: "Stale", missing: "No data" };
-const TONE: Record<DataStatus, string> = { fresh: "text-positive", stale: "text-negative", missing: "text-muted-foreground" };
+const LABEL: Record<DataStatus, string> = { fresh: "On time", stale: "Stale", missing: "No data", held: "Stopped by owner" };
+const TONE: Record<DataStatus, string> = { fresh: "text-positive", stale: "text-negative", missing: "text-muted-foreground", held: "text-muted-foreground" };
 const PROVIDER_LABEL: Record<ProviderStatus["state"], string> = { closed: "Healthy", probe: "Probe due", open: "Closed" };
 const PROVIDER_TONE: Record<ProviderStatus["state"], string> = { closed: "text-positive", probe: "text-warning", open: "text-negative" };
 const CLASS_LABEL: Record<string, string> = { quota: "out of credit", config: "configuration", rate: "rate limited", transient: "unreachable", allowance: "free allowance spent" };
@@ -115,13 +115,14 @@ export function FreshnessView({ data, loading, error }: { data?: FreshnessData; 
   const jobs = data?.jobs ?? null;
   const stalled = data?.stalled ?? null;
   const coverage = data?.coverage ?? null;
-  const bad = rows.filter((r) => r.status !== "fresh").length;
+  const bad = rows.filter(needsAttention).length;
+  const held = rows.filter((r) => r.status === "held").length;
   const closed = providers?.filter((p) => p.state !== "closed") ?? [];
   const problems = jobs?.filter((j) => j.problem) ?? [];
   const pausedCompanies = paused.reduce((n, g) => n + g.count, 0);
   const summary = loading
     ? "Checking…"
-    : [bad ? `${bad} dataset${bad > 1 ? "s" : ""} late` : "Every dataset on time", closed.length ? `${closed.length} provider${closed.length > 1 ? "s" : ""} not healthy` : null, alerts?.length ? `${alerts.length} alert${alerts.length > 1 ? "s" : ""} open` : null]
+    : [bad ? `${bad} dataset${bad > 1 ? "s" : ""} late` : held ? "Every running dataset on time" : "Every dataset on time", held ? `${held} stopped by owner` : null, closed.length ? `${closed.length} provider${closed.length > 1 ? "s" : ""} not healthy` : null, alerts?.length ? `${alerts.length} alert${alerts.length > 1 ? "s" : ""} open` : null]
         .filter(Boolean)
         .join(". ") + ".";
   const top1000 = coverage?.length ? coverage.filter((c) => c.top1000 >= 950).length : null;
@@ -280,7 +281,7 @@ export function FreshnessView({ data, loading, error }: { data?: FreshnessData; 
       </div>
 
       <div data-section="Datasets">
-        <Panel title="Datasets" subtitle="Stale means the newest stored row is older than its limit; trading-day data gets 24 hours for each weekend day or market holiday." bodyClassName="p-0" collapse={false}>
+        <Panel title="Datasets" subtitle="Stale means the newest stored row is older than its limit; trading-day data gets 24 hours for each weekend day or market holiday. Stopped by owner means its collector was stopped on purpose and nothing is expected." bodyClassName="p-0" collapse={false}>
           <Table
             head={
               <>
@@ -294,7 +295,10 @@ export function FreshnessView({ data, loading, error }: { data?: FreshnessData; 
           >
             {rows.map((r) => (
               <tr key={r.key}>
-                <Td className="font-medium sm:truncate">{r.label}</Td>
+                <Td className="font-medium">
+                  <div className="sm:truncate">{r.label}</div>
+                  {r.note ? <div className="mt-0.5 text-xs font-normal whitespace-normal text-muted-foreground">{r.note}</div> : null}
+                </Td>
                 <Td>
                   <Badge variant="outline" className={cn("whitespace-nowrap", TONE[r.status])}>{LABEL[r.status]}</Badge>
                 </Td>
