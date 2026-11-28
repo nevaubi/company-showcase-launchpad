@@ -19,7 +19,7 @@ import { capitalWords, sentenceCase, type TableCaption } from "@/lib/ir/table-ca
 import { shapeRows } from "@/lib/ir/statement-tree";
 import { basisOf } from "@/lib/ir/kpis";
 import { FILTER_OF, sectionKind, sectorOf, type SectionKind } from "@/lib/ir/sector-order";
-import { printedChecks, type CheckOptions, type CheckRow } from "@/lib/ir/statement-checks";
+import { OFF_NEEDS, printedChecks, type CheckOptions, type CheckRow } from "@/lib/ir/statement-checks";
 
 export type StatementRow =
   /** `k` is the line shown; `ks` every line printed in this row (the same printed cell, or the same name under the
@@ -1512,6 +1512,43 @@ export function sectionChecks(
       ? stored
       : new Map(stored.map((c) => [`${c.k}|${c.kind === "fy" ? "y" : "q"}|${c.e}`, c]));
   const out = new Map<string, PayloadCheck>();
+  /** Period ends at which a line only earlier documents print carries a figure comparable with `parent`. */
+  const dropped = new Map<string, Set<string>>();
+  const droppedLineAt = (parent: PayloadSeries, freq: "q" | "y") => {
+    const id = `${parent.unit}|${parent.pit ? 1 : 0}|${freq}`;
+    let ends = dropped.get(id);
+    if (!ends) {
+      ends = new Set<string>();
+      for (const r of sec.rows) {
+        if (r.kind !== "line" || !r.old) continue;
+        const lead = byKey.get(r.k);
+        if (!lead || lead.unit !== parent.unit || !!lead.pit !== !!parent.pit) continue;
+        for (const e of Object.keys(rowCells(r.ks, byKey, freq, r.at).cells)) ends.add(e);
+      }
+      dropped.set(id, ends);
+    }
+    return ends;
+  };
+  /** Periods (quarters and years) in which every part is printed and the parts add up to the total. */
+  const tied = new Map<LineRow, number>();
+  const tiesOf = (t: LineRow, parts: LineRow[], sub: Set<string>) => {
+    let n = tied.get(t);
+    if (n != null) return n;
+    n = 0;
+    const unit = byKey.get(t.k)?.unit;
+    const signs = parts.map((r) => (r.ks.some((k) => sub.has(byKey.get(k)?.label ?? "")) ? -1 : 1));
+    for (const freq of ["q", "y"] as const) {
+      const tc = rowCells(t.ks, byKey, freq, t.at).cells;
+      const pc = parts.map((r) => rowCells(r.ks, byKey, freq, r.at).cells);
+      for (const [e, cell] of Object.entries(tc)) {
+        if (pc.some((x) => !x[e] || x[e].m !== cell.m)) continue;
+        const sum = pc.reduce((a, x, j) => a + signs[j] * x[e].v, 0);
+        if (Math.abs(sum - cell.v) <= Math.max(Math.abs(cell.v) * 0.005, unit === "usd" ? 1.5e6 : 1.5)) n++;
+      }
+    }
+    tied.set(t, n);
+    return n;
+  };
   sec.rows.forEach((t, i) => {
     if (t.kind !== "line" || !t.total) return;
     // The rows of its block stored under it, and the siblings brought to their level; other rows the block
@@ -1544,7 +1581,16 @@ export function sectionChecks(
         const sum = parts.reduce((n, r, j) =>
           n + (r.ks.some((k) => sub.has(byKey.get(k)?.label ?? "")) ? -1 : 1) * partsAt[j].cell.v, 0);
         const tol = Math.max(Math.abs(cell.v) * 0.005, parent.unit === "usd" ? 1.5e6 : 1.5);
-        out.set(key, { ...x, total: cell.v, sum, ok: Math.abs(sum - cell.v) <= tol, n: parts.length });
+        const ok = Math.abs(sum - cell.v) <= tol;
+        // Not adding up says something only where the parts are the ones printed then: not in a period in
+        // which a line the table has since dropped carries a figure (Honeywell's segment profit of 2025
+        // still held Aerospace), and not before the date the page marks such periods from. And only of
+        // rows that are this total's parts at all: parts that add up to it in fewer than `OFF_NEEDS` periods
+        // are the reader's grouping, not the table's (NVIDIA's operating cash flow stored over nine of the
+        // lines above it), and say nothing against the figure.
+        if (!ok && ((opts.offSince && e < opts.offSince) || droppedLineAt(parent, freq).has(e))) continue;
+        if (!ok && tiesOf(t, parts, sub) < OFF_NEEDS) continue;
+        out.set(key, { ...x, total: cell.v, sum, ok, n: parts.length });
       }
     }
   });

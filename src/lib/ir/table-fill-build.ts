@@ -264,9 +264,10 @@ export async function fillCompany(
     const row = rows.get(id);
     const tableFacts = own.filter((f) => typeof (f.locator as { t?: unknown }).t === "number");
     // A document no reader took a table figure from is read by its statement titles and column heads alone,
-    // which cannot tell whose statements an exhibit prints: an exhibit of an 8-K that reported no results (no
-    // Item 2.02) is left unread (an acquired company's statements carry the same titles as this company's).
-    if (tableFacts.length < 2 && resultsExhibit(row?.title) === false) {
+    // which cannot tell whose statements an exhibit prints: a further exhibit of an 8-K that reported no
+    // results (no Item 2.02) is left unread (an acquired company's statements carry the same titles as this
+    // company's). The release itself is the company's own announcement and is read.
+    if (tableFacts.length < 2 && row?.kind !== "press-release" && resultsExhibit(row?.title) === false) {
       notResults++;
       continue;
     }

@@ -248,6 +248,14 @@ describe("exhibits that are not this company's own results", () => {
     expect(plan.older.sort()).toEqual(["q1", "release"]);
     expect(plan.load).not.toContain("proforma");
   });
+  it("keeps a release filed under another item: Progressive reports each month's results under Item 7.01", () => {
+    const rows = [
+      doc("new", "2026-10-15", "press-release", { title: "8-K 2026-10-15 pgr-20261015xex99.htm (Items 2.02,9.01)" }),
+      doc("may-21", "2021-06-16", "press-release", { title: "8-K 2021-06-16 pgr-20210616xex99.htm (Items 7.01,9.01)" }),
+      doc("q2-21", "2021-07-14", "press-release", { title: "8-K 2021-07-14 pgr-20210714xex99.htm (Items 2.02,9.01)" }),
+    ];
+    expect(planDocuments(rows).older.sort()).toEqual(["may-21", "q2-21"]);
+  });
 });
 
 describe("a flow that repeats in the quarter and the year to date", () => {

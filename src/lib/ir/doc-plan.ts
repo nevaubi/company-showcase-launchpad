@@ -250,10 +250,11 @@ export function planDocuments(rows: readonly PlanDocRow[]): DocPlan {
       }
       if (at < full) {
         // A placed quarter is not exact enough to say which of the two that quarter's primary document is.
-        // An exhibit of an 8-K that reported no results (no Item 2.02: an acquisition, a financing, an investor
-        // day) is never a quarter's primary statement document.
+        // A further exhibit of an 8-K that reported no results (no Item 2.02: an acquisition, a financing, an
+        // investor day) is never a quarter's primary statement document. The release itself stays: Progressive
+        // reports every month's results under Item 7.01.
         const primary =
-          resultsExhibit(best.title) !== false &&
+          (best.kind === "press-release" || resultsExhibit(best.title) !== false) &&
           (f.placed
             ? best.kind === "supplement" || best.kind === "press-release"
             : supQuarters.has(quarterOf(f.date))
