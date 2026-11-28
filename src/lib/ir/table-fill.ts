@@ -150,6 +150,12 @@ const PER_SHARE =
 const SHARES = /\bshares\b|\bshare count\b/i;
 const RATIO =
   /\bratios?\b|\brate\b|\breturn on\b|\bmargin\b|\byields?\b|\bpercent(age)?\b|%|\bcoverage\b|\befficiency\b|\bpayout\b/i;
+/**
+ * A statement line that names a rate and is an amount: "Effect of exchange rate changes on cash and cash
+ * equivalents" (Entegris' statement of cash flows lost the line, read as a rate with no percent sign),
+ * "Interest rate swap settlements".
+ */
+const AMOUNT_OF_RATE = /\beffects? of\b.*\b(exchange|currency)\b.*\brates?\b|\b(exchange|interest)\s+rate\s+(changes?|swaps?|locks?|caps?|contracts?|hedges?|derivatives?|fluctuations?)\b/i;
 const BPS = /\bbps\b|\bbasis points?\b/i;
 const HEADCOUNT = /\bheadcount\b|\bemployees\b|\bbranches\b|\batms?\b|\bnumber of\b/i;
 const SCALE_WORD = /\b(?:in|amounts in|dollars in|\$ in)\s+(thousands|millions|billions)\b/i;
@@ -1189,6 +1195,10 @@ export function fillDocument(input: FillInput): DocFill {
       printedTableName(cap?.title || statements.find((x) => x.t === t)?.title || "") ??
       mode(xs.map((x) => x.f.breakdown).filter((b): b is string => !!b)) ??
       null;
+    /** The table is a statement of flows: its lines are flows unless named as a point in time. */
+    const flowStatement = bd === "Income statement" || bd === "Cash flow statement" || bd === "Comprehensive income";
+    /** The table is a financial statement: a line about a rate is an amount ("Effect of exchange rate changes on cash"). */
+    const statementTable = flowStatement || bd === "Balance sheet";
     const rowFacts = new Map<number, IrFact[]>();
     for (const x of xs) rowFacts.set(x.r, [...(rowFacts.get(x.r) ?? []), x.f]);
     const factRows = [...rowFacts.keys()].sort((a, b) => a - b);
@@ -1472,7 +1482,7 @@ export function fillDocument(input: FillInput): DocFill {
         // Change columns in basis points: the row's figures are percentages.
         unit = "pct";
         scale = 1;
-      } else if (RATIO.test(label) && pctLike) {
+      } else if (RATIO.test(label) && pctLike && !(statementTable && AMOUNT_OF_RATE.test(label))) {
         // A ratio row whose change columns print basis points, or one printing decimals in a table of whole
         // money figures, is a percentage.
         const bpsChange = row.cells.some((c) => /^bps$/i.test(c.text.trim()));
@@ -1588,7 +1598,6 @@ export function fillDocument(input: FillInput): DocFill {
           .filter((b) => a !== b && a.period_end === b.period_end && a.months === 3 && b.months > 3)
           .map((b) => [a, b] as const),
       );
-      const flowStatement = bd === "Income statement" || bd === "Cash flow statement" || bd === "Comprehensive income";
       const repeats =
         pairs.some(([a, b]) => a.value === b.value && a.value !== 0) &&
         pairs.every(([a, b]) => a.value === b.value) &&

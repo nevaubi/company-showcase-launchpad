@@ -26,6 +26,9 @@
 // result; it is never marked as off. Neither is a period in which the table printed lines it no longer prints
 // (`old` rows with a figure there: Apple's non-current liabilities held deferred revenue until 2018, so the two
 // lines printed now do not add up to that year's total and say nothing against it).
+// - a result of results: where no run of lines above explains a line, the results already proved above it
+//   (at most four, nearest first) with the plain lines printed between the last of them and the line (net
+//   change in cash = operating + investing + financing cash flow + effect of exchange rates).
 // Only money and counts are added up: ratios, rates and per-share figures of neighbouring lines move together
 // and "add up" by chance (JPM's capital ratios did).
 // Nothing is corrected and no figure is derived.
@@ -44,6 +47,8 @@ const ADDITIVE = new Set(["usd", "count"]);
 /** Lines above a result tried with signs (2^n sign sets), and as a plain sum. */
 export const SIGNED_RUN = 6;
 export const SUM_RUN = 15;
+/** Results printed above a line that are tried as its terms. */
+export const RESULTS = 4;
 /** Lines above a result's terms looked at to explain a period that does not tie. */
 export const BESIDE = 6;
 
@@ -182,19 +187,22 @@ const tableRow = (c: PayloadCell): { d: number; t: number; r: number } | null =>
     : null;
 
 /**
- * The since-dropped lines one document printed inside the block for a period: the result and every term of the
- * period sit in one table of one document, the result below its terms, and the line's figure for the period sits
- * in that table on a row between the first term and the result. Positions decide, never a search over figures.
+ * The since-dropped lines one document printed inside the block for a period: the result and most of the terms
+ * of the period sit in one table of one document, the result below them, and the line's figure for the period
+ * sits in that table on a row between the first of those terms and the result. Positions decide, never a search
+ * over figures.
  */
 function printedBetween(dropped: CheckRow[], p: Period): { row: CheckRow; cell: PayloadCell }[] {
   const at = tableRow(p.cell);
   if (!at) return [];
+  // Most of the terms sit in the result's table above it (a term whose figure another document printed again
+  // later, a balance repeated in a cash flow statement, is cited there and still counts by its figure).
   const rows: number[] = [];
   for (const c of p.parts) {
     const x = c ? tableRow(c) : null;
-    if (!x || x.d !== at.d || x.t !== at.t || x.r >= at.r) return [];
-    rows.push(x.r);
+    if (x && x.d === at.d && x.t === at.t && x.r < at.r) rows.push(x.r);
   }
+  if (rows.length < 2 || rows.length * 2 < p.parts.length) return [];
   const first = Math.min(...rows);
   const out: { row: CheckRow; cell: PayloadCell }[] = [];
   for (const row of dropped) {
@@ -261,7 +269,7 @@ function emit(
     const ok = Math.abs(sum - p.cell.v) <= tolOf(result, terms, p);
     // A period in which the table printed lines it no longer prints ties when the document that prints the
     // result and every term for it also printed such lines between them, and all of them add up to it.
-    if (!ok && p.complete && changed.has(`${p.f}|${p.e}`) && solved.signs.every((x) => x === 1)) {
+    if (!ok && changed.has(`${p.f}|${p.e}`) && solved.signs.every((x) => x === 1)) {
       const then = printedBetween(dropped, p);
       if (then.length) {
         const more = then.reduce((n, x) => n + x.cell.v, 0);
@@ -376,6 +384,31 @@ export function printedChecks(
       const solved = either(r, run, k <= SIGNED_RUN, false, changed);
       if (!solved) continue;
       emit(out, r, run, solved, "formula", taken, changed, opts, above.slice(0, above.length - k), droppedFor(r));
+      settled.add(r.i);
+      return;
+    }
+  });
+
+  // Results of results: a line that no run of lines above it explains is the sum of the results printed above
+  // it, with the plain lines printed between the last of them and itself (the change in cash is operating,
+  // investing and financing cash flow and the effect of exchange rates). At most `RESULTS` results are taken,
+  // the nearest first; the same evidence is asked as of any formula.
+  top.forEach((r, j) => {
+    if (settled.has(r.i) || !ADDITIVE.has(r.unit)) return;
+    const near: CheckRow[] = [];
+    let x = j - 1;
+    for (; x >= 0 && !settled.has(top[x].i) && near.length < 3; x--) if (comparable(top[x], r)) near.unshift(top[x]);
+    if (x < 0 || !settled.has(top[x].i)) return;
+    const results: CheckRow[] = [];
+    for (; x >= 0 && results.length < RESULTS; x--) if (settled.has(top[x].i) && comparable(top[x], r)) results.unshift(top[x]);
+    const changed = changedFor(r);
+    for (let k = 2; k <= results.length; k++) {
+      const terms = [...results.slice(results.length - k), ...near];
+      if (terms.length > SIGNED_RUN) break;
+      const solved = either(r, terms, true, false, changed);
+      if (!solved) continue;
+      emit(out, r, terms, solved, "formula", taken, changed, opts, [], droppedFor(r));
+      settled.add(r.i);
       return;
     }
   });

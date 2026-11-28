@@ -275,8 +275,18 @@ ${r("Net cash used in investing activities", "(49.3)", "(59.7)", "(123.9)", "(23
 ${r("Proceeds from debt", "—", "25.0", "65.0", "532.0")}
 ${r("Payments of debt", "(200.0)", "(175.0)", "(515.0)", "(682.0)")}
 ${r("Net cash used in financing activities", "(216.7)", "(163.9)", "(486.8)", "(204.1)")}
+${r("Effect of exchange rate changes on cash and cash equivalents", "2.1", "(2.9)", "0.8", "5.8")}
+${r("Increase (decrease) in cash and cash equivalents", "2.9", "23.0", "(3.9)", "70.6")}
 ${r("Cash and cash equivalents at end of period", "$356.5", "$399.8", "$356.5", "$399.8")}
 </table></body></html>`;
+  it("reads the effect of exchange rates as an amount of the statement, not as a rate", async () => {
+    const run = await fillCompany([], async () => html, {
+      docs: [{ id: "entg-3q26", filed: "2026-10-29", kind: "press-release", title: "8-K 2026-10-29 entgq32026ex991.htm (Items 2.02,9.01)" }],
+      reports: ["2026-09-26", "2026-06-27", "2026-03-28", "2025-12-31"],
+    });
+    const fx = run.facts.filter((f) => /^effect of exchange rate/i.test(f.label)).map((f) => `${f.period_end}/${f.months}=${f.value} ${f.unit}`).sort();
+    expect(fx).toEqual(["2025-09-27/3=-2900000 usd", "2025-09-27/9=5800000 usd", "2026-09-26/3=2100000 usd", "2026-09-26/9=800000 usd"]);
+  });
   it("stays a flow; only a line named as a point in time is a balance", async () => {
     const run = await fillCompany([], async () => html, {
       docs: [{ id: "entg-3q26", filed: "2026-10-29", kind: "press-release", title: "8-K 2026-10-29 entgq32026ex991.htm (Items 2.02,9.01)" }],

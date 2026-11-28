@@ -208,3 +208,78 @@ describe("a build's \"selected lines\" verdict", () => {
     expect(sectionChecks(sec, byKey, stored).get("t|q|2025-12-27")?.partial).toBe(true);
   });
 });
+
+describe("a period in which the table printed a line it has since dropped", () => {
+  // Entegris' current assets at June 28, 2025 (millions), with each figure's document, table and row: the
+  // release of July 2025 (document 5, table 4) printed "Assets held-for-sale" on row 8; cash is cited from the
+  // cash flow statement of a later release.
+  const at = (v: number, d: number, t: number, r: number): PayloadCell => ({ v: Math.round(v * 1e6), m: 0, d, l: [t, r, 1], x: v.toFixed(1) });
+  const later = ["2025-12-31", "2026-03-28", "2026-06-27", "2026-09-26"];
+  const row = (i: number, label: string, june: PayloadCell, rest: number[], o: Partial<CheckRow> = {}): CheckRow => {
+    const cells: Record<string, PayloadCell> = { "2025-06-28": june };
+    rest.forEach((v, n) => (cells[later[n]] = at(v, 0, 4, 4 + i)));
+    return { i, label, unit: "usd", pit: true, total: false, q: { cells, from: Object.fromEntries(Object.keys(cells).map((e) => [e, `k${i}`])) }, y: { cells: {}, from: {} }, step: () => 1e5, ...o };
+  };
+  const rows = () => [
+    row(0, "Cash and cash equivalents", at(376.8, 1, 5, 43), [360.4, 442.7, 353.6, 356.5], { up: 5 }),
+    row(1, "Trade accounts and notes receivable, net", at(494.1, 5, 4, 5), [458.7, 529.5, 559.1, 625.2], { up: 5 }),
+    row(2, "Inventories, net", at(694.6, 5, 4, 6), [643.2, 644.4, 703.9, 769.0], { up: 5 }),
+    row(3, "Deferred tax charges and refundable income taxes", at(42.2, 5, 4, 7), [35.1, 29.0, 30.1, 35.1], { up: 5 }),
+    row(4, "Other current assets", at(93.0, 5, 4, 9), [140.8, 140.4, 138.2, 134.9], { up: 5 }),
+    row(5, "Total current assets", at(1705.5, 5, 4, 10), [1638.2, 1786.0, 1784.9, 1920.7], { total: true }),
+    { ...row(6, "Assets held-for-sale", at(4.8, 5, 4, 8), []), old: true },
+  ];
+  it("ties with that line when the same document printed it inside the block, and names it", () => {
+    const got = printedChecks(rows(), () => false).get("k5|q|2025-06-28");
+    expect(got).toMatchObject({ ok: true, n: 6, total: 1705.5e6, with: ["Assets held-for-sale"] });
+  });
+  it("is left unmarked when the line was printed outside the block, or in another document", () => {
+    const below = rows();
+    below[6].q.cells["2025-06-28"].l = [4, 12, 1];
+    expect(printedChecks(below, () => false).has("k5|q|2025-06-28")).toBe(false);
+    const elsewhere = rows();
+    elsewhere[6].q.cells["2025-06-28"].d = 7;
+    expect(printedChecks(elsewhere, () => false).has("k5|q|2025-06-28")).toBe(false);
+  });
+});
+
+describe("a result of the results printed above it", () => {
+  // Entegris' statement of cash flows, quarters from June 2025 to September 2026 (millions), as printed in its
+  // releases: the three activity totals, the effect of exchange rates, and the change in cash.
+  const ENDS6 = ["2025-06-28", "2025-09-27", "2025-12-31", "2026-03-28", "2026-06-27", "2026-09-26"];
+  const flow = (i: number, label: string, vals: number[]): CheckRow => {
+    const cells = Object.fromEntries(vals.map((v, n) => [ENDS6[n], { v: Math.round(v * 1e6), m: 3, x: v.toFixed(1) } as PayloadCell]));
+    return { i, label, unit: "usd", pit: false, total: false, q: { cells, from: Object.fromEntries(ENDS6.map((e) => [e, `k${i}`])) }, y: { cells: {}, from: {} }, step: () => 1e5 };
+  };
+  // Operating activities reduced to net income and the sum of its adjustments so that each total has terms.
+  const op = [113.5, 249.5, 192.0, 183.0, 156.2, 266.8];
+  const ni = [52.8, 70.5, 49.4, 92.0, 93.6, 157.8];
+  const inv = [-66.6, -59.7, -66.3, -38.4, -36.2, -49.3];
+  const fin = [-17.8, -163.9, -162.8, -61.6, -208.5, -216.7];
+  const rows = () => [
+    flow(0, "Net income", ni),
+    flow(1, "Adjustments and changes in operating assets and liabilities", op.map((v, n) => Math.round((v - ni[n]) * 10) / 10)),
+    flow(2, "Net cash provided by operating activities", op),
+    flow(3, "Acquisition of property, plant and equipment and other", inv.map((v) => v + 1)),
+    flow(4, "Other investing", inv.map(() => -1)),
+    flow(5, "Net cash used in investing activities", inv),
+    flow(6, "Payments of debt, dividends and other", fin.map((v) => v - 2)),
+    flow(7, "Issuance of common stock", fin.map(() => 2)),
+    flow(8, "Net cash used in financing activities", fin),
+    flow(9, "Effect of exchange rate changes on cash and cash equivalents", [6.8, -2.9, -2.3, -0.7, -0.6, 2.1]),
+    flow(10, "Increase (decrease) in cash and cash equivalents", [35.9, 23.0, -39.4, 82.3, -89.1, 2.9]),
+  ];
+  it("ties the change in cash to operating, investing and financing cash flow and the effect of exchange rates", () => {
+    const m = printedChecks(rows(), () => false);
+    for (const e of ENDS6) expect(m.get(`k10|q|${e}`)?.ok, e).toBe(true);
+    expect(m.get("k10|q|2026-09-26")?.f).toBe(
+      "Increase (decrease) in cash and cash equivalents = Net cash provided by operating activities + Net cash used in investing activities + Net cash used in financing activities + Effect of exchange rate changes on cash and cash equivalents",
+    );
+  });
+  it("states nothing when the results above do not give the line", () => {
+    const off = rows();
+    for (const e of ENDS6) off[10].q.cells[e].v += 7e6 * (ENDS6.indexOf(e) + 1);
+    const m = printedChecks(off, () => false);
+    expect(ENDS6.some((e) => m.has(`k10|q|${e}`))).toBe(false);
+  });
+});

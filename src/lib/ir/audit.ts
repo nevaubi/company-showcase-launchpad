@@ -145,6 +145,9 @@ export function auditPayload(p: IrPayload, opts: { sector?: string | null; indus
     }
     // Totals by period.
     const checks = sectionChecks(sec, byKey, stored, how);
+    // Bold print marks a result only in a table that does not print every row in bold (Microsoft's does).
+    const now = sec.rows.filter((r): r is Line => r.kind === "line" && !r.old);
+    const boldTells = now.filter((r) => r.bold).length <= now.length * 0.6;
     sec.rows.forEach((t) => {
       if (t.kind !== "line" || t.old) return;
       for (const freq of ["q", "y"] as const) {
@@ -153,7 +156,7 @@ export function auditPayload(p: IrPayload, opts: { sector?: string | null; indus
           const found = checks.get(`${tc.from[e]}|${freq}|${e}`);
           const c = found && (t.total || found.by) ? found : undefined;
           // A line that is neither a total nor printed in bold is not expected to carry a check.
-          if (!c && !t.total && !t.bold) continue;
+          if (!c && !t.total && !(t.bold && boldTells)) continue;
           const what = !c ? "unchecked" : c.partial ? "partial" : c.ok ? "ok" : "off";
           ties[what]++;
           if (freq === "q" && newest8.has(e)) ties8[what]++;
