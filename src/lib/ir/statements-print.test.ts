@@ -5,22 +5,9 @@ import { describe, expect, it } from "vitest";
 import jpm from "@/lib/ir/fixtures/statements/jpm-3q26.json";
 import hon from "@/lib/ir/fixtures/statements/hon.json";
 import { applyLabelMap, rawKey, type IrFact, type LabelMapEntry } from "@/lib/ir/kpis";
-import { buildPayload, type IrPayload, type PayloadSeries } from "@/lib/ir/payload";
+import { buildPayload, type IrPayload, type PayloadCell, type PayloadSeries } from "@/lib/ir/payload";
 import type { TableCaption } from "@/lib/ir/table-captions";
-import {
-  assembleStatements,
-  lineLabel,
-  printedDecimals,
-  printedFigure,
-  printedSuffix,
-  rowCells,
-  rowLabel,
-  sameRows,
-  tableTitle,
-  withCaptions,
-  type Statement,
-  type StatementRow,
-} from "@/lib/ir/statements";
+import { assembleStatements, lineLabel, printedDecimals, printedFigure, printedSuffix, rowCells, rowLabel, sameRows, tableTitle, withCaptions, shownScale, type Statement, type StatementRow } from "@/lib/ir/statements";
 
 interface Fixture {
   ticker: string;
@@ -270,5 +257,105 @@ describe("table titles", () => {
     expect(tableTitle("Credit-related information, continued")).toBe(true);
     expect(tableTitle("Positive operating leverage of 5.3% yoy")).toBe(false);
     expect(tableTitle("• Wealth fees increased $16 million, primarily from growth in AUM.")).toBe(false);
+  });
+});
+
+describe("the scale a row is shown at", () => {
+  // Entegris' net sales, as printed: millions with one decimal in 2026, thousands in 2015 and 2016.
+  const s: PayloadSeries = {
+    k: "s",
+    cat: "statement",
+    met: "revenue",
+    label: "Net sales",
+    parent: null,
+    total: false,
+    unit: "usd",
+    q: {},
+    y: {},
+  };
+  const cell = (v: number, x: string): PayloadCell => ({ v, x, d: 0, l: [2, 3, 1] });
+  const history: Record<string, PayloadCell> = {
+    "2014-12-31": cell(271_633e3, "271,633"),
+    "2015-03-28": cell(263_373e3, "263,373"),
+    "2015-06-27": cell(280_709e3, "280,709"),
+    "2015-09-26": cell(270_253e3, "270,253"),
+    "2015-12-31": cell(266_786e3, "$266,786"),
+    "2025-12-31": cell(823.9e6, "$823.9"),
+    "2026-03-28": cell(811.9e6, "$811.9"),
+    "2026-06-27": cell(883.2e6, "$883.2"),
+    "2026-09-26": cell(1005.7e6, "$1,005.7"),
+  };
+  it("is that of its newest figures: millions with one decimal, though most of its history printed thousands", () => {
+    expect(shownScale(history, s)).toEqual({ div: 1e6, dec: 1 });
+  });
+  it("is unchanged for a row printed at one scale throughout", () => {
+    const thousands = Object.fromEntries(Object.entries(history).slice(0, 5));
+    expect(shownScale(thousands, s)).toEqual({ div: 1e3, dec: 0 });
+  });
+});
+
+describe("one printed row across releases that restate a comparative", () => {
+  // Microsoft's product revenue (millions): the income statement's row 6 of table 4 in two releases, stored
+  // under two table names by the readers. Fiscal 2017 quarters were restated for the new revenue standard.
+  const mk = (k: string, bd: string, q: Record<string, [number, string]>): PayloadSeries => ({
+    k,
+    cat: "product",
+    met: "revenue",
+    label: "Product",
+    parent: null,
+    total: false,
+    unit: "usd",
+    bd,
+    q: Object.fromEntries(Object.entries(q).map(([e, [v, x]]) => [e, { v: v * 1e6, x, d: 0, l: [4, 6, 2] }])),
+    y: {},
+  });
+  const newer = mk("type", "Revenue by type", {
+    "2016-12-31": [18273, "$18,273"],
+    "2017-06-30": [16057, "$16,057"],
+    "2017-12-31": [17926, "$17,926"],
+    "2018-06-30": [17159, "$17,159"],
+    "2020-12-31": [19460, "$19,460"],
+    "2021-09-30": [16631, "$16,631"],
+    "2021-12-31": [20779, "$20,779"],
+    "2022-09-30": [15741, "$15,741"],
+    "2025-09-30": [15922, "$15,922"],
+    "2026-09-30": [14631, "$14,631"],
+  });
+  const older = mk("ps", "Revenue by product and service", {
+    "2016-12-31": [16537, "$16,537"],
+    "2017-06-30": [13769, "$13,769"],
+    "2017-12-31": [17926, "$17,926"],
+    "2018-06-30": [17159, "$17,159"],
+    "2020-12-31": [19460, "$19,460"],
+    "2021-09-30": [16631, "$16,631"],
+    "2021-12-31": [20779, "$20,779"],
+    "2022-09-30": [15741, "$15,741"],
+    "2025-09-30": [15922, "$15,922"],
+    "2025-12-31": [16451, "$16,451"],
+    "2026-03-31": [15089, "$15,089"],
+    "2026-06-30": [17234, "$17,234"],
+  });
+  const by = new Map([newer, older].map((x) => [x.k, x]));
+  // The newest release (document 1) and the one before (document 0) print it at table 4, row 6.
+  const places = new Map([
+    ["type", new Set(["1:4:6"])],
+    ["ps", new Set(["0:4:6"])],
+  ]);
+  it("is one row: seven of nine common quarters agree, two were restated", () => {
+    expect(sameRows(["type", "ps"], by, places)).toEqual([["type", "ps"]]);
+    const cells = rowCells(["type", "ps"], by, "q").cells;
+    // The newest copy's figure stands where both print; the other copy fills the quarters only it prints.
+    expect(cells["2016-12-31"].v).toBe(18273e6);
+    expect(cells["2026-03-31"].v).toBe(15089e6);
+    expect(Object.keys(cells)).toHaveLength(13);
+  });
+  it("stays two rows when most common figures differ (another basis), or on another row of the table", () => {
+    const recast = mk("ps", "Revenue by product and service", Object.fromEntries(Object.entries(older.q).map(([e, c]) => [e, [Math.round((c.v / 1e6) * 1.2), "x"]])) as never);
+    expect(sameRows(["type", "ps"], new Map([newer, recast].map((x) => [x.k, x])), places)).toEqual([["type"], ["ps"]]);
+    const elsewhere = new Map([
+      ["type", new Set(["1:4:6"])],
+      ["ps", new Set(["0:4:9"])],
+    ]);
+    expect(sameRows(["type", "ps"], by, elsewhere)).toEqual([["type"], ["ps"]]);
   });
 });

@@ -20,7 +20,9 @@
 // table's, and fifteen years of history hold other compositions): its periods that tie are marked, and its
 // periods that do not only when few are off. Where the periods taken together do not establish a relation,
 // those in which the table printed no line it has since dropped are asked alone: the others are no evidence
-// against a relation between the lines printed now. A period where a term is not printed is marked as tying only when the printed terms alone give the
+// against a relation between the lines printed now. Such a period still ties when the document that prints
+// it printed the since-dropped lines inside the block (between the first term and the result, in the same
+// table) and they add up with the terms: the lines are named on the check (`with`). A period where a term is not printed is marked as tying only when the printed terms alone give the
 // result; it is never marked as off. Neither is a period in which the table printed lines it no longer prints
 // (`old` rows with a figure there: Apple's non-current liabilities held deferred revenue until 2018, so the two
 // lines printed now do not add up to that year's total and say nothing against it).
@@ -174,6 +176,35 @@ function solve(
 const either = (result: CheckRow, terms: CheckRow[], signed: boolean, parts: boolean, changed: ReadonlySet<string>) =>
   solve(result, terms, signed, parts) ?? (changed.size ? solve(result, terms, signed, parts, changed) : null);
 
+const tableRow = (c: PayloadCell): { d: number; t: number; r: number } | null =>
+  c.d != null && Array.isArray(c.l) && typeof c.l[0] === "number" && typeof c.l[1] === "number"
+    ? { d: c.d, t: c.l[0], r: c.l[1] }
+    : null;
+
+/**
+ * The since-dropped lines one document printed inside the block for a period: the result and every term of the
+ * period sit in one table of one document, the result below its terms, and the line's figure for the period sits
+ * in that table on a row between the first term and the result. Positions decide, never a search over figures.
+ */
+function printedBetween(dropped: CheckRow[], p: Period): { row: CheckRow; cell: PayloadCell }[] {
+  const at = tableRow(p.cell);
+  if (!at) return [];
+  const rows: number[] = [];
+  for (const c of p.parts) {
+    const x = c ? tableRow(c) : null;
+    if (!x || x.d !== at.d || x.t !== at.t || x.r >= at.r) return [];
+    rows.push(x.r);
+  }
+  const first = Math.min(...rows);
+  const out: { row: CheckRow; cell: PayloadCell }[] = [];
+  for (const row of dropped) {
+    const cell = figures(row, p.f).cells[p.e];
+    const x = cell && cell.m === p.cell.m ? tableRow(cell) : null;
+    if (x && x.d === at.d && x.t === at.t && x.r > first && x.r < at.r && !rows.includes(x.r)) out.push({ row, cell: cell! });
+  }
+  return out;
+}
+
 /** Whether figures of some of the lines beside the terms (at most six, as printed) add up to the difference. */
 function explains(beside: CheckRow[], p: Period, diff: number, tol: number): boolean {
   const vs = beside
@@ -212,6 +243,8 @@ function emit(
   opts: CheckOptions,
   /** lines printed straight above the terms, at the result's level: a figure of theirs can explain a period off */
   beside: CheckRow[] = [],
+  /** lines only earlier documents print, comparable with the result */
+  dropped: CheckRow[] = [],
 ) {
   const partial = !!opts.partial;
   const signed: Term[] = terms.map((row, i) => ({ row, sign: solved.signs[i] }));
@@ -226,6 +259,30 @@ function emit(
     if (present < 2 && !p.complete) continue;
     const sum = p.parts.reduce((s, c, i) => s + (c ? solved.signs[i] * c.v : 0), 0);
     const ok = Math.abs(sum - p.cell.v) <= tolOf(result, terms, p);
+    // A period in which the table printed lines it no longer prints ties when the document that prints the
+    // result and every term for it also printed such lines between them, and all of them add up to it.
+    if (!ok && p.complete && changed.has(`${p.f}|${p.e}`) && solved.signs.every((x) => x === 1)) {
+      const then = printedBetween(dropped, p);
+      if (then.length) {
+        const more = then.reduce((n, x) => n + x.cell.v, 0);
+        const room = tolOf(result, terms, p) + then.reduce((n, x) => n + slack(x.row, x.cell), 0);
+        if (Math.abs(sum + more - p.cell.v) <= room) {
+          out.set(key, {
+            k: owner,
+            e: p.e,
+            kind: p.f === "q" ? "q" : "fy",
+            total: p.cell.v,
+            sum: sum + more,
+            ok: true,
+            n: present + then.length,
+            by,
+            ...(f ? { f } : {}),
+            with: then.map((x) => x.row.label),
+          });
+          continue;
+        }
+      }
+    }
     // A period missing a term is stated only when the printed terms alone give the result; so is a period in
     // which the table printed lines it no longer prints.
     if (!ok && (!solved.marksOff || !p.complete || changed.has(`${p.f}|${p.e}`))) continue;
@@ -281,6 +338,7 @@ export function printedChecks(
   for (const r of rows) if (r.up != null && byIndex.has(r.up)) partsOf.set(r.up, [...(partsOf.get(r.up) ?? []), r]);
   const comparable = (a: CheckRow, b: CheckRow) => a.unit === b.unit && a.pit === b.pit;
   const settled = new Set<number>();
+  const droppedFor = (r: CheckRow) => rows.filter((o) => o.old && comparable(o, r));
   /** Periods in which a line only earlier documents print carries a figure comparable with `r`. */
   const changedFor = (r: CheckRow) => {
     const out = new Set<string>();
@@ -301,7 +359,7 @@ export function printedChecks(
       either(t, parts, false, true, changed) ??
       (parts.length <= SIGNED_RUN + 2 ? either(t, parts, true, false, changed) : null);
     if (!solved) continue;
-    emit(out, t, parts, solved, "block", taken, changed, opts);
+    emit(out, t, parts, solved, "block", taken, changed, opts, [], droppedFor(t));
     settled.add(t.i);
   }
 
@@ -317,7 +375,7 @@ export function printedChecks(
       const run = above.slice(above.length - k);
       const solved = either(r, run, k <= SIGNED_RUN, false, changed);
       if (!solved) continue;
-      emit(out, r, run, solved, "formula", taken, changed, opts, above.slice(0, above.length - k));
+      emit(out, r, run, solved, "formula", taken, changed, opts, above.slice(0, above.length - k), droppedFor(r));
       return;
     }
   });

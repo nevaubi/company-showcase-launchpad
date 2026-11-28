@@ -96,9 +96,7 @@ import { fiscalCalendar, periodGrids, uniqueHeads, type IrPeriodKind } from "@/l
 import {
   assembleStatements,
   currentCut,
-  lineDiv,
   lineLabel,
-  printedDecimals,
   printedFigure,
   printedSuffix,
   printsIn,
@@ -108,6 +106,7 @@ import {
   unplacedLines,
   sectionChecks,
   checkOptions,
+  shownScale,
   visibleRows,
   type Statement,
   type StatementRow,
@@ -213,10 +212,12 @@ function cellTitle(
         ? "Selected lines only: not all parts are printed"
         : chk.f
           ? chk.ok
-            ? `Ties: ${chk.f}`
+            ? `Ties: ${chk.f}${chk.with?.length ? `, with ${chk.with.join(", ")} (printed then)` : ""}`
             : `${chk.f} gives ${chk.sum.toLocaleString("en-US")}, the printed figure is ${chk.total.toLocaleString("en-US")} (full units)`
           : chk.ok
-            ? `${chk.n} parts add up to this total`
+            ? chk.with?.length
+              ? `${chk.n} parts add up to this total, with ${chk.with.join(", ")} (printed then)`
+              : `${chk.n} parts add up to this total`
             : `Parts add up to ${chk.sum.toLocaleString("en-US")}, the printed total is ${chk.total.toLocaleString("en-US")} (full units)`
       : null,
     ...(c.flags ?? []).map((f) => f.why),
@@ -328,9 +329,9 @@ function sectionView(
     if (r.kind === "head") return { kind: "head", id: `h${i}`, text: r.text, depth: r.depth };
     const s = byKey.get(r.k)!;
     const m = merged.get(r)!;
-    const div = s.unit === "usd" || s.unit === "count" ? lineDiv(s) : 1;
+    // The scale and decimals of the newest figures the row shows (`shownScale`).
+    const { div, dec } = shownScale({ ...m.held, ...m.cells }, s);
     const shownDiv = s.unit === "usd" && sec.id === "text" ? 1e6 : div;
-    const dec = printedDecimals(s);
     // a quiet note after the name when the line's scale is not the section's ("in billions", "in dollars")
     const note = sec.id === "text" ? "" : scaleNote(div, s, sec.div);
     const suffix = printedSuffix(s);

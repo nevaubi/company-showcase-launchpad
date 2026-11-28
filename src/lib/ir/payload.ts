@@ -183,6 +183,11 @@ export interface PayloadCheck {
    */
   by?: "block" | "formula";
   f?: string;
+  /**
+   * Lines the table has since dropped that the same document printed inside this total's block for the period,
+   * counted with the parts ("Assets held-for-sale" among Entegris' current assets of 2025).
+   */
+  with?: string[];
 }
 export interface PayloadDoc {
   id: string;

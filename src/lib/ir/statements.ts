@@ -422,6 +422,29 @@ export function lineDiv(s: PayloadSeries): number {
   return mode(ds) ?? 1;
 }
 
+/**
+ * The scale and decimals a row is shown at: those of the newest figures it shows (the four newest periods that
+ * print one), so a company that printed thousands until 2023 and millions since is shown in millions with one
+ * decimal, as it prints now, with its older figures at that scale (Entegris' rows read "416,700 in thousands"
+ * beside rows in millions otherwise). A row whose figures share one scale is shown as before; a line that is
+ * no money or count keeps its own decimals.
+ */
+export function shownScale(cells: Record<string, PayloadCell>, s: PayloadSeries): { div: number; dec: number } {
+  if (s.unit !== "usd" && s.unit !== "count") return { div: 1, dec: printedDecimals(s) };
+  const newest = Object.keys(cells)
+    .filter((e) => printedDiv(cells[e]) != null)
+    .sort()
+    .slice(-4);
+  const div = mode(newest.map((e) => printedDiv(cells[e])!)) ?? lineDiv(s);
+  const decs: number[] = [];
+  for (const c of Object.values(cells)) {
+    if (!c.x || !/\d/.test(c.x) || printedDiv(c) !== div) continue;
+    const m = c.x.match(/\d\.(\d+)/);
+    decs.push(m ? m[1].length : 0);
+  }
+  return { div, dec: mode(decs) ?? printedDecimals(s) };
+}
+
 /** The latest period end any cell of a line carries. */
 export function lastEnd(s: PayloadSeries): string {
   let m = "";
@@ -487,6 +510,29 @@ function agree(a: PayloadSeries, b: PayloadSeries) {
       if (o && Math.abs(o.v - c.v) > 0.005 * Math.max(Math.abs(o.v), Math.abs(c.v))) return false;
     }
   return true;
+}
+
+/**
+ * Two lines that print the same figures for most of the periods both carry (at least three in common, two in
+ * three agreeing within 0.5 percent): the same line, with some periods restated in the later documents.
+ * Microsoft's product revenue of fiscal 2017 was restated for the new revenue standard: 16,537 in the release
+ * of the time, 18,273 as a comparative a year later, and equal figures in seven other quarters.
+ */
+function restatedCopy(a: PayloadSeries, b: PayloadSeries) {
+  if (!sameScale(a, b)) return false;
+  let common = 0;
+  let same = 0;
+  for (const [x, y] of [
+    [a.q, b.q],
+    [a.y, b.y],
+  ] as const)
+    for (const [e, c] of Object.entries(x)) {
+      const o = y[e];
+      if (!o) continue;
+      common++;
+      if (Math.abs(o.v - c.v) <= 0.005 * Math.max(Math.abs(o.v), Math.abs(c.v))) same++;
+    }
+  return common >= 3 && same * 3 >= common * 2;
 }
 
 /**
@@ -586,7 +632,9 @@ export function sameRows(
           (o.met === s.met || o.cat === "statement" || s.cat === "statement") &&
           ![...docsIn(g.at)].some((d) => mine.has(d)) &&
           [...at].some((x) => [...g.at].some((y) => rowOfPlace(x) === rowOfPlace(y))) &&
-          g.ks.every((k) => agree(byKey.get(k)!, s))
+          // A later document may restate a comparative: the row is still the row (`restatedCopy`); the newest
+          // copy's figure is the one shown.
+          g.ks.every((k) => agree(byKey.get(k)!, s) || restatedCopy(byKey.get(k)!, s))
         );
       }) ??
       // A line only other copies print that prints the same figure as a row in a common period, under the same
