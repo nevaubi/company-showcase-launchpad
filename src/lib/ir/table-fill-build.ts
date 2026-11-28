@@ -294,7 +294,7 @@ export async function fillCompany(
     if (!filed) {
       const reports = fillDocument(inputOf(null))
         .statements.map((x) => doc.grid.find((t) => t.index === x.t))
-        .map((t) => (t ? newestHeadDate(t) : null))
+        .map((t) => (t ? newestHeadDate(t, calendar) : null))
         .filter((x): x is string => !!x)
         .sort()
         .at(-1);

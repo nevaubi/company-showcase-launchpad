@@ -627,6 +627,18 @@ export function printedHead(
 }
 
 /**
+ * Whether a printed date can be a period end of the company: within 7 days of a quarter end of its fiscal
+ * calendar, or the last day of a month (monthly reporters); any date when no calendar is known. A release
+ * also prints the day it was written over a column ("as of 7/16/26" over Netflix's forecast): that is no
+ * period, and no stored figure is moved to it.
+ */
+export function periodLike(end: string, calendar: string[] | undefined): boolean {
+  if (!calendar?.length) return true;
+  const [y, m, d] = end.split("-").map(Number);
+  return d === lastDay(y, m) || nearQuarterEnd(end, calendar);
+}
+
+/**
  * The one full date a column head prints, with its own length (months; -1 a length that maps to none), or null
  * when the head prints no full date, two dates, or a change or percent head.
  */
@@ -645,12 +657,12 @@ export function headDate(key: string): { end: string; months?: number } | null {
  * The newest full date printed in the column heads of a table (the rows above its first figure row), or null:
  * the period a statement table reports, read from the table alone.
  */
-export function newestHeadDate(table: GridTable): string | null {
+export function newestHeadDate(table: GridTable, calendar?: string[]): string | null {
   let newest: string | null = null;
   for (const row of table.rows.slice(0, firstFigureRow(table)))
     for (const cell of row.cells) {
       const d = headDate(cell.text);
-      if (d && (!newest || d.end > newest)) newest = d.end;
+      if (d && periodLike(d.end, calendar) && (!newest || d.end > newest)) newest = d.end;
     }
   return newest;
 }
@@ -931,7 +943,7 @@ export function fillDocument(input: FillInput): DocFill {
       // figure of the column is moved to it), unless the head prints another length than the stored figures.
       const k0 = keys.get(g.s);
       const hd = k0 && k0 === keys.get(g.e - 1) ? headDate(k0) : null;
-      if (hd && hd.end !== p.end) {
+      if (hd && hd.end !== p.end && periodLike(hd.end, input.calendar)) {
         if (hd.months != null && (hd.months < 0 || (p.months > 0 && hd.months !== p.months)))
           continue;
         p = { ...p, end: hd.end, start: null };
@@ -1312,7 +1324,7 @@ export function fillDocument(input: FillInput): DocFill {
     // Table name of the filled lines, from what the document prints (never the reader's own name for the table,
     // which drifts between releases): the statement kind, else the printed title, else the reader's name.
     const bd =
-      printedTableName(titleOf.get(t) || cap?.title || statements.find((x) => x.t === t)?.title || "") ??
+      printedTableName((isStatement.has(t) ? titleOf.get(t) : "") || cap?.title || statements.find((x) => x.t === t)?.title || "") ??
       mode(xs.map((x) => x.f.breakdown).filter((b): b is string => !!b)) ??
       null;
     /** The table is a statement of flows: its lines are flows unless named as a point in time. */
