@@ -241,6 +241,27 @@ describe("printed scale", () => {
     expect(sameRows(["m", "b"], by, new Map())).toEqual([["m"], ["b"]]);
     expect(Object.keys(rowCells(["m", "b"], by, "q").cells)).toEqual(["2026-09-30"]);
   });
+  it("a company that changed the scale it prints at keeps its history, in the finer figures only", () => {
+    // Entegris' net sales: "$1,005.7" and "$883.2" in millions (2026 releases), "263,373" and "271,633" in
+    // thousands (2016 releases).
+    const sales: PayloadSeries = {
+      ...line("s", "$1,005.7", 1005.7e6),
+      label: "Net sales",
+      q: {
+        "2026-09-26": { v: 1005.7e6, x: "$1,005.7", d: 0, l: [2, 3, 1] },
+        "2026-06-27": { v: 883.2e6, x: "$883.2", d: 0, l: [2, 3, 3] },
+        "2015-03-28": { v: 263_373e3, x: "263,373", d: 1, l: [5, 3, 7] },
+        "2014-12-31": { v: 271_633e3, x: "271,633", d: 2, l: [4, 3, 7] },
+      },
+    };
+    const by = new Map([[sales.k, sales]]);
+    const cells = rowCells(["s"], by, "q", [0, 2, 3]).cells;
+    expect(Object.keys(cells).sort()).toEqual(["2014-12-31", "2015-03-28", "2026-06-27", "2026-09-26"]);
+    expect(cells["2015-03-28"]).toMatchObject({ v: 263_373e3, x: "263,373" });
+    // A thousands figure for a period between the row's own never joins them (two tables of the same years).
+    const mixed: PayloadSeries = { ...sales, q: { ...sales.q, "2026-08-01": { v: 300_000e3, x: "300,000", d: 3, l: [9, 3, 1] } } };
+    expect(Object.keys(rowCells(["s"], new Map([[mixed.k, mixed]]), "q", [0, 2, 3]).cells)).not.toContain("2026-08-01");
+  });
 });
 
 describe("table titles", () => {

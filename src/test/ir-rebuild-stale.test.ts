@@ -108,6 +108,7 @@ describe("settings", () => {
       maxMs: 15 * 60_000,
       stale: true,
       repairBefore: null,
+      parallel: 1,
     });
     expect(rebuildSettings({ IR_REBUILD_STALE: "0" }).enabled).toBe(false);
     // A repair time lets a pass run with the stale lane off, and a value that is no time is ignored.
@@ -301,5 +302,57 @@ describe("when the loop starts a pass", () => {
     expect(rebuildDue({ ...base, lastEndMs: at - IDLE_RECHECK_MS, lastLeft: 0 })).toBe(true);
     expect(rebuildDue({ ...base, lastEndMs: at - 10 * 60_000, lastFailed: true })).toBe(false);
     expect(rebuildDue({ ...base, lastEndMs: at - 15 * 60_000, lastFailed: true })).toBe(true);
+  });
+});
+
+describe("side by side", () => {
+  /** A rebuild that really waits, so lanes overlap; records how many ran at once. */
+  function slow(opts: { fail?: Set<string> } = {}) {
+    let running = 0;
+    let peak = 0;
+    const started: string[] = [];
+    const deps: PassDeps = {
+      rebuild: async (t) => {
+        started.push(t);
+        running++;
+        peak = Math.max(peak, running);
+        await new Promise((r) => setTimeout(r, 5));
+        running--;
+        if (opts.fail?.has(t)) throw new Error(`boom ${t}`);
+        return true;
+      },
+      gate: async () => undefined,
+      save: async () => undefined,
+      now: Date.now,
+      log: () => undefined,
+    };
+    return { deps, started, peak: () => peak };
+  }
+
+  it("takes companies in lane order, at most `parallel` at once, within the company limit", async () => {
+    const w = slow();
+    const order = ["A", "B", "C", "D", "E", "F", "G"];
+    const r = await runPass(emptyState(), order, { ...settings(5), parallel: 3 }, w.deps);
+    expect(w.started).toEqual(["A", "B", "C", "D", "E"]);
+    expect(w.peak()).toBe(3);
+    expect(r.rebuilt.sort()).toEqual(["A", "B", "C", "D", "E"]);
+    expect(r).toMatchObject({ stoppedBy: "companies", left: 2 });
+  });
+
+  it("one company's failure leaves the others of the pass alone", async () => {
+    const w = slow({ fail: new Set(["B"]) });
+    const s = emptyState();
+    const r = await runPass(s, ["A", "B", "C"], { ...settings(), parallel: 3 }, w.deps);
+    expect(r.rebuilt.sort()).toEqual(["A", "C"]);
+    expect(r.failed).toEqual({ B: "boom B" });
+    expect(r).toMatchObject({ stoppedBy: "done", left: 0 });
+    expect(s.failures["B"]?.count).toBe(1);
+  });
+
+  it("reads IR_REBUILD_PARALLEL within 1 to 8, one by default", () => {
+    expect(rebuildSettings({}).parallel).toBe(1);
+    expect(rebuildSettings({ IR_REBUILD_PARALLEL: "5" }).parallel).toBe(5);
+    expect(rebuildSettings({ IR_REBUILD_PARALLEL: "64" }).parallel).toBe(8);
+    expect(rebuildSettings({ IR_REBUILD_PARALLEL: "0" }).parallel).toBe(1);
   });
 });

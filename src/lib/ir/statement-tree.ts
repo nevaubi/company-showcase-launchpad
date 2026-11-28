@@ -38,14 +38,24 @@ function closes(r: TreeLine, byKey: Map<string, PayloadSeries>, label: (r: TreeL
   return r.ks.some((k) => !!byKey.get(k)?.total) || /^total\b/i.test(label(r).trim());
 }
 
-/** Whether the parts' figures add up to the total's: at least one period compared, none off. */
+/**
+ * Whether the parts' figures add up to the total's: at least one period compared, none off. With `doc` (the
+ * document whose table the section is laid out from), the periods that document prints the total for decide
+ * when it prints any with every part: the rows are that table's, and an older copy of the table may have
+ * printed other lines under the same total (Entegris' current assets held "Assets held-for-sale" for two
+ * years, so the five lines printed now do not add up to those quarters' total and say nothing against it).
+ */
 export function addsUp(
   t: TreeLine,
   parts: TreeLine[],
   cells: CellsOf,
   unit: string | undefined,
+  doc?: number,
 ): boolean {
   let compared = 0;
+  let off = 0;
+  let own = 0;
+  let ownOff = 0;
   for (const freq of ["q", "y"] as const) {
     const tc = cells(t, freq);
     const pc = parts.map((p) => cells(p, freq));
@@ -53,11 +63,17 @@ export function addsUp(
       if (pc.some((x) => !x[e])) continue;
       const sum = pc.reduce((n, x) => n + x[e].v, 0);
       const tol = Math.max(Math.abs(c.v) * 0.005, unit === "usd" ? 1.5e6 : 1.5);
-      if (Math.abs(sum - c.v) > tol) return false;
+      const bad = Math.abs(sum - c.v) > tol;
       compared++;
+      if (bad) off++;
+      if (doc != null && c.d === doc) {
+        own++;
+        if (bad) ownOff++;
+      }
     }
   }
-  return compared > 0;
+  if (own > 0) return ownOff === 0;
+  return compared > 0 && off === 0;
 }
 
 /**
@@ -69,6 +85,8 @@ export function shapeRows(
   byKey: Map<string, PayloadSeries>,
   label: (r: TreeLine) => string,
   cells: CellsOf,
+  /** the document whose table the section is laid out from (see `addsUp`) */
+  doc?: number,
 ): void {
   const lines: number[] = [];
   rows.forEach((r, i) => {
@@ -132,7 +150,7 @@ export function shapeRows(
   const fromAbove = new Map<number, number[]>();
   for (const [i, j] of up) if (j < i) fromAbove.set(j, [...(fromAbove.get(j) ?? []), i]);
   for (const [j, kids] of fromAbove)
-    if (!addsUp(line(j), kids.map(line), cells, byKey.get(line(j).ks[0])?.unit)) for (const i of kids) up.delete(i);
+    if (!addsUp(line(j), kids.map(line), cells, byKey.get(line(j).ks[0])?.unit, doc)) for (const i of kids) up.delete(i);
   // Parts a total lost in the build, from its own block.
   for (const t of lines) {
     const tr = line(t);
@@ -169,13 +187,13 @@ export function shapeRows(
     let take: number[] = [];
     // Not when the stored parts already add up to the total: the rows above are parts of something else
     // (JPM's interest income and expense, above net interest income under total net revenue).
-    if (kids.length) take = addsUp(tr, kids.map(line), cells, byKey.get(tr.k)?.unit) ? [] : orphans.slice(0, sibs);
+    if (kids.length) take = addsUp(tr, kids.map(line), cells, byKey.get(tr.k)?.unit, doc) ? [] : orphans.slice(0, sibs);
     else {
       const unit = byKey.get(tr.k)?.unit;
       for (let n = orphans.length; n >= 2; n--) {
         const set = orphans.slice(0, n);
         if (set.some((x) => byKey.get(line(x).k)?.unit !== unit)) continue;
-        if (addsUp(tr, set.map(line), cells, unit)) {
+        if (addsUp(tr, set.map(line), cells, unit, doc)) {
           take = set;
           break;
         }

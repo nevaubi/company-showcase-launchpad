@@ -17,6 +17,30 @@ export function scenarioDocument(source: Omit<SourceScope, "id">): boolean {
   );
 }
 
+/**
+ * A document that introduces itself as pro forma financial information (an acquisition or disposal exhibit):
+ * its tables combine this company with another, or print the other company's results under this company's
+ * statement names, so none of it is a reported figure of this company. Entegris' 8-K of April 4, 2022 printed
+ * CMC Materials' quarter beside its own under "Revenues" and "Cost of sales". Decided from the opening of the
+ * document's text, where such an exhibit names itself.
+ */
+const PRO_FORMA_DOCUMENT =
+  /\b(?:unaudited\s+)?pro\s*forma\s+(?:condensed\s+)?(?:combined|consolidated)\s+(?:condensed\s+)?financial\s+(?:information|statements?|data)\b/i;
+export function proFormaDocument(opening: string | null | undefined): boolean {
+  return PRO_FORMA_DOCUMENT.test((opening ?? "").slice(0, 1200));
+}
+
+/**
+ * Whether an exhibit's stored title says its 8-K reported results (Item 2.02, "Results of Operations and
+ * Financial Condition"): true or false for a title listing the 8-K's items ("8-K 2022-04-04 ex99-2.htm (Items
+ * 7.01,8.01,9.01)"), null for a document whose title lists none (an IR-site file).
+ */
+export function resultsExhibit(title: string | null | undefined): boolean | null {
+  const m = /^8-K(?:\/A)?\b.*\(Items?\s+([^)]*)\)/i.exec((title ?? "").split("||")[0]);
+  if (!m) return null;
+  return m[1].split(/[,\s]+/).includes("2.02");
+}
+
 const SCENARIO_MEASURE =
   /\b(?:pro forma stressed (?:capital|loss|income|balance)|(?:supervisory |severely )?adverse scenario|under (?:a |the )?stress(?:ed)? scenario|stress[- ]test (?:projections?|scenarios?))\b/i;
 const TARGET_MEASURE =

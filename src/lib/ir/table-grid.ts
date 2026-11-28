@@ -11,7 +11,7 @@ export interface GridCell {
   plain: string;
   /** first grid column the cell covers (sum of the colspans before it in its row) */
   col: number;
-  /** grid columns it covers */
+  /** grid columns it covers; 0 for a cell hidden inside a printed row (it takes no place in the layout) */
   span: number;
   /** printed bold (font-weight 600 or more, <b>, <strong>, <th>) */
   bold: boolean;
@@ -108,10 +108,18 @@ export function parseGrid(html: string): GridTable[] {
     if (!o.row || o.cellStart < 0) return;
     const inner = body.slice(o.cellStart, at);
     const style = styleOf(o.cellAttrs);
-    const span = Math.max(
-      1,
-      Math.min(100, Number(o.cellAttrs.match(/\bcolspan\s*=\s*["']?(\d+)/i)?.[1] ?? 1) || 1),
-    );
+    // A cell the document hides (display:none) inside a printed row takes no column: the browser lays the row
+    // out without it, so the cells after it sit under the heads their figures were printed under (Entegris'
+    // first-quarter 2020 statement hides a three-column cell after each line's name, and read with it every
+    // figure of those lines moved one period to the right). It keeps its place in `cells`, which is what a
+    // stored figure's position counts.
+    const gone = !o.row.hidden && o.row.cells.length > 0 && /display\s*:\s*none/i.test(style);
+    const span = gone
+      ? 0
+      : Math.max(
+          1,
+          Math.min(100, Number(o.cellAttrs.match(/\bcolspan\s*=\s*["']?(\d+)/i)?.[1] ?? 1) || 1),
+        );
     // Inner spans carry the font weight in most EDGAR documents; take the first text-bearing one.
     const inStyles = [
       ...inner.matchAll(

@@ -6,17 +6,20 @@
 // stored facts give them.
 import type { IrFact } from "@/lib/ir/kpis";
 import type { IrPayload, IrQuality, PayloadFillConflict } from "@/lib/ir/payload";
-import { assembleStatements, lineDiv, rowLabel } from "@/lib/ir/statements";
+import { assembleStatements, lineDiv, rowLabel, statementAnchors } from "@/lib/ir/statements";
 import {
   fillDocument,
   isComparisonPosition,
+  newestHeadDate,
   FILL_METHOD,
   quarterEnds,
   type DocFill,
   type MissReason,
 } from "@/lib/ir/table-fill";
 import type { TableCaption } from "@/lib/ir/table-captions";
+import { proFormaDocument, resultsExhibit } from "@/lib/ir/reported-scope";
 import { reduceDocument, type FillDoc } from "@/lib/ir/table-fill-cache";
+import { inferFiled } from "@/lib/ir/doc-meta";
 
 /** A stored document's row: filing date, stored kind, title. */
 export interface DocMeta {
@@ -68,10 +71,17 @@ export function withDocMeta(p: IrPayload, meta: Map<string, DocMeta>, run?: Fill
 
 /** Documents downloaded and parsed per rebuild when no reduced copy of them is stored yet. */
 export const FILL_DOCS = 12;
-/** Documents per company whose tables are filled: twelve quarters of releases, supplements and exhibits. */
+/** Documents per company whose tables are filled in the full window: twelve quarters of releases, supplements and exhibits. */
 export const FILL_HISTORY_DOCS = 60;
-/** How far back from the newest document the fill reads (months): at least the last 12 quarters. */
+/** How far back from the newest document the fill reads every table document (months): at least the last 12 quarters. */
 export const FILL_MONTHS = 37;
+/**
+ * Older documents whose tables are filled: the rebuild plan's primary statement documents past the full window
+ * (doc-plan.ts `older`: one family a quarter, back 15 years), newest first. A statement's rows then run back as
+ * far as the company's documents are stored; before this they stopped at 37 months, and Apple's balance sheet
+ * showed 14 quarters of the 60 its releases print.
+ */
+export const FILL_OLDER_DOCS = 130;
 
 export interface FillRun {
   /** stored facts plus the filled ones, for the build */
@@ -96,6 +106,16 @@ export interface FillRun {
   failed: number;
   /** documents chosen but left for a later rebuild (no reduced copy yet and this rebuild's downloads spent) */
   waiting: number;
+  /**
+   * Documents stored without a filing date that print one: the first date in their opening text that falls
+   * within 120 days after the newest period their statements report (doc-meta.ts `inferFiled`, the rule the
+   * deep build uses for PDFs). The rebuild writes it to the document row.
+   */
+  dated: Map<string, string>;
+  /** documents that introduce themselves as pro forma financial information: unread, their stored figures left out */
+  proForma: Set<string>;
+  /** documents with no stored table figure left unread because their 8-K reported no results (no Item 2.02) */
+  notResults: number;
 }
 
 /** The date `n` months before a date ("YYYY-MM-DD"). */
@@ -107,17 +127,22 @@ export function monthsBefore(date: string, n: number): string {
 /** A stored table document by its document row: id, filing date, kind, title. */
 export interface TableDoc extends DocMeta {
   id: string;
+  /** a document stored without a filing date: where the rebuild plan places it (doc-plan.ts), for its order only */
+  placed?: string;
 }
 
 /**
- * Documents to fill, newest filing first (ties: more table facts first), at most `max`: those with table facts,
- * and the company's table documents by their rows (`rows`: releases, supplements and other HTML exhibits), read
- * even when no stored fact points into them.
+ * Documents to fill, newest filing first (ties: more table facts first), at most `max` of the full window: those
+ * with table facts, and the company's table documents by their rows (`rows`: releases, supplements and other HTML
+ * exhibits), read even when no stored fact points into them. Documents filed before the window are taken only
+ * when the plan names them (`older`), at most `maxOlder`, after the window's documents and newest first.
  */
 export function fillDocs(
   facts: IrFact[],
   max = FILL_HISTORY_DOCS,
   rows: TableDoc[] = [],
+  older?: ReadonlySet<string>,
+  maxOlder = FILL_OLDER_DOCS,
 ): string[] {
   const by = new Map<string, { filed: string; n: number }>();
   for (const f of facts) {
@@ -126,10 +151,11 @@ export function fillDocs(
     d.n++;
     by.set(f.document_id, d);
   }
+  // A document without a filing date takes the plan's place for its order and window, never as a filing date.
   for (const r of rows) {
     const d = by.get(r.id);
-    if (d) d.filed = d.filed || r.filed || "";
-    else by.set(r.id, { filed: r.filed ?? "", n: -1 });
+    if (d) d.filed = d.filed || r.filed || r.placed || "";
+    else by.set(r.id, { filed: r.filed ?? r.placed ?? "", n: -1 });
   }
   const kinds = new Map(rows.map((r) => [r.id, r.kind]));
   for (const f of facts)
@@ -143,19 +169,24 @@ export function fillDocs(
     d.slice(0, 4) + String(Math.floor((Number(d.slice(5, 7)) - 1) / 3));
   const tier = (id: string) =>
     ["press-release", "supplement"].includes(kinds.get(id) ?? "") ? 0 : 1;
-  return live
-    .filter(([, d]) => !d.filed || d.filed >= back)
-    .sort(
+  const order = (list: typeof live) =>
+    list.sort(
       (a, b) =>
         quarter(b[1].filed).localeCompare(quarter(a[1].filed)) ||
         tier(a[0]) - tier(b[0]) ||
         b[1].filed.localeCompare(a[1].filed) ||
         b[1].n - a[1].n ||
         a[0].localeCompare(b[0]),
-    )
-    .slice(0, max)
-    .map(([id]) => id);
+    );
+  const recent = order(live.filter(([, d]) => !d.filed || d.filed >= back)).slice(0, max);
+  const before = older?.size
+    ? order(live.filter(([id, d]) => !!d.filed && d.filed < back && older.has(id))).slice(0, maxOlder)
+    : [];
+  return [...recent, ...before].map(([id]) => id);
 }
+
+/** Documents read ahead of the one being filled (their downloads overlap; fills stay in order, one at a time). */
+const READ_AHEAD = 4;
 
 /**
  * Fill the newest documents' tables. `read` returns a document's stored text (rendition, else the HTML
@@ -171,12 +202,14 @@ export async function fillCompany(
     docs?: TableDoc[];
     /** period ends of the company's 10-Q and 10-K reports ("YYYY-MM-DD"), for its fiscal calendar */
     reports?: string[];
+    /** the plan's primary statement documents filed before the full window (doc-plan.ts): filled too */
+    older?: ReadonlySet<string>;
   } = {},
 ): Promise<FillRun> {
   // Facts a previous fill wrote are never inputs (the build is from stored facts only).
   const stored = facts.filter((f) => f.method !== FILL_METHOD);
   const rows = new Map((opts.docs ?? []).map((d) => [d.id, d]));
-  const ids = fillDocs(stored, opts.maxDocs ?? FILL_HISTORY_DOCS, opts.docs);
+  const ids = fillDocs(stored, opts.maxDocs ?? FILL_HISTORY_DOCS, opts.docs, opts.older);
   const calendar = fiscalCalendar(stored, opts.reports);
   const docMeta = new Map<string, { filed: string | null; kind: string | null }>();
   const byDoc = new Map<string, IrFact[]>();
@@ -187,12 +220,23 @@ export async function fillCompany(
   const texts = new Map<string, string>();
   const added: IrFact[] = [];
   const comparisons = new Set<IrFact>();
+  const dated = new Map<string, string>();
+  const proForma = new Set<string>();
+  let notResults = 0;
   let read_ = 0;
   let failed = 0;
   let waiting = 0;
-  // One document at a time: its reduced grid is dropped once its fill is taken.
-  for (const id of ids) {
-    const got = await read(id).catch(() => null);
+  // One document is filled at a time, in order, and its reduced grid is dropped once its fill is taken; the
+  // next few are already being read, so a company with a hundred documents waits on its downloads only once.
+  const pending = new Map<number, Promise<string | FillDoc | "wait" | null>>();
+  const start = (i: number) => {
+    if (i < ids.length && !pending.has(i)) pending.set(i, read(ids[i]).catch(() => null));
+  };
+  for (let at = 0; at < ids.length; at++) {
+    const id = ids[at];
+    for (let k = at; k <= at + READ_AHEAD; k++) start(k);
+    const got = await pending.get(at)!;
+    pending.delete(at);
     if (got === "wait") {
       waiting++;
       continue;
@@ -203,6 +247,12 @@ export async function fillCompany(
     }
     const doc = typeof got === "string" ? reduceDocument(got, opts.company) : got;
     read_++;
+    // A pro forma exhibit prints another company's figures under this company's statement names: nothing of
+    // it is read, and the figures a reader stored from it leave the series (`FillRun.proForma`).
+    if (proFormaDocument(doc.head)) {
+      proForma.add(id);
+      continue;
+    }
     texts.set(id, doc.head);
     const caps = doc.captions;
     captions.set(id, caps);
@@ -213,20 +263,46 @@ export async function fillCompany(
     });
     const row = rows.get(id);
     const tableFacts = own.filter((f) => typeof (f.locator as { t?: unknown }).t === "number");
-    const filed = own.find((f) => f.filed)?.filed ?? row?.filed ?? null;
-    docMeta.set(id, { filed, kind: own[0]?.document_kind ?? row?.kind ?? null });
-    const fill = fillDocument({
+    // A document no reader took a table figure from is read by its statement titles and column heads alone,
+    // which cannot tell whose statements an exhibit prints: an exhibit of an 8-K that reported no results (no
+    // Item 2.02) is left unread (an acquired company's statements carry the same titles as this company's).
+    if (tableFacts.length < 2 && resultsExhibit(row?.title) === false) {
+      notResults++;
+      continue;
+    }
+    let filed = own.find((f) => f.filed)?.filed ?? row?.filed ?? null;
+    const inputOf = (date: string | null) => ({
       doc: id,
       html: "",
       grid: doc.grid,
       zeroDash: doc.zeroDash,
       facts: own,
       captions: new Map(caps.map((c) => [c.t, { title: c.title, unit: c.unit }])),
-      filed,
+      filed: date,
       calendar,
       statementsOnly: tableFacts.length < 2,
-      meta: row ? { filed: row.filed, kind: row.kind, accn: null, doc: null } : undefined,
+      meta: row ? { filed: date ?? row.filed, kind: row.kind, accn: null, doc: null } : undefined,
     });
+    // A document stored without a filing date that prints one (`FillRun.dated`): the newest date in the heads
+    // of its statement tables is the period it reports; the first date of its opening text within 120 days
+    // after that is when it was published. Its statements are then read as any dated document's: without a
+    // date no column head of a document with no stored fact can be settled.
+    if (!filed) {
+      const reports = fillDocument(inputOf(null))
+        .statements.map((x) => doc.grid.find((t) => t.index === x.t))
+        .map((t) => (t ? newestHeadDate(t) : null))
+        .filter((x): x is string => !!x)
+        .sort()
+        .at(-1);
+      const hit = reports ? inferFiled({ text: doc.head, periodEnd: reports }) : null;
+      if (hit?.filed) {
+        filed = hit.filed;
+        dated.set(id, filed);
+        for (const f of own) if (!f.filed) f.filed = filed;
+      }
+    }
+    docMeta.set(id, { filed, kind: own[0]?.document_kind ?? row?.kind ?? null });
+    const fill = fillDocument(inputOf(filed));
     fills.set(id, fill);
     added.push(...fill.facts);
   }
@@ -234,7 +310,8 @@ export async function fillCompany(
   const fixed = new Map<string, IrFact>();
   for (const fill of fills.values()) for (const f of fill.fixes) if (f.id) fixed.set(f.id, f);
   const levels = comparisons.size ? stored.filter((f) => !comparisons.has(f)) : stored;
-  const base = fixed.size ? levels.map((f) => (f.id && fixed.get(f.id)) || f) : levels;
+  const kept = proForma.size ? levels.filter((f) => !f.document_id || !proForma.has(f.document_id)) : levels;
+  const base = fixed.size ? kept.map((f) => (f.id && fixed.get(f.id)) || f) : kept;
   const fx = [...fixed.values()];
   return {
     facts: [...base, ...added],
@@ -249,6 +326,9 @@ export async function fillCompany(
     read: read_,
     failed,
     waiting,
+    dated,
+    proForma,
+    notResults,
   };
 }
 
@@ -270,30 +350,38 @@ export interface StoredDocRow {
 
 /**
  * The company's table documents by their rows: releases, supplements and other exhibits stored as HTML, filed
- * within the last 37 months of `today` (`FILL_MONTHS`), within the reader's size bound, not marked "no tables" by the table
- * reader, and not refused; newest first.
+ * within the last 37 months of `today` (`FILL_MONTHS`) or named by the plan as an older primary statement
+ * document (`older`), within the reader's size bound, not marked "no tables" by the table reader, and not
+ * refused; newest first.
  */
 export function tableDocRows(
   rows: StoredDocRow[],
   today: string,
-  opts: { maxBytes?: number; refused?: Set<string> } = {},
+  opts: {
+    maxBytes?: number;
+    refused?: Set<string>;
+    older?: ReadonlySet<string>;
+    /** documents stored without a filing date, by the date the plan places them at */
+    placed?: Readonly<Record<string, string>>;
+  } = {},
 ): TableDoc[] {
   const [y, m, d] = today.slice(0, 10).split("-").map(Number);
   const back = new Date(Date.UTC(y, m - 1 - TABLE_DOC_MONTHS, d)).toISOString().slice(0, 10);
+  const at = (r: StoredDocRow) => r.filed ?? opts.placed?.[r.id] ?? null;
   return rows
     .filter(
       (r) =>
-        !!r.filed &&
-        r.filed >= back &&
-        r.filed <= today &&
+        !!at(r) &&
+        (at(r)! >= back || !!opts.older?.has(r.id)) &&
+        (!r.filed || r.filed <= today) &&
         TABLE_DOC_KINDS.includes(r.kind ?? "") &&
         /^html?$/i.test(r.ext ?? "") &&
         (r.bytes ?? 0) <= (opts.maxBytes ?? Infinity) &&
         r.extract_status !== "no tables" &&
         !opts.refused?.has(r.id),
     )
-    .sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? "") || a.id.localeCompare(b.id))
-    .map((r) => ({ id: r.id, filed: r.filed, kind: r.kind, title: r.title }));
+    .sort((a, b) => at(b)!.localeCompare(at(a)!) || a.id.localeCompare(b.id))
+    .map((r) => ({ id: r.id, filed: r.filed, kind: r.kind, title: r.title, ...(r.filed ? {} : { placed: at(r)! }) }));
 }
 
 /**
@@ -319,12 +407,14 @@ export function withFill(p: IrPayload, run: FillRun): IrPayload {
   const index = new Map(p.docs.map((d, i) => [d.id, i]));
   const tables = { ...(p.tables ?? {}) };
   const conflicts: PayloadFillConflict[] = [];
+  // A section's table with no printed title still says which periods its columns print.
+  const anchors = new Set(statementAnchors(p).map((a) => `${a.d}:${a.t}`));
   for (const [id, fill] of run.fills) {
     const d = index.get(id);
     if (d == null) continue;
     for (const t of fill.tables) {
       const key = `${d}:${t.t}`;
-      const cap = tables[key];
+      const cap = tables[key] ?? (anchors.has(key) && t.cols?.length ? {} : undefined);
       if (!cap) continue;
       const wraps = new Set(t.wraps);
       const heads = cap.heads?.filter(([r]) => !wraps.has(r));
@@ -332,6 +422,7 @@ export function withFill(p: IrPayload, run: FillRun): IrPayload {
         ...cap,
         ...(heads ? { heads } : {}),
         ...(t.style.length ? { rows: t.style } : {}),
+        ...(t.cols?.length ? { cols: t.cols } : {}),
       };
       if (heads && !heads.length) delete tables[key].heads;
     }

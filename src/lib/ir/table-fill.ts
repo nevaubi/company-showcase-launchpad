@@ -77,6 +77,12 @@ export interface TableFill {
   style: [number, number, number, string][];
   /** label-only rows that are the first line of the next row's wrapped name (not headings) */
   wraps: number[];
+  /**
+   * The table's printed figure columns whose period is settled, one per period: [grid column, months (0 for
+   * balances), period end, printed head]. A table printing six- or nine-month columns and no three-month one
+   * is a year-to-date table (`ytdBasis`, statements.ts).
+   */
+  cols?: [number, number, string, string][];
 }
 
 export interface DocFill {
@@ -167,6 +173,21 @@ const blockName = (h: string) =>
 const squash = (s: string) => s.replace(/\s+/g, "");
 
 /** Whether the text is a figure cell: one number, or a dash. */
+/** Whether at least half of a table's figure rows (three or more) print a decimal figure. */
+function mostlyDecimals(table: GridTable, first: number): boolean {
+  let rows = 0;
+  let decimal = 0;
+  for (let r = first; r < table.rows.length; r++) {
+    const row = table.rows[r];
+    if (row.hidden) continue;
+    const figures = row.cells.filter((c) => c.col > 0 && numberOf(c.text) != null);
+    if (!figures.length) continue;
+    rows++;
+    if (figures.some((c) => /\.\d/.test(c.text))) decimal++;
+  }
+  return rows >= 3 && decimal * 2 >= rows;
+}
+
 const numberOf = (text: string): number | null => {
   const t = text.trim();
   if (!t || /^(19|20)\d{2}$/.test(t)) return null;
@@ -526,6 +547,20 @@ export function headDate(key: string): { end: string; months?: number } | null {
   return own.size ? { end, months: [...own][0] } : { end };
 }
 
+/**
+ * The newest full date printed in the column heads of a table (the rows above its first figure row), or null:
+ * the period a statement table reports, read from the table alone.
+ */
+export function newestHeadDate(table: GridTable): string | null {
+  let newest: string | null = null;
+  for (const row of table.rows.slice(0, firstFigureRow(table)))
+    for (const cell of row.cells) {
+      const d = headDate(cell.text);
+      if (d && (!newest || d.end > newest)) newest = d.end;
+    }
+  return newest;
+}
+
 /** Six months before a date ("YYYY-MM-DD"). */
 const sixMonthsBefore = (d: string) => {
   const [y, m, day] = d.split("-").map(Number);
@@ -579,9 +614,22 @@ export function tableHeads(
       .filter((e, i, all) => i === 0 || e !== all[i - 1]);
     const down = ends.every((e, i) => i === 0 || e < ends[i - 1]);
     const up = ends.every((e, i) => i === 0 || e > ends[i - 1]);
-    if (!down && !up) for (const [k] of xs) refuse(k);
+    if (!down && !up && !yearAgoThenPrior(ends)) for (const [k] of xs) refuse(k);
   }
   return out;
+}
+
+/**
+ * Three columns of one length printed as: this period, the same period a year earlier, the period just before
+ * this one ("March 28, 2015 | March 29, 2014 | December 31, 2014", how Entegris and many others print their
+ * quarter). The dates say so themselves: the second about a year before the first, the third about a quarter.
+ */
+function yearAgoThenPrior(ends: string[]): boolean {
+  if (ends.length !== 3) return false;
+  const days = (a: string, b: string) => (Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
+  const year = days(ends[0], ends[1]);
+  const quarter = days(ends[0], ends[2]);
+  return year >= 355 && year <= 378 && quarter >= 80 && quarter <= 100;
 }
 
 const STATEMENT_TITLE =
@@ -616,6 +664,13 @@ export function printedTableName(title: string): string | null {
     .trim();
   return core ? sentenceCase(core) : null;
 }
+
+/** A printed figure at its scale, without the binary noise of the product (8.2 × 1,000,000 is 8,200,000, not 8,199,999.999999999). */
+const scaled = (v: number, scale: number) => (scale === 1 ? v : Number((v * scale).toPrecision(15)));
+
+/** A line of a flow statement whose name says a point in time. */
+const POINT_NAME =
+  /\b(?:at|as of)\s+(?:the\s+)?(?:beginning|end|start|close)\b|\b(?:beginning|end|start|close)\s+of\s+(?:the\s+)?(?:period|year|quarter)\b|\b(?:beginning|ending|opening|closing)\s+(?:balance|cash)\b|\bperiod[- ]end\b|\boutstanding\b|\bbalance\b/i;
 
 /** A scale word without "in" ("(Millions)", "(Millions of dollars)", "(Dollars in millions)"). */
 const BARE_SCALE = /\b(thousands|millions|billions)\b/i;
@@ -958,6 +1013,25 @@ export function fillDocument(input: FillInput): DocFill {
       return { end: h.end, months: h.months, start: known.flows.get(periodId({ end: h.end, months: h.months })) ?? null, point: false };
     };
 
+    // The periods the table's figure columns print (its first forty figure rows say them all).
+    const printedCols = new Map<string, [number, number, string, string]>();
+    for (let r = first, seen = 0; r < table.rows.length && seen < 40; r++) {
+      const row = table.rows[r];
+      if (row.hidden) continue;
+      let any = false;
+      for (const c of row.cells) {
+        if (c.col === 0 || numberOf(c.text) == null) continue;
+        any = true;
+        const p = periodOf(c);
+        if (!p) continue;
+        const months = p.months > 0 ? p.months : 0;
+        const id = `${months}:${p.end}`;
+        if (!printedCols.has(id)) printedCols.set(id, [c.col, months, p.end, keyOver(keys, c) ?? ""]);
+      }
+      if (any) seen++;
+    }
+    if (printedCols.size) report.cols = [...printedCols.values()].sort((a, b) => a[0] - b[0]);
+
     // Conflicts: the stored text at each fact position against what the document prints there.
     for (const x of xs) {
       const stored = String((x.f.locator as { text?: string }).text ?? "");
@@ -1096,10 +1170,18 @@ export function fillDocument(input: FillInput): DocFill {
       const basisChanges = p && p.end === x.f.period_end && p.months !== x.f.months;
       if (!basisChanges && numeric == null) continue;
       x.f = { ...x.f, ...(basisChanges ? { months: p.months, period_start: p.start } : {}),
-        ...(numeric != null ? { unit: "usd", value: numeric * moneyScale! } : {}) };
+        ...(numeric != null ? { unit: "usd", value: scaled(numeric, moneyScale!) } : {}) };
       fixes.push(x.f);
     }
-    const intOnly = xs.filter((x) => x.f.unit === "usd").every((x) => !/\.\d/.test(x.cell.text));
+    // Whether the table's money prints whole numbers. From its stored money facts where it has some; a table no
+    // reader stored a money fact for (a statement read from the document alone) says so itself: decimals in most
+    // of its figure rows are how its money is printed (Skyworks prints "943.7" in millions under "in millions,
+    // except per share amounts"), never a per-share sign. Before this every row of such a table was read as a
+    // per-share figure.
+    const usdCells = xs.filter((x) => x.f.unit === "usd");
+    const intOnly = usdCells.length
+      ? usdCells.every((x) => !/\.\d/.test(x.cell.text))
+      : !mostlyDecimals(table, first);
     // Table name of the filled lines: the readers' own name for the table, else its printed title.
     // Table name of the filled lines, from what the document prints (never the reader's own name for the table,
     // which drifts between releases): the statement kind, else the printed title, else the reader's name.
@@ -1263,7 +1345,7 @@ export function fillDocument(input: FillInput): DocFill {
             if (have.has(periodId({ end: u.p.end, months }))) continue;
             const v = cellValue(row, u.c) ?? (zeroDash && DASH.test(u.cell.text.trim()) ? 0 : null);
             if (v == null) continue;
-            facts.push(made(tmpl, input.doc, t, r, u.c, u.cell.text, v * scale, u.p, months));
+            facts.push(made(tmpl, input.doc, t, r, u.c, u.cell.text, scaled(v, scale), u.p, months));
             report.cells++;
           }
         }
@@ -1488,25 +1570,29 @@ export function fillDocument(input: FillInput): DocFill {
             r,
             u.c,
             u.cell.text,
-            v * (unit === "usd" || unit === "count" ? scale : 1),
+            scaled(v, unit === "usd" || unit === "count" ? scale : 1),
             u.p,
             months,
           ),
         );
       }
       // A row printing the same nonzero figure for a quarter and the year to date that ends with it is a balance
-      // (market capitalization, shares at period end): every figure of the row is a point in time.
-      const repeats = rowOut.some((a) =>
-        rowOut.some(
-          (b) =>
-            a !== b &&
-            a.period_end === b.period_end &&
-            a.months === 3 &&
-            b.months > 3 &&
-            a.value === b.value &&
-            a.value !== 0,
-        ),
+      // (market capitalization, shares at period end): every figure of the row is a point in time. Not when
+      // another pair of its columns differs (a flow that all fell into one quarter repeats there and nowhere
+      // else: Entegris' "Proceeds from government incentives" printed 8.2 for the quarter and the nine months of
+      // 2025, a dash and 5.4 for 2026, and read as a balance its nine months stood as the quarter). And in a
+      // statement of income or cash flows a line is a flow unless its name says a point in time (cash at the
+      // beginning or end of the period): an acquisition paid in the quarter repeats in both columns too.
+      const pairs = rowOut.flatMap((a) =>
+        rowOut
+          .filter((b) => a !== b && a.period_end === b.period_end && a.months === 3 && b.months > 3)
+          .map((b) => [a, b] as const),
       );
+      const flowStatement = bd === "Income statement" || bd === "Cash flow statement" || bd === "Comprehensive income";
+      const repeats =
+        pairs.some(([a, b]) => a.value === b.value && a.value !== 0) &&
+        pairs.every(([a, b]) => a.value === b.value) &&
+        (!flowStatement || POINT_NAME.test(label));
       if (repeats && equityBasis !== "average") for (const f of rowOut) Object.assign(f, { months: 0, period_start: null });
       // One figure per period: a balance printed in both the quarter and the year-to-date column is read once,
       // and a period printed twice with different figures is left out.

@@ -72,8 +72,54 @@ describe("payload budget", () => {
   });
   it("records every step and refuses a payload still over the cap", () => {
     const { budget } = budgetPayload(p, { cap: 1000, quarters: 1 });
-    expect(budget.steps.map((s) => s.step)).toEqual(["recent", "more", "periods", "displayed"]);
+    // The order: older tables, lines no table shows, ten years of history, retired lines, then shorter history.
+    expect(budget.steps.map((s) => s.step)).toEqual(["recent", "more", "displayed", "periods", "old"]);
     expect(budget.ok).toBe(false);
     expect(budget.after).toBeGreaterThan(1000);
+  });
+  it("gives up lines only earlier documents print before the history of the rows printed now", () => {
+    // The same tables two years earlier (no period in common with the newest release), plus one line that
+    // older copy alone prints: it is listed under its table as printed only in earlier periods.
+    const table = facts.filter((f) => typeof (f.locator as { t?: unknown }).t === "number");
+    const earlier = table.map((f, i) => ({
+      ...f,
+      id: `earlier-${i}`,
+      document_id: "00000000-0000-4000-8000-000000000002",
+      filed: back(f.filed, 2),
+      period_end: back(f.period_end, 2)!,
+      period_start: back(f.period_start, 2),
+    }));
+    const seed = earlier.find((f) => f.unit === "usd")!;
+    const retired = {
+      ...seed,
+      id: "retired",
+      label: "Retired store support line",
+      parent: null,
+      is_total: false,
+      value: 123e6,
+      locator: { ...(seed.locator as object), r: 900 } as IrFact["locator"],
+    };
+    const two = buildPayload("LOW", [...facts, ...earlier, retired]);
+    const isOld = (x: typeof two) =>
+      assembleStatements(x).some((sec) => sec.rows.some((r) => r.kind === "line" && r.old));
+    expect(isOld(two)).toBe(true);
+    // Every step, to learn the sizes; then a cap the payload meets once the retired line is gone.
+    const every = budgetPayload(two, { cap: 1 }).budget.steps;
+    const oldStep = every.find((x) => x.step === "old")!;
+    const before = every[every.indexOf(oldStep) - 1];
+    expect(oldStep.bytes).toBeLessThan(before.bytes);
+    const { payload, budget } = budgetPayload(two, { cap: oldStep.bytes });
+    expect(budget.ok).toBe(true);
+    expect(budget.steps.at(-1)?.step).toBe("old");
+    expect(budget.cut).toBe(true);
+    expect(isOld(payload)).toBe(false);
+    expect(payload.series.some((x) => x.label === "Retired store support line")).toBe(false);
+    // No quarter of the rows printed now was given up for it.
+    expect(payload.quarters).toEqual(two.quarters);
+    // The rows the table prints now are as they were, cell for cell; only the retired line is gone.
+    const printedNow = view(two).map((x) => ({ ...x, rows: x.rows.filter((r) => !r.startsWith("Retired store support line ")) }));
+    expect(view(payload)).toEqual(printedNow);
+    // With room for everything nothing is cut.
+    expect(budgetPayload(two).budget.cut).toBe(false);
   });
 });

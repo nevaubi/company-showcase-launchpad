@@ -21,7 +21,7 @@ import type { ConsistencySummary } from "@/lib/ir/consistency";
 import { periodLong } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadSeries } from "@/lib/ir/payload";
 import type { SecCheck } from "@/lib/ir/sec-check";
-import { assembleStatements, lineLabel, sectionChecks, type Statement } from "@/lib/ir/statements";
+import { assembleStatements, lineLabel, linesLeftOut, sectionChecks, type Statement } from "@/lib/ir/statements";
 import { cn } from "@/lib/utils";
 import "@/components/ir/table.css";
 
@@ -59,11 +59,12 @@ function tableChecks(
   sec?: Statement,
 ): PayloadCheck[] {
   const secs = sec ? [sec] : assembleStatements(payload);
+  const partial = linesLeftOut(payload);
   const out = new Map<string, PayloadCheck>();
   const covered = new Set<string>();
   for (const s of secs) {
     for (const r of s.rows) if (r.kind === "line" && r.total) for (const k of r.ks) covered.add(k);
-    for (const [key, c] of sectionChecks(s, byKey, payload.checks)) out.set(key, c);
+    for (const [key, c] of sectionChecks(s, byKey, payload.checks, partial)) out.set(key, c);
   }
   return [...out.values(), ...payload.checks.filter((c) => !covered.has(c.k))];
 }

@@ -173,6 +173,12 @@ export interface PayloadCheck {
   partial?: boolean;
   /** lines subtracted for the parts to equal the total (deductions printed as positives) */
   sub?: string[];
+  /**
+   * Set at read time: found from the section's own printed rows (statement-checks.ts), not stored by the build.
+   * "block": the parts printed under the total; "formula": the lines printed above a result (`f` in words).
+   */
+  by?: "block" | "formula";
+  f?: string;
 }
 export interface PayloadDoc {
   id: string;
@@ -201,6 +207,12 @@ export interface PayloadTable {
    * (a name wrapped over two printed rows joined, footnote marks taken off), for model-read rows too.
    */
   rows?: [number, number, number, string][];
+  /**
+   * The table's printed figure columns, one per period: [grid column, months (0 for balances), period end,
+   * printed head] (table-fill.ts). A table of six- or nine-month columns with no three-month one is a
+   * year-to-date table.
+   */
+  cols?: [number, number, string, string][];
 }
 /** A stored fact the document prints differently at its own position (kept as stored; shown in the checks). */
 export interface PayloadFillConflict {
@@ -260,6 +272,10 @@ export interface IrQuality {
     waiting?: number;
     /** rebuilds in a row that left documents waiting (the stale lane stops after 8) */
     pass?: number;
+    /** documents left unread, and their stored figures left out, because they are pro forma financial information */
+    proForma?: number;
+    /** documents with no stored table figure left unread because their 8-K reported no results (no Item 2.02) */
+    notResults?: number;
     /** when this rebuild ran (ISO time) */
     at?: string;
   };

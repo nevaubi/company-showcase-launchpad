@@ -102,7 +102,7 @@ export async function documentRows(ticker: string): Promise<PlanDocRow[]> {
       supabaseAdmin
         .from("ir_documents")
         .select(
-          "id, kind, ext, filed, title, period, source_url, rendition_path, extract_facts, prose_facts",
+          "id, kind, ext, filed, title, period, source_url, rendition_path, extract_facts, prose_facts, bytes, extract_status",
         )
         .eq("ticker", ticker)
         .order("id")
@@ -199,7 +199,31 @@ export async function refusedDocs(ticker: string): Promise<Set<string>> {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Bounds on reading stored documents during one company's rebuild (table fill and captions). */
+/** READ_LIMITS with the catch-up settings applied (see its comment). Reads the environment when called. */
+export function readLimits(env: Record<string, string | undefined> = process.env): typeof READ_LIMITS {
+  const within = (v: string | undefined, lo: number, hi: number) => {
+    const n = Math.floor(Number(v));
+    return v != null && v !== "" && Number.isFinite(n) && n >= lo ? Math.min(hi, n) : null;
+  };
+  const docs = within(env["IR_FILL_DOCS"], 1, 400);
+  const minutes = within(env["IR_FILL_MINUTES"], 1, 30);
+  if (docs == null && minutes == null) return READ_LIMITS;
+  const totalMs = minutes != null ? minutes * 60_000 : READ_LIMITS.totalMs;
+  return {
+    ...READ_LIMITS,
+    docs: docs ?? READ_LIMITS.docs,
+    totalMs,
+    // The byte bound follows the document count: 40 MB a document at most, as for one document.
+    totalBytes: Math.max(READ_LIMITS.totalBytes, (docs ?? READ_LIMITS.docs) * 14e6),
+  };
+}
+
+/**
+ * Bounds on reading stored documents during one company's rebuild (table fill and captions). A rebuild reads
+ * `docs` documents that have no reduced copy yet and leaves the rest waiting for the next one (the stale lane
+ * comes back for them). A catch-up run on an idle machine raises both with IR_FILL_DOCS (1 to 400 documents) and
+ * IR_FILL_MINUTES (1 to 30 minutes of downloads), so one rebuild reads a company's whole history (`readLimits`).
+ */
 export const READ_LIMITS = {
   /** a document larger than this is not read */
   bytes: 40e6,
@@ -346,24 +370,21 @@ export async function documentMeta(ids: string[]): Promise<Map<string, DocMeta>>
 }
 
 /**
- * The company's table documents by their rows (releases, supplements, other HTML exhibits of the last 15 months,
- * newest first), so a release no stored fact points into is still read; refused documents left out.
+ * The company's table documents by their rows (releases, supplements, other HTML exhibits of the full window,
+ * and the plan's older primary statement documents, newest first), so a release no stored fact points into is
+ * still read; refused documents left out.
  */
-export async function tableDocuments(ticker: string, refused: Set<string>): Promise<TableDoc[]> {
-  const { data, error } = await retry(() =>
-    supabaseAdmin
-      .from("ir_documents")
-      .select("id, kind, ext, filed, title, bytes, extract_status")
-      .eq("ticker", ticker)
-      .in("kind", ["press-release", "supplement", "other"])
-      .order("filed", { ascending: false })
-      .limit(200)
-      .abortSignal(AbortSignal.timeout(60_000)),
-  );
-  if (error) throw new Error(error.message);
-  return tableDocRows((data ?? []) as StoredDocRow[], new Date().toISOString().slice(0, 10), {
+export function tableDocuments(
+  rows: PlanDocRow[],
+  refused: Set<string>,
+  older: ReadonlySet<string>,
+  placed: Readonly<Record<string, string>> = {},
+): TableDoc[] {
+  return tableDocRows(rows as StoredDocRow[], new Date().toISOString().slice(0, 10), {
     maxBytes: READ_LIMITS.bytes,
     refused,
+    older,
+    placed,
   });
 }
 
@@ -384,6 +405,16 @@ export async function reportDates(ticker: string): Promise<string[]> {
   return ((data ?? []) as { report: string | null }[])
     .map((r) => r.report)
     .filter((x): x is string => !!x);
+}
+
+/** Write filing dates the documents print to their rows, only where the row has none (never over a known date). */
+async function storePrintedDates(dated: Map<string, string>): Promise<void> {
+  const byDate = new Map<string, string[]>();
+  for (const [id, filed] of dated) byDate.set(filed, [...(byDate.get(filed) ?? []), id]);
+  for (const [filed, ids] of byDate)
+    await retry(() =>
+      supabaseAdmin.from("ir_documents").update({ filed }).in("id", ids).is("filed", null).abortSignal(AbortSignal.timeout(60_000)),
+    );
 }
 
 /** A historical campaign may finish after an operator has paused it. Only newly processed,
@@ -426,8 +457,9 @@ export async function rebuildCompany(
   let facts = withoutGuardedFacts(stored, refused).filter(isReportedMeasure);
   const wantFill = opts.fill !== false && opts.captions !== false;
   // A company with no stored fact is still built when its documents print statements the fill can read.
+  const older = new Set(plan.older);
   const [tableDocs, reports] = wantFill
-    ? await Promise.all([tableDocuments(ticker, refused), reportDates(ticker)])
+    ? [tableDocuments(docRows, refused, older, plan.placed), await reportDates(ticker)]
     : [[] as TableDoc[], [] as string[]];
   if (!facts.length && !tableDocs.length) return null;
   // STORED-FACT FIXES: pure corrections of stored facts, before table fill and buildPayload.
@@ -435,7 +467,8 @@ export async function rebuildCompany(
   const signed = fixPrintedSigns(facts);
   facts = [...signed.facts];
   const company = coverageOf(ticker)?.shortName;
-  const read = documentReader();
+  const limits = readLimits();
+  const read = documentReader(limits);
   // Filing dates and titles from the document rows: IR-site copies store facts without a filing date.
   const meta = await documentMeta([
     ...new Set(facts.map((f) => f.document_id).filter((x): x is string => !!x)),
@@ -448,23 +481,35 @@ export async function rebuildCompany(
   // Table fill: printed rows the readers left out, read from the stored documents (no model call).
   let run: FillRun | undefined;
   if (wantFill)
-    run = await fillCompany(facts, fillReader(read, { dry: opts.dry, company }), {
+    run = await fillCompany(facts, fillReader(read, { dry: opts.dry, company, limits }), {
       company,
       docs: tableDocs,
       reports,
+      older,
     });
   if (!(run?.facts ?? facts).length) return null;
+  // Filing dates the documents print themselves (`FillRun.dated`): on the payload's documents, and on the rows.
+  for (const [id, filed] of run?.dated ?? []) meta.set(id, { ...(meta.get(id) ?? { kind: null, title: null }), filed });
+  if (!opts.dry && run?.dated.size) await storePrintedDates(run.dated).catch(() => undefined);
   let payload = buildPayload(ticker, run?.facts ?? facts, map);
   // Sections only from the newest 37 months' documents, before any caption is read for them (payload-budget.ts).
   payload = budgetPayload(payload, { cap: Infinity }).payload;
   // Printed titles of the tables the statement view is laid out from (documents already read come from the cache).
-  if (opts.captions !== false) {
-    payload = await withCaptions(payload, async (d) => {
-      const id = payload.docs[d]?.id ?? "";
-      return run?.captions.get(id) ?? (await documentCaptions(id, company, read).catch(() => null));
-    });
+  // In rounds: a table's printed title and columns can part two tables the first layout took for one (a
+  // nine-month statement printed under the same title as the three-month one), and the sections then laid out
+  // need their own tables' titles. Each round only adds tables; it ends when one adds none.
+  for (let round = 0; round < 3; round++) {
+    const had = Object.keys(payload.tables ?? {}).length;
+    if (opts.captions !== false) {
+      const docsOf = payload.docs;
+      payload = await withCaptions(payload, async (d) => {
+        const id = docsOf[d]?.id ?? "";
+        return run?.captions.get(id) ?? (await documentCaptions(id, company, read).catch(() => null));
+      });
+    }
+    if (run) payload = withFill(payload, run);
+    if (Object.keys(payload.tables ?? {}).length === had) break;
   }
-  if (run) payload = withFill(payload, run);
   payload = withDocMeta(payload, meta, run);
   const quality = qualityOf(payload, run);
   // Rebuilds in a row that left history documents waiting: the stale lane comes back at most 8 times.
@@ -476,13 +521,10 @@ export async function rebuildCompany(
   const fullHistory = payload;
   // Reserve space for the quality record and archive reference, added below.
   const reserve = new Blob([JSON.stringify({ quality, plan: plan.counts })]).size + 2048;
-  let bounded = budgetPayload(payload, { cap: BUDGET_BYTES - reserve });
-  const needsShorterHistory = !bounded.budget.ok;
-  if (needsShorterHistory) {
-    // Preserve every visible section; shorter history is the last resort for a dense bank.
-    bounded = budgetPayload(payload, { cap: BUDGET_BYTES - reserve, quarters: 20 });
-  }
-  const archived = needsShorterHistory || bounded.budget.steps.some((step) => step.step === "displayed");
+  // One ladder (payload-budget.ts): the rows the tables print now keep their history longest.
+  const bounded = budgetPayload(payload, { cap: BUDGET_BYTES - reserve });
+  // Whatever the page file leaves out stays downloadable: the full build is stored beside it.
+  const archived = bounded.budget.cut;
   const archivePath = archived ? `series/${ticker}/${crypto.randomUUID()}.json.gz` : null;
   payload = bounded.payload;
   if (archivePath) payload = { ...payload, preview: { basis: "recent-statements", archivePath } };
@@ -498,6 +540,8 @@ export async function rebuildCompany(
         fill: {
           ...quality.fill,
           signs: quality.fill.signs + signed.fixed.length,
+          ...(run?.proForma.size ? { proForma: run.proForma.size } : {}),
+          ...(run?.notResults ? { notResults: run.notResults } : {}),
           pass,
           at: new Date().toISOString(),
         },

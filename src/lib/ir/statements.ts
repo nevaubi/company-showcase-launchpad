@@ -19,6 +19,7 @@ import { capitalWords, sentenceCase, type TableCaption } from "@/lib/ir/table-ca
 import { shapeRows } from "@/lib/ir/statement-tree";
 import { basisOf } from "@/lib/ir/kpis";
 import { FILTER_OF, sectionKind, sectorOf, type SectionKind } from "@/lib/ir/sector-order";
+import { printedChecks, type CheckRow } from "@/lib/ir/statement-checks";
 
 export type StatementRow =
   /** `k` is the line shown; `ks` every line printed in this row (the same printed cell, or the same name under the
@@ -111,8 +112,8 @@ export interface Statement {
 
 /** Year-to-date figures as printed (build format 6): "<months>:<period end>" → cell. Read optionally. */
 type YtdCells = { ytd?: Record<string, PayloadCell> };
-/** Printed figure columns of a table (build format 6): [grid column, months (0 balances), end, printed head]. */
-type PrintedCols = { cols?: [number, number, string, string][] };
+/** Printed figure columns of a table: [grid column, months (0 balances), end, printed head] (`PayloadTable.cols`). */
+type PrintedCols = Pick<PayloadTable, "cols">;
 
 interface Table {
   id: string;
@@ -378,6 +379,14 @@ export function printedDiv(c: { v: number; x?: string }): number | null {
   const r = Math.abs(c.v / n);
   for (const d of [1, 1e3, 1e6, 1e9]) if (Math.abs(r / d - 1) < 0.02) return d;
   return null;
+}
+
+/** The smallest step a printed money or count figure can show, in full units (943.7 in millions: 100,000); null when its print does not tell. */
+export function printedStep(c: { v: number; x?: string }): number | null {
+  const d = printedDiv(c);
+  if (d == null || !c.x) return null;
+  const m = c.x.match(/\d\.(\d+)/);
+  return d / 10 ** (m ? m[1].length : 0);
 }
 
 const mode = <T>(xs: T[]): T | undefined => {
@@ -992,6 +1001,7 @@ function assembleSections(p: IrPayload): Statement[] {
       byKey,
       (r) => rowLabel(r as LineRow, byKey),
       (r, f) => rowCells(r.ks, byKey, f, (r as LineRow).at).cells,
+      dr.anchor.d,
     );
     printedLevels(rows, printedRows);
     // Lines only older documents' copies print (not the same release) close the section, under a heading that
@@ -1080,6 +1090,34 @@ function assembleSections(p: IrPayload): Statement[] {
         first: old.reduce((m, s) => (firstEnd(s) < m ? firstEnd(s) : m), "9999"),
       });
     }
+  }
+  // A year-to-date table whose printed figures the payload does not hold (they are kept only as the parts of
+  // calculated quarters) has nothing to show under its own lengths; under quarter heads it would repeat, line
+  // for line, the statement those lines belong to (Entegris' nine-month statement of operations was listed as
+  // "…, continued" with the three-month statement's figures). It is left out when another section shows
+  // every line it prints now; a company that prints half-years only keeps its statement.
+  const ownYtd = (sec: Statement) =>
+    sec.keys.some((k) =>
+      Object.values((byKey.get(k) as YtdCells | undefined)?.ytd ?? {}).some(
+        (c) => c.d === sec.doc && Array.isArray(c.l) && `${c.d}:${c.l[0]}` === sec.id,
+      ),
+    );
+  const repeats = new Set<string>();
+  for (const sec of sections) {
+    if (sec.basis !== "ytd" || ownYtd(sec)) continue;
+    const elsewhere = new Set(sections.filter((o) => o !== sec && o.basis !== "ytd").flatMap((o) => o.keys));
+    // The lines the table prints now; a line only its older copies print is listed with the unplaced lines.
+    const now = sec.rows.filter((r): r is LineRow => r.kind === "line" && !r.old).map((r) => r.k);
+    if (now.length && now.every((k) => elsewhere.has(k))) repeats.add(sec.id);
+  }
+  if (repeats.size) {
+    const kept = sections.filter((x) => !repeats.has(x.id));
+    const shown = new Set(kept.flatMap((x) => x.keys));
+    return arrange(
+      p,
+      kept,
+      retired.filter((x) => !repeats.has(x.id.replace(/~old$/, "")) || x.keys.some((k) => !shown.has(k))),
+    );
   }
   return arrange(p, sections, retired);
 }
@@ -1267,6 +1305,17 @@ function tableDiv(byKey: Map<string, PayloadSeries>, d: number, t: number): numb
 }
 
 /**
+ * Whether a table's printed columns (`PayloadTable.cols`) are year-to-date ones only: a six- or nine-month
+ * column and no three-month one. Null when the table's columns are not recorded.
+ */
+export function ytdCols(cap: PrintedCols | undefined): boolean | null {
+  const cols = cap?.cols;
+  if (!cols?.length) return null;
+  const months = cols.map((c) => c[1]).filter((m) => m > 0);
+  return months.some((m) => m === 6 || m === 9) && !months.includes(3);
+}
+
+/**
  * Whether a table prints year-to-date columns only (six or nine months, no three-month column): by its printed
  * columns (`PayloadTable.cols`, build format 6), else by the figures located in it (year-to-date cells and no
  * quarter cell). Such a section is shown under its printed lengths and ends, never under quarter heads.
@@ -1278,11 +1327,8 @@ export function ytdBasis(
   d: number,
   t: number,
 ): boolean {
-  const cols = (cap as PrintedCols | undefined)?.cols;
-  if (cols?.length) {
-    const months = cols.map((c) => c[1]).filter((m) => m > 0);
-    return months.some((m) => m === 6 || m === 9) && !months.includes(3);
-  }
+  const printed = ytdCols(cap);
+  if (printed != null) return printed;
   const here = (c: PayloadCell) => c.d === d && Array.isArray(c.l) && c.l[0] === t;
   let ytd = 0;
   for (const k of keys) {
@@ -1377,6 +1423,34 @@ export function rowCells(
         from[e] = k;
       }
   }
+  // A company that changed the scale it prints at keeps its history (Entegris printed thousands until 2023 and
+  // millions since: thirteen years of its statement were left out of rows printed in millions). A figure
+  // printed at another scale fills a period only when it is printed at least as finely as the row's own
+  // figures (thousands under a row in millions; never a slide's "23.1" billion under a row printing 23,136
+  // million) and only before every period the row shows at its own scale, so the two scales never alternate
+  // along a row and a table of the same years at another scale (Netflix's regional table in millions beside
+  // its reconciliation in thousands) still never fills it.
+  if (rowDiv != null) {
+    let firstOwn = "";
+    let coarsest = 0;
+    for (const [e, c] of Object.entries(cells)) {
+      if (printedDiv(c) !== rowDiv) continue;
+      if (!firstOwn || e < firstOwn) firstOwn = e;
+      coarsest = Math.max(coarsest, printedStep(c) ?? 0);
+    }
+    if (firstOwn && coarsest)
+      for (const k of ks) {
+        const s = byKey.get(k);
+        if (!s) continue;
+        for (const [e, c] of Object.entries(cellsFor(s, freq))) {
+          const step = printedStep(c);
+          if (e < firstOwn && !cells[e] && !held[e] && step != null && step <= coarsest) {
+            cells[e] = c;
+            from[e] = k;
+          }
+        }
+      }
+  }
   if (at && (freq === "q" || freq === "y"))
     for (const k of ks) {
       const v = ownOf(k);
@@ -1430,6 +1504,8 @@ export function sectionChecks(
   sec: Statement,
   byKey: Map<string, PayloadSeries>,
   stored: PayloadCheck[] | Map<string, PayloadCheck>,
+  /** the payload left lines out to fit the page (`linesLeftOut`): see `printedChecks` */
+  partial = false,
 ): Map<string, PayloadCheck> {
   const map =
     stored instanceof Map
@@ -1472,7 +1548,47 @@ export function sectionChecks(
       }
     }
   });
+  // Totals and results the build stored no passing check for: what the section's own rows prove
+  // (statement-checks.ts). A year-to-date section's rows are not quarter or year figures.
+  if (sec.basis !== "ytd") {
+    const rows: CheckRow[] = [];
+    sec.rows.forEach((r, i) => {
+      if (r.kind !== "line") return;
+      const lead = byKey.get(r.k);
+      if (!lead) return;
+      const div = lead.unit === "usd" || lead.unit === "count" ? lineDiv(lead) : 1;
+      const dec = printedDecimals(lead);
+      rows.push({
+        i,
+        label: rowLabel(r, byKey),
+        unit: lead.unit,
+        pit: !!lead.pit,
+        total: r.total,
+        ...(r.up != null ? { up: r.up } : {}),
+        ...(r.old ? { old: true } : {}),
+        q: rowCells(r.ks, byKey, "q", r.at),
+        y: rowCells(r.ks, byKey, "y", r.at),
+        step: (c) => {
+          const m = c.x?.match(/\d\.(\d+)/);
+          const d = c.x && /\d/.test(c.x) ? (m ? m[1].length : 0) : dec;
+          return (lead.unit === "usd" || lead.unit === "count" ? (printedDiv(c) ?? div) : 1) / 10 ** d;
+        },
+      });
+    });
+    for (const [key, c] of printedChecks(rows, (k) => out.has(k), partial)) out.set(key, c);
+  }
   return out;
+}
+
+/**
+ * Whether the build left lines out of the payload to fit the page (payload-budget.ts: its collapsed tables,
+ * lines no table shows, or lines only older documents print): the lines a table printed in an earlier period
+ * are then not all known to the page.
+ */
+export function linesLeftOut(p: Pick<IrPayload, "stats">): boolean {
+  return (p.stats.quality?.budget?.steps ?? []).some(
+    (x) => (x.step === "more" || x.step === "displayed" || x.step === "old") && x.dropped > 0,
+  );
 }
 
 /** Lines no printed table or slide places (figures read from sentences): listed apart, by category. */
@@ -1616,9 +1732,12 @@ export async function withCaptions(
   p: IrPayload,
   captionsOf: (d: number) => Promise<TableCaption[] | null | undefined>,
 ): Promise<IrPayload> {
-  const anchors = statementAnchors(p);
+  // Tables that already carry their printed title stay as they are: the rebuild calls this again once the
+  // titles of a first round have told two tables of one name apart (a nine-month statement beside the
+  // three-month one), and the sections then anchored still need theirs.
+  const tables: Record<string, PayloadTable> = { ...(p.tables ?? {}) };
+  const anchors = statementAnchors(p).filter((a) => !tables[`${a.d}:${a.t}`]);
   const docs = [...new Set(anchors.map((a) => a.d))];
-  const tables: Record<string, PayloadTable> = {};
   for (const d of docs) {
     const caps = await captionsOf(d);
     if (!caps) continue;

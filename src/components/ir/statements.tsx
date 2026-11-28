@@ -107,6 +107,7 @@ import {
   scaleNote,
   unplacedLines,
   sectionChecks,
+  linesLeftOut,
   visibleRows,
   type Statement,
   type StatementRow,
@@ -210,9 +211,13 @@ function cellTitle(
     chk
       ? chk.partial
         ? "Selected lines only: not all parts are printed"
-        : chk.ok
-          ? `${chk.n} parts add up to this total`
-          : `Parts add up to ${chk.sum.toLocaleString("en-US")}, the printed total is ${chk.total.toLocaleString("en-US")} (full units)`
+        : chk.f
+          ? chk.ok
+            ? `Ties: ${chk.f}`
+            : `${chk.f} gives ${chk.sum.toLocaleString("en-US")}, the printed figure is ${chk.total.toLocaleString("en-US")} (full units)`
+          : chk.ok
+            ? `${chk.n} parts add up to this total`
+            : `Parts add up to ${chk.sum.toLocaleString("en-US")}, the printed total is ${chk.total.toLocaleString("en-US")} (full units)`
       : null,
     ...(c.flags ?? []).map((f) => f.why),
     "Click to open the source",
@@ -283,7 +288,7 @@ function sectionView(
   const headMap = printedYtd
     ? new Map(cols.map((k) => [k, ytdHead(k)]))
     : uniqueHeads(cols, o.freq, o.fy);
-  const tableChecks = sectionChecks(sec, byKey, checks);
+  const tableChecks = sectionChecks(sec, byKey, checks, linesLeftOut(p));
   let tieOk = 0;
   let tieN = 0;
   const visibleChecks: VisibleStatementCheck[] = [];
@@ -335,7 +340,9 @@ function sectionView(
       const isHeld = !m.cells[e];
       const owner = byKey.get(m.from[e]) ?? s;
       // Only a total the section prints with its parts carries the tie-out mark, checked against those parts.
-      const candidate = r.total && !printedYtd && !isHeld ? tableChecks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
+      // A result the lines above it explain carries it too (`by`, statement-checks.ts).
+      const found = !printedYtd && !isHeld ? tableChecks.get(`${owner.k}|${o.freq}|${e}`) : undefined;
+      const candidate = found && (r.total || found.by) ? found : undefined;
       const chk = candidate && candidate.total === c.v ? candidate : undefined;
       if (chk && !chk.partial) {
         visibleChecks.push({section:sec.title,label:rowLabel(r,byKey),series:owner,cell:c,check:chk});

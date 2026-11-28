@@ -9,7 +9,8 @@ import { tableCaptions, type TableCaption } from "@/lib/ir/table-captions";
 import { dashMeansZero } from "@/lib/ir/table-fill";
 import { parseGrid, type GridCell, type GridTable } from "@/lib/ir/table-grid";
 
-export const FILL_CACHE_VERSION = 1;
+// 2: a cell hidden inside a printed row takes no column (table-grid.ts); copies of version 1 hold shifted columns.
+export const FILL_CACHE_VERSION = 2;
 
 /** A stored document reduced to what the fill reads. */
 export interface FillDoc {

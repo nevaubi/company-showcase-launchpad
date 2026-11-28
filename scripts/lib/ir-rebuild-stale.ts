@@ -18,6 +18,9 @@
  *   IR_REBUILD_MAX=20           companies per pass (1 to 200)
  *   IR_REBUILD_MINUTES=15       minutes per pass before no new company starts (1 to 30); the loop
  *                               stops a pass outright at 45 min (`ir-rebuild` in loop-schedule.ts)
+ *   IR_REBUILD_PARALLEL=1       companies rebuilt side by side, each in a process of its own (1 to 8).
+ *                               The worker keeps 1 (it shares memory with the readers); a catch-up run
+ *                               by hand on an idle machine passes --parallel
  *   IR_REBUILD_BESIDE=0         back to idle-only passes (default: the lane takes one reading lane's
  *                               place while stale payloads are left, `staleLane`)
  *   IR_REBUILD_REPAIR_BEFORE=<ISO time>
@@ -49,6 +52,8 @@ export interface RebuildSettings {
   stale: boolean;
   /** IR_REBUILD_REPAIR_BEFORE in ms: payloads at the current format built before it are taken; null when unset */
   repairBefore: number | null;
+  /** IR_REBUILD_PARALLEL: companies rebuilt side by side, each in a process of its own (1 to 8; default 1) */
+  parallel: number;
 }
 
 const bounded = (v: string | undefined, def: number, lo: number, hi: number) => {
@@ -69,6 +74,7 @@ export function rebuildSettings(env: Record<string, string | undefined>): Rebuil
     maxMs: bounded(env["IR_REBUILD_MINUTES"], 15, 1, 30) * 60_000,
     stale,
     repairBefore,
+    parallel: bounded(env["IR_REBUILD_PARALLEL"], 1, 1, 8),
   };
 }
 
@@ -218,29 +224,21 @@ export interface PassResult {
 }
 
 /**
- * One bounded pass: the stale tickers in lane order, one at a time, stopping at `maxCompanies` or
- * once `maxMs` is spent. State is saved after every company.
+ * One bounded pass: the stale tickers in lane order, stopping at `maxCompanies` or once `maxMs` is
+ * spent. State is saved after every company. `settings.parallel` (default 1: one at a time) is how
+ * many companies are rebuilt side by side: each lane takes the next company in order, so the order
+ * and the bounds are the same and only the wall time differs; no new company starts once a bound is hit.
  */
-export async function runPass(state: RebuildState, order: readonly string[], settings: PassBounds, deps: PassDeps): Promise<PassResult> {
+export async function runPass(state: RebuildState, order: readonly string[], settings: PassBounds & { parallel?: number }, deps: PassDeps): Promise<PassResult> {
   const t0 = deps.now();
   pruneFailures(state, order);
   const todo = eligible(state, order, t0).filter((t) => !deps.skip?.has(t));
   const result: PassResult = { rebuilt: [], failed: {}, review: [], left: 0, stale: order.length, stoppedBy: "done" };
+  const lanes = Math.max(1, Math.floor(settings.parallel ?? 1));
+  /** next company to take, and how many were taken */
   let i = 0;
-  for (; i < todo.length; i++) {
-    if (deps.stopped?.()) {
-      result.stoppedBy = "signal";
-      break;
-    }
-    if (result.rebuilt.length + Object.keys(result.failed).length >= settings.maxCompanies) {
-      result.stoppedBy = "companies";
-      break;
-    }
-    if (deps.now() - t0 >= settings.maxMs) {
-      result.stoppedBy = "time";
-      break;
-    }
-    const t = todo[i]!;
+  let stoppedBy: PassResult["stoppedBy"] | null = null;
+  const one = async (t: string) => {
     await deps.gate();
     const started = deps.now();
     let error: string | null = null;
@@ -260,7 +258,19 @@ export async function runPass(state: RebuildState, order: readonly string[], set
     }
     state.at = new Date(deps.now()).toISOString();
     await deps.save(state);
-  }
+  };
+  const lane = async () => {
+    for (;;) {
+      if (stoppedBy || i >= todo.length) return;
+      if (deps.stopped?.()) stoppedBy = "signal";
+      else if (i >= settings.maxCompanies) stoppedBy = "companies";
+      else if (deps.now() - t0 >= settings.maxMs) stoppedBy = "time";
+      if (stoppedBy) return;
+      await one(todo[i++]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(lanes, Math.max(1, todo.length)) }, lane));
+  result.stoppedBy = stoppedBy ?? "done";
   result.left = todo.length - i;
   result.review = reviewList(state);
   state.at = new Date(deps.now()).toISOString();

@@ -2,8 +2,11 @@
  * One bounded pass of the stale IR payload lane (rules in scripts/lib/ir-rebuild-stale.ts): rebuilds
  * companies whose ir_company_series stats lack the current BUILD_FORMAT, banks first, one at a time,
  * from stored facts, label maps and document text. No model or paid API is called.
- *   bun scripts/ir-rebuild-stale.ts [--max=20] [--minutes=15] [--skip=JPM,NVDA] [--dry]
+ *   bun scripts/ir-rebuild-stale.ts [--max=20] [--minutes=15] [--parallel=1] [--skip=JPM,NVDA] [--dry]
  * --skip: companies a reading lane holds now (the loop passes them); left for a later pass.
+ * --parallel: companies rebuilt side by side (1 to 8), each in a process of its own (`--one=T`, used
+ *   only by the pass itself), so one company's memory is given back when it ends and a crash loses
+ *   one company. For a catch-up run by hand on an idle machine; the worker keeps one at a time.
  * The IR loop starts it in idle time (scripts/ir-deep-loop.ts); by hand it waits for nothing and
  * exits when another pass holds the `ir-rebuild-stale` lease.
  */
@@ -18,6 +21,7 @@ const settings = rebuildSettings({
   ...process.env,
   ...(args.max ? { IR_REBUILD_MAX: args.max } : {}),
   ...(args.minutes ? { IR_REBUILD_MINUTES: args.minutes } : {}),
+  ...(args.parallel ? { IR_REBUILD_PARALLEL: args.parallel } : {}),
 });
 const DRY = args.dry !== undefined;
 /** The lease outlives the pass budget plus one slow company; the loop's deadline kills a pass before it ends. */
@@ -59,15 +63,49 @@ const releaseLease = () => sb.from("job_state")
   .update({ paused_reason: null, lease_until: new Date().toISOString(), updated_at: new Date().toISOString() })
   .eq("job", REBUILD_JOB).eq("paused_reason", owner);
 
+/** A company that has not ended after this long is stopped and counted as failed (its row is untouched). */
+const ONE_LIMIT_MS = 25 * 60_000;
+/** Exit code of `--one` when the company has nothing to build from. */
+const EMPTY_EXIT = 3;
+const children = new Set<{ kill: () => void }>();
+
+/** One company in a process of its own (`--parallel`): resolves like `rebuildCompany`, throws its error. */
+async function rebuildInChild(t: string): Promise<boolean> {
+  const child = Bun.spawn(["bun", import.meta.path, `--one=${t}`, ...(DRY ? ["--dry"] : [])], { stdout: "ignore", stderr: "pipe", env: process.env });
+  children.add(child);
+  const timer = setTimeout(() => child.kill(), ONE_LIMIT_MS);
+  try {
+    const [code, err] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    if (code === 0) return true;
+    if (code === EMPTY_EXIT) return false;
+    throw new Error(err.trim().split("\n").at(-1)?.slice(0, 300) || `rebuild process ended with code ${code}`);
+  } finally {
+    clearTimeout(timer);
+    children.delete(child);
+  }
+}
+
+if (import.meta.main && args.one) {
+  // Child of a parallel pass: one company, no lease (the pass holds it), the result in the exit code.
+  try {
+    await dbGate(REBUILD_JOB);
+    process.exit((await rebuildCompany(args.one, { dry: DRY })) !== null ? 0 : EMPTY_EXIT);
+  } catch (e) {
+    console.error((e as Error).message || String(e));
+    process.exit(1);
+  }
+}
+
 let stop = false;
 for (const signal of ["SIGTERM", "SIGINT"] as const)
   process.on(signal, () => {
     // The company in progress is abandoned (its row is untouched or already current); the next pass reselects.
     stop = true;
+    for (const c of children) c.kill();
     void releaseLease().then(() => process.exit(0), () => process.exit(0));
   });
 
-if (import.meta.main) {
+if (import.meta.main && !args.one) {
   if (!settings.enabled) process.exit(0);
   const t0 = Date.now();
   await dbGate(REBUILD_JOB);
@@ -85,9 +123,9 @@ if (import.meta.main) {
       const scope = staleOn ? "" : " only";
       log(`repair: payloads at build ${BUILD_FORMAT} written before ${before}${scope}`);
     }
-    log(`${stale.length} of ${rows.length} payloads to rebuild (build ${BUILD_FORMAT}); this pass takes up to ${settings.maxCompanies} companies in ${settings.maxMs / 60_000} min, first ${order.slice(0, 6).join(", ") || "none"}`);
+    log(`${stale.length} of ${rows.length} payloads to rebuild (build ${BUILD_FORMAT}); this pass takes up to ${settings.maxCompanies} companies in ${settings.maxMs / 60_000} min${settings.parallel > 1 ? `, ${settings.parallel} side by side` : ""}, first ${order.slice(0, 6).join(", ") || "none"}`);
     const r = await runPass(state, order, settings, {
-      rebuild: async (t) => (await rebuildCompany(t, { dry: DRY })) !== null,
+      rebuild: settings.parallel > 1 ? rebuildInChild : async (t) => (await rebuildCompany(t, { dry: DRY })) !== null,
       gate: () => dbGate(REBUILD_JOB),
       save: saveState,
       now: Date.now,

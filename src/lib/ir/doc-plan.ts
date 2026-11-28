@@ -17,7 +17,7 @@
 // loaded.
 // Counts per reason go to stats.quality.plan.
 
-import { scenarioDocument } from "./reported-scope";
+import { resultsExhibit, scenarioDocument } from "./reported-scope";
 
 /** A document row as the store keeps it (ir_documents). */
 export interface PlanDocRow {
@@ -33,6 +33,9 @@ export interface PlanDocRow {
   extract_facts?: number | null;
   /** figures the text reader stored from the document */
   prose_facts?: number | null;
+  /** stored size and the table reader's verdict, for the table fill's choice of documents (table-fill-build.ts) */
+  bytes?: number | null;
+  extract_status?: string | null;
 }
 
 export type PlanSkip = "scenario" | "copy" | "deck" | "older" | "too-old" | "undated";
@@ -40,6 +43,17 @@ export type PlanSkip = "scenario" | "copy" | "deck" | "older" | "too-old" | "und
 export interface DocPlan {
   /** documents whose facts are loaded, newest first */
   load: string[];
+  /**
+   * Of them, the primary statement documents older than the full window (one family a quarter: the supplement
+   * when the company files one, else the release). The table fill reads their statements too, so a statement's
+   * rows run back as far as the documents are stored, not only as far as the full window.
+   */
+  older: string[];
+  /**
+   * Loaded documents stored without a filing date, with the date they were placed at (from their `period`).
+   * The table fill reads them in that place; the date is never written as a filing date.
+   */
+  placed: Record<string, string>;
   counts: {
     stored: number;
     loaded: number;
@@ -185,9 +199,12 @@ export function planDocuments(rows: readonly PlanDocRow[]): DocPlan {
       open.set(kind, list);
     }
   }
-  // Supplements by quarter of filing (for the older history's primary documents): filing dates only.
+  // Supplements by quarter of filing (for the older history's primary documents): filing dates only, and only
+  // supplements of a results 8-K (or of no 8-K), so another exhibit never displaces the quarter's release.
   const supQuarters = new Set(
-    families.filter((f) => f.rows[0].kind === "supplement").map((f) => quarterOf(f.date!)),
+    families
+      .filter((f) => f.rows[0].kind === "supplement" && f.rows.some((r) => resultsExhibit(r.title) !== false))
+      .map((f) => quarterOf(f.date!)),
   );
   // Undated documents: a copy only of a document of the same kind, period and title; else a family of its own.
   const byName = new Map<string, Family>();
@@ -214,7 +231,8 @@ export function planDocuments(rows: readonly PlanDocRow[]): DocPlan {
   const decks = newest ? monthsBack(newest, PLAN_DECK_MONTHS) : "";
   const oldest = newest ? monthsBack(newest, PLAN_YEARS * 12) : "";
 
-  const load: { id: string; date: string }[] = [];
+  const load: { id: string; date: string; older?: true }[] = [];
+  const placedAt: [string, string][] = [];
   let loadedUndated = 0;
   for (const f of families) {
     const best = bestOf(f);
@@ -232,11 +250,15 @@ export function planDocuments(rows: readonly PlanDocRow[]): DocPlan {
       }
       if (at < full) {
         // A placed quarter is not exact enough to say which of the two that quarter's primary document is.
-        const primary = f.placed
-          ? best.kind === "supplement" || best.kind === "press-release"
-          : supQuarters.has(quarterOf(f.date))
-            ? best.kind === "supplement"
-            : best.kind === "press-release";
+        // An exhibit of an 8-K that reported no results (no Item 2.02: an acquisition, a financing, an investor
+        // day) is never a quarter's primary statement document.
+        const primary =
+          resultsExhibit(best.title) !== false &&
+          (f.placed
+            ? best.kind === "supplement" || best.kind === "press-release"
+            : supQuarters.has(quarterOf(f.date))
+              ? best.kind === "supplement"
+              : best.kind === "press-release");
         if (!primary) {
           skip("older");
           continue;
@@ -244,11 +266,15 @@ export function planDocuments(rows: readonly PlanDocRow[]): DocPlan {
       }
     }
     if (!best.filed) loadedUndated++;
-    load.push({ id: best.id, date: f.date ?? "" });
+    if (!best.filed && f.date) placedAt.push([best.id, f.date]);
+    const at = f.date ? (f.placed ? iso(time(f.date) + PLAN_PLACED_DAYS * DAY) : f.date) : "";
+    load.push({ id: best.id, date: f.date ?? "", ...(at && at < full ? { older: true as const } : {}) });
   }
   load.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
   return {
     load: load.map((x) => x.id),
+    older: load.filter((x) => x.older).map((x) => x.id),
+    placed: Object.fromEntries(placedAt),
     counts: {
       stored: rows.length,
       loaded: load.length,

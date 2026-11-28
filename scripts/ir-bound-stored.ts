@@ -19,9 +19,8 @@ for (const ticker of (args.tickers ?? "").split(",").filter(Boolean)) {
   const full = JSON.parse(await file.text()) as IrPayload;
   if (full.ticker !== ticker || full.preview) { log(`${ticker}: stored file is not a full history, skipped`); continue; }
   const reserve = 4096;
-  let b = budgetPayload(full, { cap: BUDGET_BYTES - reserve });
-  // Shorter history is the last resort, as in rebuildCompany; the full file stays the archive.
-  for (const quarters of [20, 16, 12]) if (!b.budget.ok) b = budgetPayload(full, { cap: BUDGET_BYTES - reserve, quarters });
+  // The same ladder as rebuildCompany (shorter history is its last resort); the full file stays the archive.
+  const b = budgetPayload(full, { cap: BUDGET_BYTES - reserve });
   if (!b.budget.ok) { log(`${ticker}: still over budget (${b.budget.after})`); continue; }
   const archivePath = row.payload_path;
   const payload: IrPayload = {
