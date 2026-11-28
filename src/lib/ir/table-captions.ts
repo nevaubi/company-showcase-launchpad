@@ -37,7 +37,45 @@ const NOISE = /^\(?(unaudited|continued|in \w+)\)?$/i;
  * "Preliminary", Merck's "Table", Costco's balance sheet "Subject to reclassification".
  */
 const STAMP =
-  /^\(?(preliminary|draft|subject to reclassification|document|table(\s+\d+[a-z]?)?|exhibit(\s+\d+(\.\d+)?)?|category\s*:.*|(n\/a|n\.?m\.?)\b.*)\)?\.?$/i;
+  /^\(?(preliminary|draft|subject to reclassification|document|(table|schedule|attachment|appendix|annex|exhibit)(\s+[a-z0-9]{1,4}([.-][a-z0-9]{1,3})?)?|category\s*:.*|(n\/a|n\.?m\.?)\b.*)\)?\.?$/i;
+
+/** A financial statement's name, as a title prints it. */
+export const STATEMENT_NAME =
+  /\bstatements?\s+of\s+(?:[a-z]+\s+){0,3}?(?:income|operations|earnings|cash\s+flows?|financial\s+(?:position|condition))\b|\b(?:income\s+statements?|balance\s+sheets?|cash\s+flows?\s+statements?)\b/i;
+
+/** Words of statement titles that documents print broken by a stray space. */
+const TITLE_WORDS = ["consolidated", "condensed", "statements", "statement", "operations", "balance", "sheets", "income", "earnings"];
+const BROKEN = new RegExp(`\\b(?:${TITLE_WORDS.map((w) => w.split("").join("\\s?")).join("|")})\\b`, "gi");
+/**
+ * A title with the words of a statement's name put back together where a stray space breaks them
+ * (Universal Display prints "CONSOLIDATED STAT EMENTS OF INCOME", Century Communities "C onsolidated Balance
+ * Sheet"); everything else as printed.
+ */
+export function healTitle(s: string): string {
+  return s.replace(BROKEN, (m) => (/\s/.test(m) ? m.replace(/\s+/g, "") : m));
+}
+
+/**
+ * The statement name the last of some lines print, nearest first: a line that names a statement, or two or
+ * three short lines that only name one together (California Water prints "CONDENSED CONSOLIDATED STATEMENTS"
+ * over "OF OPERATIONS", Virtu "... Statements of Financial" over "Condition"). `at` is the index of the line
+ * the name ends on; null when the lines name none.
+ */
+export function statementLine(lines: string[], from = lines.length - 1, reach = 6): { title: string; at: number } | null {
+  const clean = (x: string) => healTitle(x.replace(/\s*\((unaudited|continued)\)\s*/gi, " ").trim());
+  for (let i = from; i >= 0 && from - i < reach; i--) {
+    const one = clean(lines[i]);
+    if (one.length <= 140 && STATEMENT_NAME.test(one)) return { title: one, at: i };
+    for (const k of [1, 2]) {
+      if (i - k < 0) break;
+      const parts = lines.slice(i - k, i + 1).map(clean);
+      if (parts.some((x) => x.length > 80 || STATEMENT_NAME.test(x))) continue;
+      const joined = parts.join(" ");
+      if (STATEMENT_NAME.test(joined)) return { title: joined, at: i };
+    }
+  }
+  return null;
+}
 /** The company's legal name printed in one cell with the title after it ("THE PROCTER & GAMBLE COMPANY AND SUBSIDIARIES Consolidated Balance Sheets"). */
 const COMPANY_PREFIX =
   /^.{2,80}?\b(inc|corp|corporation|co|company|incorporated|ltd|plc|llc|n\.v|s\.a|ag|se)\.?,?\s+(and|&)\s+(its\s+)?(consolidated\s+)?subsidiaries\b[.,:]?\s+(?=\S)/i;
@@ -83,6 +121,8 @@ function titleLike(s: string, company?: string) {
     return false;
   if (!/[a-z]{3,}/i.test(s)) return false;
   if (NOISE.test(s) || STAMP.test(s) || SCALE.test(s)) return false;
+  // A piece of a scale line broken over two lines ("(in" over "thousands )").
+  if (/^(thousands|millions|billions)\b/i.test(s) || (s.match(/\(/g)?.length ?? 0) !== (s.match(/\)/g)?.length ?? 0)) return false;
   // The tail of a sentence broken over two lines ("each segment.").
   if (/^[a-z]/.test(s) && /[.,;]$/.test(s)) return false;
   if (ENTITY.test(s) || SUBSIDIARIES.test(s)) return false;
@@ -127,11 +167,21 @@ function captionOf(t: ParsedTable, before: string[], company?: string): TableCap
       (c) =>
         MONTH.test(c) ||
         /\b(19|20)\d{2}\b/.test(c) ||
+        /^\d{1,2}\/\d{1,2}\/\d{2}$/.test(c.trim()) ||
         /months? ended|\bf?q[1-4]\b|\b[1-4]q\b|\b[1-4]q\d{2}\b/i.test(c) ||
         (filled(r).length > 1 && /quarterly/i.test(c)),
     ),
   );
-  for (const r of heads0 < 0 ? top : top.slice(0, heads0)) {
+  const above = heads0 < 0 ? top : top.slice(0, heads0);
+  // A row that names a statement is the title wherever its cell sits and whatever is printed over it
+  // (American States Water prints "Consolidated" and, under it over the figure columns, "Comparative
+  // Condensed Balance Sheets"; Charles River "SCHEDULE 1" over the statement's name).
+  const singles = above.map((r) => filled(r)).filter((f) => f.length === 1).map((f) => titleCore(f[0]));
+  const named = statementLine(singles, singles.length - 1, singles.length);
+  if (named && titleLike(named.title, company)) out.title = named.title;
+  /** The title is a block heading or a lone word, which a statement name printed before the table outranks. */
+  let weak = false;
+  for (const r of above) {
     const f = filled(r);
     if (f.length !== 1) continue;
     const s = f[0];
@@ -151,28 +201,32 @@ function captionOf(t: ParsedTable, before: string[], company?: string): TableCap
   // Income" beside "For Three Months Ended September 30,").
   if (!out.title && heads0 >= 0) {
     const c0 = top[heads0][0]?.trim() ?? "";
-    if (c0 && !SCALE.test(c0) && titleLike(c0, company)) out.title = c0;
+    if (c0 && !SCALE.test(c0) && titleLike(c0, company)) {
+      out.title = c0;
+      weak = true;
+    }
   }
-  // A title printed in the label cell of the period-heads row (Texas Instruments: "Consolidated Statements of
-  // Income" beside "For Three Months Ended September 30,").
-  if (!out.title && heads0 >= 0) {
-    const c0 = top[heads0][0]?.trim() ?? "";
-    if (c0 && !SCALE.test(c0) && titleLike(c0, company)) out.title = c0;
-  }
+  if (out.title && !/\s/.test(out.title.trim())) weak = true;
+  if (out.title && STATEMENT_NAME.test(healTitle(out.title))) weak = false;
   // Text before the table: the nearest title-like line, and a scale line beside it.
   for (let i = before.length - 1, seen = 0; i >= 0 && seen < 6; i--, seen++) {
     const s = before[i];
     if (!out.unit && SCALE.test(s) && s.length < 160) out.unit = s.match(SCALE)![0].trim();
-    if (!out.title && titleLike(s, company)) {
-      out.title = s.replace(/\s*\((unaudited|continued)\)\s*/gi, " ").trim();
+    if ((!out.title || weak) && titleLike(s, company)) {
+      // The nearest title-like line, whole: a statement's name broken over lines is read with the lines above it.
+      const whole = statementLine(before, i, 1);
+      if (whole) out.title = whole.title;
+      else if (!out.title) out.title = s.replace(/\s*\((unaudited|continued)\)\s*/gi, " ").trim();
       break;
     }
   }
   if (out.title)
-    out.title = out.title
-      .replace(/\s*\(unaudited\)\s*/gi, " ")
-      .replace(/:\s*$/, "")
-      .trim();
+    out.title = healTitle(
+      out.title
+        .replace(/\s*\(unaudited\)\s*/gi, " ")
+        .replace(/:\s*$/, "")
+        .trim(),
+    );
   if (first < 0) return out;
   let last = first;
   t.rows.forEach((r, i) => {

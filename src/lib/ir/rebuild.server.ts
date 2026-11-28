@@ -24,6 +24,7 @@ import {
   FILL_DOCS,
   fillCompany,
   qualityOf,
+  statementPeriodEnds,
   tableDocRows,
   withDocMeta,
   withFill,
@@ -388,7 +389,12 @@ export function tableDocuments(
   });
 }
 
-/** Period ends of the company's 10-Q and 10-K reports, for its fiscal calendar. */
+/**
+ * Period ends of the company's 10-Q and 10-K reports, for its fiscal calendar and for the day of a period a
+ * release heads by month and year alone. Where the filing index holds no such report for the company (about
+ * a hundred covered companies: the index starts after their last one), the quarter ends of its SEC statement
+ * file are used instead; without either, no period a document heads can be checked and nothing of it is read.
+ */
 export async function reportDates(ticker: string): Promise<string[]> {
   const { data, error } = await retry(() =>
     supabaseAdmin
@@ -398,13 +404,25 @@ export async function reportDates(ticker: string): Promise<string[]> {
       .in("form", ["10-Q", "10-K"])
       .not("report", "is", null)
       .order("report", { ascending: false })
-      .limit(12)
+      .limit(80)
       .abortSignal(AbortSignal.timeout(60_000)),
   );
-  if (error) return [];
-  return ((data ?? []) as { report: string | null }[])
-    .map((r) => r.report)
-    .filter((x): x is string => !!x);
+  const filed = error
+    ? []
+    : ((data ?? []) as { report: string | null }[]).map((r) => r.report).filter((x): x is string => !!x);
+  if (filed.length >= 4) return filed;
+  const fromFile = await statementFileDates(ticker).catch(() => [] as string[]);
+  return [...new Set([...filed, ...fromFile])].sort().reverse();
+}
+
+/** Quarter and year ends of the company's SEC statement file (`companies/T.json` in the datasets bucket), newest first. */
+async function statementFileDates(ticker: string): Promise<string[]> {
+  const { data } = await supabaseAdmin.storage.from("datasets").download(`companies/${ticker}.json`);
+  if (!data) return [];
+  const file = JSON.parse(await data.text()) as {
+    statements?: Record<string, Record<string, { periods?: { end?: string }[] } | undefined> | undefined>;
+  };
+  return statementPeriodEnds(file);
 }
 
 /** Write filing dates the documents print to their rows, only where the row has none (never over a known date). */

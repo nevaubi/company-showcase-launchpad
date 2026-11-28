@@ -5,10 +5,28 @@ what is missing, measured: `docs/data-estate.md`. History to 27 Nov 2026: `docs/
 
 ## Waiting on the owner
 
-- [ ] AI credit: the AI gateway (out since 26 Nov) and the OpenAI paid key are empty. IR deep builds, label canon, supply links, supply intelligence, promises and written summaries wait on it.
-- [ ] Vendor content: may transcripts or figures from the vendor archive be shown on a page? Until answered they are used only as a list of what exists and as a private cross-check.
-- [ ] Options: Cboe has refused the collector since 19 Nov. Slower pace, or another source?
+- [x] AI credit: refilled (owner, 27 Nov).
+- [x] Vendor content: may be shown with the vendor named as the source (owner, 27 Nov). The collector stays stopped until its repairs are done and he asks.
+- [x] Options: Yahoo Finance or Firecrawl, not Cboe (owner, 27 Nov).
 - [ ] Email sender domain for waitlist receipt and approval emails.
+
+## Now: investor-data pages, accurate and complete (owner, 27 to 28 Nov)
+
+Every company page rebuilt from the documents already stored: no AI credit, nothing collected anew.
+
+- [x] Save progress on request (owner, 28 Nov 01:35 UTC): everything committed; the push to the repository happens when the turn ends.
+- [x] BAC and Citi pages fit the page limit again (12 and 40 quarters shown, the full archive kept for download).
+- [x] Reader mistakes found on real releases and fixed, each with a test on the document: hidden cells shifting columns, another company's pro forma exhibit read as the company's own, cash flows read as balances, a nine-month statement listed as a second quarterly one, decimal money misread, the exchange-rate effect read as a rate.
+- [x] Check marks: totals against their parts, results against their formula (gross profit, operating income, net income, total assets, change in cash against the three activity totals), older periods checked with the lines printed then; a failing check is shown only where the parts are proven.
+- [x] Rows shown at the scale the company prints now; a row joined across releases that restate a comparative.
+- [ ] Running: every existing page (797) rebuilt with the corrected rules, then first pages for the 957 companies that have stored releases and no page. `scripts/ir-rebuild-stale.ts --first`, eight at a time, BAC and C skipped. 399 done at 01:35 UTC, none failed.
+- [ ] In hand, written and passing the reader tests, not yet tried on the trial companies: more release layouts. Fiscal calendar from the SEC statement file where the filing index has no 10-Q or 10-K (103 companies read nothing without it), numeric dates ("9/30/2026"), month-and-year heads, a year alone under a dated title, three-column balance sheets, titles broken over two lines or behind "Schedule 1", statements carried on in a second table. On 160 companies with no page: nothing read for 33 before, 18 after; figures read up 22%.
+- [ ] Next layouts, by how often the survey met them: a scale stated after or inside the table (Revolution Medicines, GEO, Tradeweb, Stepan); fiscal-quarter heads ("Third Quarter 2026", "Q3 2026", "Second Quarter of Fiscal 2027": Kirby, GEO, Pinterest, California Resources); five-quarter trend heads (Radian); titles "Results of operations" and "Condensed cash flow" (Piper Sandler, Bio-Techne).
+- [ ] Then raise the build format and rebuild every page once more, so all of them carry the layouts above.
+- [ ] Audit of every rebuilt page (`scripts/ir-audit.ts`): companies with a failing check, a missing statement or thin history, worked through by how many companies share the cause.
+- [ ] Known gaps from the trials: Progressive's month-ends (39 quarters against 44 before), UnitedHealth's image-only releases, NextEra's "Preliminary" captions, Procter & Gamble's titles, Home Depot's stray 1977 column, Microsoft's product revenue after the rebuild, thin sections at Costco and Tesla.
+- [ ] Bank of America: 93 quarters are in the archive, 12 fit the page. Older periods loaded when the reader asks for them.
+- [ ] Roll the saved-figure rewrite back on for the Render worker once the format is final (it is switched off there; this run happens in the workspace).
 
 ## Phase 0. Control
 
@@ -62,7 +80,7 @@ what is missing, measured: `docs/data-estate.md`. History to 27 Nov 2026: `docs/
 
 - [ ] Supply intelligence stuck at "retry 6: interrupted" since 20 Nov (47 companies covered): one company at a time, place kept.
 - [ ] Analytics publish times out at 30 minutes (9 of 10 runs); prose reader times out at 2 hours: split and continue.
-- [ ] IR rebuild: BAC and C payloads over the size limit.
+- [x] IR rebuild: BAC and C payloads over the size limit (bounded 27 Nov; older BAC periods on demand is listed under "Now").
 - [ ] EIA table T01.10: "undefined is not a function" on refresh; published snapshot (78 rows) untouched.
 - [ ] FRED refresh: download deadline; baseline and pointer untouched.
 - [ ] Setup replay holds: HUBB and WLY have a source bar on 5 May 2021 with the low above the open; 62 companies with too short a history; 5 delisted.

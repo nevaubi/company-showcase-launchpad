@@ -24,7 +24,7 @@ import type { IrFact } from "@/lib/ir/kpis";
 import { normLabel } from "@/lib/ir/kpis";
 import { parseNumber } from "@/lib/ir/tables";
 import { stockKind } from "@/lib/ir/stock";
-import { sentenceCase } from "@/lib/ir/table-captions";
+import { healTitle, sentenceCase } from "@/lib/ir/table-captions";
 import { parseGrid, type GridCell, type GridRow, type GridTable } from "@/lib/ir/table-grid";
 
 export const FILL_METHOD = "printed";
@@ -121,6 +121,8 @@ export interface FillInput {
   calendar?: string[];
   /** a document no stored fact points into: only its statement tables are read */
   statementsOnly?: boolean;
+  /** period ends known to the day (the company's 10-Q and 10-K report dates), see `KnownPeriods.exact` */
+  exact?: string[];
   /** document fields for filled facts when the document has no stored fact to copy them from */
   meta?: { filed: string | null; kind: string | null; accn?: string | null; doc?: string | null };
 }
@@ -376,6 +378,12 @@ export interface KnownPeriods {
   calendar?: string[];
   /** filing date of the document: no printed period ends after it */
   filed?: string | null;
+  /**
+   * Period ends known to the day ("YYYY-MM-DD"): the company's 10-Q and 10-K report dates and the ends its
+   * stored facts use. A head that prints a month and a year without a day ("September 2026") takes its day
+   * from one of these.
+   */
+  exact?: string[];
 }
 
 const MONTHS: Record<string, number> = {
@@ -485,6 +493,87 @@ interface HeadPeriod extends Period {
   fresh?: boolean;
 }
 
+const NAMED_DATE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+((?:19|20)\d{2})\b/gi;
+const NUMERIC_DATE = /(?<![\d/.-])(\d{1,2})\/(\d{1,2})\/((?:19|20)\d{2}|\d{2})(?![\d/])/g;
+const MONTH_YEAR = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+((?:19|20)\d{2})\b/gi;
+const MONTH_DAY = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b(?!\s*(?:months?|weeks?|days?|years?|quarters?)\b)/gi;
+const iso = (y: number, m: number, d: number) =>
+  `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+const lastDay = (y: number, m: number) => (m === 2 && y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 29 : MONTH_DAYS[m - 1]);
+const dayNumber = (d: string) => Date.parse(`${d}T00:00:00Z`) / 86_400_000;
+
+/**
+ * The full dates a text prints, in order, each once: "September 26, 2026", "Sept. 26, 2026", and the numeric
+ * form US filers use, month first ("9/26/2026", "9/26/26"; Dorman, Bio-Techne and Centerspace head their
+ * statements so). A numeric date whose month or day cannot be one is not a date.
+ */
+export function fullDates(text: string): string[] {
+  const at: [number, string][] = [];
+  for (const m of text.matchAll(NAMED_DATE)) {
+    const mon = MONTHS[m[1].toLowerCase().slice(0, 3)];
+    const day = Number(m[2]);
+    if (day >= 1 && day <= lastDay(Number(m[3]), mon)) at.push([m.index!, iso(Number(m[3]), mon, day)]);
+  }
+  for (const m of text.matchAll(NUMERIC_DATE)) {
+    const mon = Number(m[1]);
+    const day = Number(m[2]);
+    const year = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+    if (mon >= 1 && mon <= 12 && day >= 1 && day <= lastDay(year, mon)) at.push([m.index!, iso(year, mon, day)]);
+  }
+  return [...new Set(at.sort((a, b) => a[0] - b[0]).map((x) => x[1]))];
+}
+
+/** Words that make a year in a head something other than a plain period ("Fiscal 2027", "Q3 2026", "2026 Guidance"). */
+const NOT_PLAIN_YEAR =
+  /\bq[1-4]\b|\b[1-4]q\b|\bquarters?\b(?!\s+ended)|\bqtr\b|\bytd\b|\bfiscal\b|\bfy\b|\bguidance\b|\boutlook\b|\bforecast\b|\bestimate|\bpro forma\b|\badjusted\b|\bnon-?gaap\b|\bbudget\b|\bplan\b|\btarget\b|\bactual\b|\bhigh\b|\blow\b/i;
+
+/**
+ * The one date a column head stands for, or null. In order:
+ * - a full date in the head itself (`fullDates`);
+ * - a month and a year without a day ("September 2026", "Three Months Ended September | 2026"): the period end
+ *   known to the day (`known.exact`, the document's own fact ends) that falls in that month or within a week
+ *   of it (Kontoor Brands' "September 2026" is its quarter ended October 3, 2026); with none known, the last
+ *   day of the month when every quarter of the fiscal calendar ends on a month's last day; otherwise none;
+ * - a year alone ("2026" under "Three Months Ended") when the table's title lines (`words`) print the date:
+ *   the one full date of that year they print, else the one month and day they print with that year (Wendy's
+ *   "Periods Ended September 28, 2025 and September 27, 2026" over "2025 | 2026"; Sensient's "Nine Months
+ *   Ended September 30," in the label column over "2026 | 2025").
+ * A head printing two dates, or a year beside words that make it something else (`NOT_PLAIN_YEAR`), gives none.
+ */
+export function headEnd(head: string, words: string, known: Pick<KnownPeriods, "exact" | "ends" | "calendar">): string | null {
+  const full = fullDates(head);
+  if (full.length) return full.length === 1 ? full[0] : null;
+  const my = [...head.matchAll(MONTH_YEAR)];
+  if (my.length > 1) return null;
+  if (my.length === 1) {
+    const mon = MONTHS[my[0][1].toLowerCase().slice(0, 3)];
+    const year = Number(my[0][2]);
+    const from = dayNumber(iso(year, mon, 1)) - 7;
+    const to = dayNumber(iso(year, mon, lastDay(year, mon))) + 7;
+    const hits = [...new Set([...(known.exact ?? []), ...(known.ends ?? [])])].filter((d) => {
+      const n = dayNumber(d);
+      return n >= from && n <= to;
+    });
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) return null;
+    const monthEnds = !!known.calendar?.length && known.calendar.every((md) => Number(md.slice(3)) === MONTH_DAYS[Number(md.slice(0, 2)) - 1]);
+    return monthEnds ? iso(year, mon, lastDay(year, mon)) : null;
+  }
+  const years = [...head.matchAll(/\b((?:19|20)\d{2})\b/g)].map((m) => Number(m[1]));
+  if (years.length !== 1 || NOT_PLAIN_YEAR.test(head)) return null;
+  // The head prints nothing but its year and, at most, its length ("three months ended|2026").
+  const rest = head.replace(/\b(?:19|20)\d{2}\b/, " ").replace(/\b(for the|three|six|nine|twelve|3|6|9|12|months?|quarters?|years?|weeks?|periods?|ended|ending|as of|at|unaudited|audited)\b|[^a-z0-9]/gi, " ");
+  if (/[a-z0-9]/i.test(rest)) return null;
+  const year = years[0];
+  const dated = [...new Set(fullDates(words).filter((d) => Number(d.slice(0, 4)) === year))];
+  if (dated.length === 1) return dated[0];
+  if (dated.length > 1) return null;
+  const days = new Set([...words.matchAll(MONTH_DAY)].map((m) => `${MONTHS[m[1].toLowerCase().slice(0, 3)]}-${Number(m[2])}`));
+  if (days.size !== 1) return null;
+  const [mon, day] = [...days][0].split("-").map(Number);
+  return day >= 1 && day <= lastDay(year, mon) ? iso(year, mon, day) : null;
+}
+
 /**
  * A column's period from its printed head alone, strictly: one full date ("September 26, 2026", "Sep 30, | 2026")
  * and exactly one length (own head first, else the table's title lines). A period the document's facts use is
@@ -498,18 +587,16 @@ export function printedHead(
   title: string,
   known: KnownPeriods,
   statement = false,
+  dateWords = "",
 ): HeadPeriod | null {
   const head = key.replace(/\|/g, " ");
   if (NOT_PERIOD_HEAD.test(head)) return null;
-  const dates = [
-    ...head.matchAll(
-      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+((?:19|20)\d{2})\b/gi,
-    ),
-  ];
-  if (dates.length !== 1) return null;
-  const [, mon, day, year] = dates[0];
-  const end = `${year}-${String(MONTHS[mon.toLowerCase().slice(0, 3)]).padStart(2, "0")}-${day.padStart(2, "0")}`;
-  const asOf = /\bas of\b/i.test(head);
+  const words = `${title} ${dateWords}`;
+  const end = headEnd(head, words, known);
+  if (!end) return null;
+  // A date the head does not print in full was completed from the title lines or the fiscal calendar.
+  const completed = fullDates(head).length === 0;
+  const asOf = /\bas of\b/i.test(head) || (completed && /\bas of\b|\bas at\b/i.test(dateWords) && !lengthsIn(head).size);
   const own = lengthsIn(head);
   if (own.size > 1) return null;
   let months = [...own][0];
@@ -517,6 +604,12 @@ export function printedHead(
     const wide = lengthsIn(title);
     if (wide.size > 1) return null;
     months = [...wide][0];
+    // The length a statement prints under its name ("Three Months Ended March 31, 2020 and 2019").
+    if (months == null && !BALANCE_TITLE.test(title)) {
+      const under = lengthsIn(dateWords);
+      if (under.size > 1) return null;
+      months = [...under][0];
+    }
   }
   if (months === -1) return null;
   const balance = months == null || asOf;
@@ -540,14 +633,9 @@ export function printedHead(
 export function headDate(key: string): { end: string; months?: number } | null {
   const head = key.replace(/\|/g, " ");
   if (NOT_PERIOD_HEAD.test(head)) return null;
-  const dates = [
-    ...head.matchAll(
-      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+((?:19|20)\d{2})\b/gi,
-    ),
-  ];
+  const dates = fullDates(head);
   if (dates.length !== 1) return null;
-  const [, mon, day, year] = dates[0];
-  const end = `${year}-${String(MONTHS[mon.toLowerCase().slice(0, 3)]).padStart(2, "0")}-${day.padStart(2, "0")}`;
+  const end = dates[0];
   const own = lengthsIn(head);
   if (own.size > 1) return { end, months: -1 };
   return own.size ? { end, months: [...own][0] } : { end };
@@ -586,12 +674,13 @@ export function tableHeads(
   title: string,
   known: KnownPeriods,
   statement = false,
+  dateWords = "",
 ): Map<string, HeadPeriod | null> {
   const out = new Map<string, HeadPeriod | null>();
   const firstCol = new Map<string, number>();
   for (const [g, k] of [...keys].sort((a, b) => a[0] - b[0])) {
     if (!/\d/.test(k) || out.has(k)) continue;
-    out.set(k, printedHead(k, title, known, statement));
+    out.set(k, printedHead(k, title, known, statement, dateWords));
     firstCol.set(k, g);
   }
   const got = [...out].filter((x): x is [string, HeadPeriod] => !!x[1]);
@@ -620,7 +709,7 @@ export function tableHeads(
       .filter((e, i, all) => i === 0 || e !== all[i - 1]);
     const down = ends.every((e, i) => i === 0 || e < ends[i - 1]);
     const up = ends.every((e, i) => i === 0 || e > ends[i - 1]);
-    if (!down && !up && !yearAgoThenPrior(ends)) for (const [k] of xs) refuse(k);
+    if (!down && !up && !yearAgoThenPrior(ends, xs[0][1].months === 0)) for (const [k] of xs) refuse(k);
   }
   return out;
 }
@@ -630,12 +719,14 @@ export function tableHeads(
  * this one ("March 28, 2015 | March 29, 2014 | December 31, 2014", how Entegris and many others print their
  * quarter). The dates say so themselves: the second about a year before the first, the third about a quarter.
  */
-function yearAgoThenPrior(ends: string[]): boolean {
+function yearAgoThenPrior(ends: string[], balance = false): boolean {
   if (ends.length !== 3) return false;
   const days = (a: string, b: string) => (Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
   const year = days(ends[0], ends[1]);
   const quarter = days(ends[0], ends[2]);
-  return year >= 355 && year <= 378 && quarter >= 80 && quarter <= 100;
+  // A balance sheet's third column is the last year-end, one to three quarters back ("September 30, 2026 |
+  // September 30, 2025 | December 31, 2025", how FirstCash, Enova and Simpson print theirs).
+  return year >= 355 && year <= 378 && quarter >= 80 && quarter <= (balance ? 290 : 100);
 }
 
 const STATEMENT_TITLE =
@@ -696,7 +787,7 @@ export function printedScaleLine(text: string): string {
 /** Whether a table's title or the text printed above its first figures names a financial statement. */
 export function statementTitle(title: string, headText = ""): boolean {
   // A printed title decides; the heads only speak for a table printing none.
-  const x = title.trim() ? title : headText;
+  const x = healTitle(title.trim() ? title : headText);
   return STATEMENT_TITLE.test(x) && !NOT_STATEMENT.test(x);
 }
 const LEAD_TITLE =
@@ -704,15 +795,29 @@ const LEAD_TITLE =
 /**
  * A statement's title printed just before its table when the captions found none ("Walmart Inc. Condensed
  * Consolidated Statements of Income (Unaudited)" → "Condensed Consolidated Statements of Income"): the last
- * statement name in the last 120 characters of the lead text.
+ * statement name in the last 200 characters of the lead text (a statement prints its periods and its scale
+ * under its name: "... Statements of Operations Three and Nine Month Periods Ended September 28, 2025 and
+ * September 27, 2026 (In Thousands Except Per Share Amounts) (Unaudited)").
  */
+const LEAD_REACH = 200;
+/**
+ * What a statement prints under its name before its table: the lead text after the last statement name, where
+ * its periods are dated ("As of March 31, 2020, and December 31, 2019"). Empty when the lead names none.
+ */
+export function leadDates(lead: string | undefined): string {
+  const tail = healTitle((lead ?? "").replace(/\s+/g, " ").trim()).slice(-LEAD_REACH);
+  const last = [...tail.matchAll(LEAD_TITLE)].at(-1);
+  return last ? tail.slice(last.index! + last[0].length).trim() : "";
+}
 export function leadTitle(lead: string | undefined): string {
-  const tail = (lead ?? "").replace(/\s+/g, " ").trim().slice(-120);
+  const tail = healTitle((lead ?? "").replace(/\s+/g, " ").trim()).slice(-LEAD_REACH);
   const hits = [...tail.matchAll(LEAD_TITLE)];
   const last = hits.at(-1)?.[0]?.trim() ?? "";
-  return last && !NOT_STATEMENT.test(tail.slice(Math.max(0, tail.lastIndexOf(last) - 40)))
-    ? last
-    : "";
+  if (!last || NOT_STATEMENT.test(tail.slice(Math.max(0, tail.lastIndexOf(last) - 40)))) return "";
+  // Under its name a statement prints its periods, its scale and "(Unaudited)": running text after the name
+  // ("... Statements of Operations. Revenue by product line was as follows:") leads another table.
+  const after = tail.slice(tail.lastIndexOf(last) + last.length);
+  return /[.:;]\s+[A-Z][a-z]|\b(following|below|follows|tables?|see|summar\w+|includ\w+|compared)\b/i.test(after) ? "" : last;
 }
 
 interface Located {
@@ -901,6 +1006,7 @@ export function fillDocument(input: FillInput): DocFill {
     ends: new Set(),
     calendar: input.calendar,
     filed: input.filed ?? input.facts.find((f) => f.filed)?.filed ?? input.meta?.filed ?? null,
+    exact: input.exact,
   };
   for (const f of input.facts) {
     known.ends.add(f.period_end);
@@ -908,9 +1014,9 @@ export function fillDocument(input: FillInput): DocFill {
   }
   // Tables the facts cover in part, and tables no fact sits in whose column heads the document settles.
   // A length phrase printed over the whole table (its title, or a head in the label column).
-  const lengthWordsOf = (table: GridTable, first: number) =>
+  const lengthWordsOf = (table: GridTable, first: number, title: string) =>
     [
-      input.captions?.get(table.index)?.title ?? "",
+      title,
       ...table.rows
         .slice(0, first)
         .flatMap((r) => r.cells.filter((c) => c.col === 0).map((c) => c.text)),
@@ -919,14 +1025,26 @@ export function fillDocument(input: FillInput): DocFill {
   const statements: PrintedStatement[] = [];
   const isStatement = new Set<number>();
   const headsOf = new Map<number, Map<string, HeadPeriod | null>>();
+  /** The title each table is read under: its caption's, else the statement name printed just before it. */
+  const titleOf = new Map<number, string>();
+  /** The joined column heads of each table, to recognise a statement carried on in the next table. */
+  const headLine = new Map<number, string>();
   for (const table of grid) {
     const first = firstFigureRow(table);
     if (first < 0) continue;
-    const title = input.captions?.get(table.index)?.title || leadTitle(table.lead);
+    const keys = headerKeys(table, first);
+    headLine.set(table.index, [...keys].sort((a, b) => a[0] - b[0]).map((x) => x[1]).join("¦"));
+    let title = input.captions?.get(table.index)?.title || leadTitle(table.lead);
     const headText = table.rows
       .slice(0, first)
       .flatMap((r) => r.cells.map((c) => c.text))
       .join(" ");
+    // A statement carried on in a second table: no title of its own, nothing printed between the two, and the
+    // same column heads (HA Sustainable prints its financing cash flows so, Redwire its investing ones).
+    const prev = table.index - 1;
+    if (!title && !(table.lead ?? "").trim() && isStatement.has(prev) && /\d/.test(headLine.get(table.index)!) && headLine.get(prev) === headLine.get(table.index))
+      title = titleOf.get(prev) ?? "";
+    titleOf.set(table.index, title);
     const rows = table.rows.filter((r, i) => i >= first && !r.hidden && hasFigure(r)).length;
     if (rows >= 5 && statementTitle(title, headText)) {
       statements.push({ t: table.index, title: title || cleanLabel(headText).slice(0, 80), rows });
@@ -935,10 +1053,12 @@ export function fillDocument(input: FillInput): DocFill {
     headsOf.set(
       table.index,
       tableHeads(
-        headerKeys(table, first),
-        lengthWordsOf(table, first),
+        keys,
+        lengthWordsOf(table, first, title),
         known,
         isStatement.has(table.index),
+        // What the statement prints under its name, where its columns are dated when the heads print years only.
+        isStatement.has(table.index) ? leadDates(table.lead) : "",
       ),
     );
   }
@@ -1192,7 +1312,7 @@ export function fillDocument(input: FillInput): DocFill {
     // Table name of the filled lines, from what the document prints (never the reader's own name for the table,
     // which drifts between releases): the statement kind, else the printed title, else the reader's name.
     const bd =
-      printedTableName(cap?.title || statements.find((x) => x.t === t)?.title || "") ??
+      printedTableName(titleOf.get(t) || cap?.title || statements.find((x) => x.t === t)?.title || "") ??
       mode(xs.map((x) => x.f.breakdown).filter((b): b is string => !!b)) ??
       null;
     /** The table is a statement of flows: its lines are flows unless named as a point in time. */

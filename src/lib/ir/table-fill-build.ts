@@ -211,6 +211,8 @@ export async function fillCompany(
   const rows = new Map((opts.docs ?? []).map((d) => [d.id, d]));
   const ids = fillDocs(stored, opts.maxDocs ?? FILL_HISTORY_DOCS, opts.docs, opts.older);
   const calendar = fiscalCalendar(stored, opts.reports);
+  // Period ends known to the day: the report dates, and the ends at least two stored flow figures use.
+  const exact = exactEnds(stored, opts.reports);
   const docMeta = new Map<string, { filed: string | null; kind: string | null }>();
   const byDoc = new Map<string, IrFact[]>();
   for (const f of stored)
@@ -281,6 +283,7 @@ export async function fillCompany(
       captions: new Map(caps.map((c) => [c.t, { title: c.title, unit: c.unit }])),
       filed: date,
       calendar,
+      exact,
       statementsOnly: tableFacts.length < 2,
       meta: row ? { filed: date ?? row.filed, kind: row.kind, accn: null, doc: null } : undefined,
     });
@@ -383,6 +386,29 @@ export function tableDocRows(
     )
     .sort((a, b) => at(b)!.localeCompare(at(a)!) || a.id.localeCompare(b.id))
     .map((r) => ({ id: r.id, filed: r.filed, kind: r.kind, title: r.title, ...(r.filed ? {} : { placed: at(r)! }) }));
+}
+
+/**
+ * The quarter and year ends of a company's SEC statement file (`CompanyDataset.statements`: quarterly and
+ * annual, each statement with its `periods`), newest first: the periods its own 10-Q and 10-K filings report.
+ */
+export function statementPeriodEnds(file: {
+  statements?: Record<string, Record<string, { periods?: { end?: string }[] } | undefined> | undefined>;
+}): string[] {
+  const out = new Set<string>();
+  for (const freq of Object.values(file.statements ?? {}))
+    for (const st of Object.values(freq ?? {}))
+      for (const p of st?.periods ?? []) if (/^\d{4}-\d{2}-\d{2}$/.test(p.end ?? "")) out.add(p.end!);
+  return [...out].sort().reverse();
+}
+
+/** Period ends known to the day: the 10-Q and 10-K report dates and every end at least two stored flow figures use. */
+export function exactEnds(facts: IrFact[], reports: string[] = []): string[] {
+  const n = new Map<string, number>();
+  for (const f of facts)
+    if ([3, 6, 9, 12].includes(f.months) && /^\d{4}-\d{2}-\d{2}$/.test(f.period_end ?? ""))
+      n.set(f.period_end, (n.get(f.period_end) ?? 0) + 1);
+  return [...new Set([...reports.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r)), ...[...n].filter(([, k]) => k >= 2).map(([e]) => e)])].sort();
 }
 
 /**
