@@ -180,3 +180,31 @@ describe("a period that does not tie", () => {
     expect(later.get("k6|q|2026-06-30")?.ok).toBe(true);
   });
 });
+
+describe("a build's \"selected lines\" verdict", () => {
+  // Apple's cost of sales, December 2025 quarter, in millions: products 67,478 and services 7,047 print and
+  // add up to the total 74,525.
+  it("gives way when the table's own parts are all printed and add up to the total", async () => {
+    const { sectionChecks } = await import("@/lib/ir/statements");
+    const mk = (k: string, label: string, v: number, total = false, parent: string | null = null): PayloadSeries =>
+      ({ k, cat: "cost", met: "cost", label, parent, total, unit: "usd", q: { "2025-12-27": { v: v * 1e6, x: v.toLocaleString("en-US"), m: 3, d: 0, l: [1, k === "t" ? 9 : k === "p" ? 7 : 8, 1] } }, y: {} }) as PayloadSeries;
+    const series = [mk("p", "Products", 67478, false, "t"), mk("s", "Services", 7047, false, "t"), mk("t", "Total cost of sales", 74525, true)];
+    const byKey = new Map(series.map((x) => [x.k, x]));
+    const sec = {
+      id: "0:1",
+      rows: [
+        { kind: "line", k: "p", ks: ["p"], depth: 1, total: false, up: 2 },
+        { kind: "line", k: "s", ks: ["s"], depth: 1, total: false, up: 2 },
+        { kind: "line", k: "t", ks: ["t"], depth: 0, total: true },
+      ],
+      keys: ["p", "s", "t"],
+    } as never;
+    const stored = [{ k: "t", e: "2025-12-27", kind: "q" as const, total: 74525e6, sum: 67478e6, ok: false, n: 1, partial: true }];
+    const got = sectionChecks(sec, byKey, stored).get("t|q|2025-12-27");
+    expect(got).toMatchObject({ ok: true, n: 2, sum: 74525e6 });
+    expect(got?.partial).toBeUndefined();
+    // With a part missing for the period, the build's verdict stands.
+    delete byKey.get("s")!.q["2025-12-27"];
+    expect(sectionChecks(sec, byKey, stored).get("t|q|2025-12-27")?.partial).toBe(true);
+  });
+});

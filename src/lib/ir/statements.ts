@@ -1612,8 +1612,21 @@ export function sectionChecks(
         if (!x || x.total !== cell.v) continue;
         // A passed stored check remains tied to its actual reported total. For a failed
         // check, require this table's own comparable components before making a claim.
-        if (x.ok || x.partial) {
+        if (x.ok && !x.partial) {
           out.set(key, x);
+          continue;
+        }
+        // A "selected lines" verdict of the build stands unless this table's own parts, all printed for the
+        // period, add up to the total exactly: then they are all its parts (Apple's total cost of sales of
+        // December 2025 carried the mark although products and services print and add up to it).
+        if (x.partial) {
+          const cs = parts.map((_, j) => pc[j].cells[e]);
+          const whole =
+            parts.length >= 2 &&
+            cs.every((c) => !!c && c.m === cell.m) &&
+            Math.abs(cs.reduce((n, c) => n + c!.v, 0) - cell.v) <= Math.max(1, Math.abs(cell.v) * 1e-9);
+          if (whole) out.set(key, { k: x.k, e: x.e, kind: x.kind, total: cell.v, sum: cell.v, ok: true, n: parts.length, by: "block" });
+          else out.set(key, x);
           continue;
         }
         const parent = byKey.get(owner);
