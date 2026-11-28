@@ -13,7 +13,7 @@
 import { periodGrids } from "@/lib/ir/periods";
 import type { IrPayload, PayloadSeries } from "@/lib/ir/payload";
 import { missingStatements, sectionKind, sectorOf, type SectionKind } from "@/lib/ir/sector-order";
-import { assembleStatements, linesLeftOut, rowCells, sectionChecks, type Statement, type StatementRow } from "@/lib/ir/statements";
+import { assembleStatements, checkOptions, rowCells, sectionChecks, type Statement, type StatementRow } from "@/lib/ir/statements";
 
 /** Quarters back from the newest: the newest 8, the next 12, the next 20, anything older. */
 export const AUDIT_BANDS = ["q8", "q20", "q40", "older"] as const;
@@ -87,10 +87,10 @@ export function auditPayload(p: IrPayload, opts: { sector?: string | null; indus
   let lines = 0;
   let old = 0;
   const stored = new Map(p.checks.map((c) => [`${c.k}|${c.kind === "fy" ? "y" : "q"}|${c.e}`, c]));
-  const partial = linesLeftOut(p);
+  // As the page marks them.
+  const how = checkOptions(p);
 
   for (const sec of front) {
-    if (sec.basis === "ytd") continue;
     const own: { row: Line; cells: Record<string, unknown>; held: Record<string, unknown> }[] = [];
     const covered = new Set<string>();
     for (const r of sec.rows) {
@@ -144,7 +144,7 @@ export function auditPayload(p: IrPayload, opts: { sector?: string | null; indus
       if (!cur || st.depth > cur.depth || (st.depth === cur.depth && st.rows > cur.rows)) best.set(kind, st);
     }
     // Totals by period.
-    const checks = sectionChecks(sec, byKey, stored, partial);
+    const checks = sectionChecks(sec, byKey, stored, how);
     sec.rows.forEach((t) => {
       if (t.kind !== "line" || t.old) return;
       for (const freq of ["q", "y"] as const) {

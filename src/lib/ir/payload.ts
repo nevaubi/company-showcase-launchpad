@@ -139,10 +139,14 @@ export type PayloadAt = [number, number, number] | [number, number, number, Prin
  * Version of what the build stores. 2: label-map drops keep printed table figures (kpis.ts `applyLabelMap`)
  * and `series.at` carries each printing's differing figures. 3: table fill (rows the readers left out, read
  * from the stored documents, cells marked `how: "printed"`), the printed row layout (`PayloadTable.rows`),
- * fill conflicts and `stats.quality`. A stored payload with a lower `build` (or none) still lays out, with the
- * rows and figures of its own build: the worker should rebuild it.
+ * fill conflicts and `stats.quality`. 4, 5: the document plan and the page budget (doc-plan.ts,
+ * payload-budget.ts). 6: statements read back to fifteen years from the stored releases, each filled table's
+ * printed columns (`PayloadTable.cols`), and the reading guards of November 2026 (hidden cells take no column,
+ * pro forma and non-results exhibits left out, a repeated flow is not a balance); payloads of format 5 can
+ * hold figures those rules would not have read. A stored payload with a lower `build` (or none) still lays
+ * out, with the rows and figures of its own build: the worker should rebuild it.
  */
-export const BUILD_FORMAT = 5;
+export const BUILD_FORMAT = 6;
 
 /** Whether a stored payload predates the current build format (the worker rebuilds such companies first). */
 export const needsRebuild = (p: Pick<IrPayload, "build">) => (p.build ?? 1) < BUILD_FORMAT;

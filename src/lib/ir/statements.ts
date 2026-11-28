@@ -19,7 +19,7 @@ import { capitalWords, sentenceCase, type TableCaption } from "@/lib/ir/table-ca
 import { shapeRows } from "@/lib/ir/statement-tree";
 import { basisOf } from "@/lib/ir/kpis";
 import { FILTER_OF, sectionKind, sectorOf, type SectionKind } from "@/lib/ir/sector-order";
-import { printedChecks, type CheckRow } from "@/lib/ir/statement-checks";
+import { printedChecks, type CheckOptions, type CheckRow } from "@/lib/ir/statement-checks";
 
 export type StatementRow =
   /** `k` is the line shown; `ks` every line printed in this row (the same printed cell, or the same name under the
@@ -1504,8 +1504,8 @@ export function sectionChecks(
   sec: Statement,
   byKey: Map<string, PayloadSeries>,
   stored: PayloadCheck[] | Map<string, PayloadCheck>,
-  /** the payload left lines out to fit the page (`linesLeftOut`): see `printedChecks` */
-  partial = false,
+  /** how far the read-time checks may go (`checkOptions` for a payload on the page) */
+  opts: CheckOptions = {},
 ): Map<string, PayloadCheck> {
   const map =
     stored instanceof Map
@@ -1549,8 +1549,10 @@ export function sectionChecks(
     }
   });
   // Totals and results the build stored no passing check for: what the section's own rows prove
-  // (statement-checks.ts). A year-to-date section's rows are not quarter or year figures.
-  if (sec.basis !== "ytd") {
+  // (statement-checks.ts), from the quarter and year figures. A year-to-date section has them too (a cash
+  // flow statement printed for the nine months only: first quarters printed, the others calculated), and the
+  // page shows them wherever it shows quarters or years.
+  {
     const rows: CheckRow[] = [];
     sec.rows.forEach((r, i) => {
       if (r.kind !== "line") return;
@@ -1575,7 +1577,7 @@ export function sectionChecks(
         },
       });
     });
-    for (const [key, c] of printedChecks(rows, (k) => out.has(k), partial)) out.set(key, c);
+    for (const [key, c] of printedChecks(rows, (k) => out.has(k), opts)) out.set(key, c);
   }
   return out;
 }
@@ -1589,6 +1591,15 @@ export function linesLeftOut(p: Pick<IrPayload, "stats">): boolean {
   return (p.stats.quality?.budget?.steps ?? []).some(
     (x) => (x.step === "more" || x.step === "displayed" || x.step === "old") && x.dropped > 0,
   );
+}
+
+/**
+ * How the page checks a payload's totals (`sectionChecks`): whether lines were left out of it, and the first
+ * period in which a total may be marked as not adding up (the cut-off for current lines: fifteen months before
+ * the newest period).
+ */
+export function checkOptions(p: IrPayload): CheckOptions {
+  return { partial: linesLeftOut(p), offSince: currentCut(p) || undefined };
 }
 
 /** Lines no printed table or slide places (figures read from sentences): listed apart, by category. */

@@ -101,12 +101,12 @@ describe("a total's periods over a long history", () => {
     expect(m.get("k5|q|2025-06-28")?.ok).toBe(true);
   });
   it("with lines left out of the page, only when one document prints the total and every part", () => {
-    const same = printedChecks(oneOff([0, 0, 0, 0, 1, 1, 1, 1]), () => false, true);
+    const same = printedChecks(oneOff([0, 0, 0, 0, 1, 1, 1, 1]), () => false, { partial: true });
     expect(same.get("k5|q|2025-09-27")?.ok).toBe(false);
     // The last period's parts come from other documents than its total.
     const rows = oneOff([0, 0, 0, 0, 1, 1, 1, 1]);
     rows[5].q.cells["2025-09-27"].d = 2;
-    const mixed = printedChecks(rows, () => false, true);
+    const mixed = printedChecks(rows, () => false, { partial: true });
     expect(mixed.has("k5|q|2025-09-27")).toBe(false);
     expect(mixed.get("k5|q|2025-06-28")?.ok).toBe(true);
   });
@@ -140,5 +140,43 @@ describe("a result of the lines above it, where older periods held other lines",
   });
   it("without that line on the page, two periods off in six are too many for a formula", () => {
     expect(printedChecks(rows.slice(0, 4), () => false).size).toBe(0);
+  });
+});
+
+describe("a period that does not tie", () => {
+  // Netflix's financing activities, in thousands, as printed in its releases of 2025 and 2026.
+  const ENDS6 = ["2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"];
+  const line = (i: number, label: string, vals: number[]): CheckRow => {
+    const cells = Object.fromEntries(vals.map((v, n) => [ENDS6[n], { v: v * 1e3, m: 3, x: v.toLocaleString("en-US") } as PayloadCell]));
+    return { i, label, unit: "usd", pit: false, total: false, q: { cells, from: Object.fromEntries(ENDS6.map((e) => [e, `k${i}`])) }, y: { cells: {}, from: {} }, step: () => 1e3 };
+  };
+  const financing = () => [
+    line(0, "Proceeds from issuance of debt", [0, 0, 0, 0, 0, 992_550]),
+    line(1, "Repayments of debt", [-1_033_450, 0, 0, 0, 0, 0]),
+    line(2, "Proceeds from issuance of common stock", [169_066, 70_215, 76_082, 49_310, 59_980, 74_674]),
+    line(3, "Repurchases of common stock", [-1_654_327, -1_856_885, -2_079_559, -1_270_588, -4_714_403, -4_796_725]),
+    line(4, "Taxes paid related to net share settlement of equity awards", [-6_114, -6_196, -5_985, -29_230, -6_631, -5_165]),
+    line(5, "Other financing activities", [21_957, 55_837, -67_948, 19_694, -8_573, -20_306]),
+    line(6, "Net cash used in financing activities", [-2_502_868, -1_737_029, -2_077_410, -1_230_814, -4_669_627, -3_754_972]),
+  ];
+  it("is not marked when a line printed straight above the terms carries the difference", () => {
+    const m = printedChecks(financing(), () => false);
+    // Five quarters tie without the debt issue…
+    for (const e of ENDS6.slice(0, 5)) expect(m.get(`k6|q|${e}`)?.ok).toBe(true);
+    // …and the quarter of the issue (992,550 above the terms) is left unmarked, not marked as off.
+    expect(m.has("k6|q|2026-09-30")).toBe(false);
+  });
+  it("is marked when nothing above explains it", () => {
+    const rows = financing();
+    rows[0].q.cells["2026-09-30"].v = 0;
+    expect(printedChecks(rows, () => false).get("k6|q|2026-09-30")?.ok).toBe(false);
+  });
+  it("is marked only from the date the page gives: older periods show what ties and nothing else", () => {
+    const rows = financing();
+    rows[0].q.cells["2026-09-30"].v = 0;
+    expect(printedChecks(rows, () => false, { offSince: "2026-07-01" }).get("k6|q|2026-09-30")?.ok).toBe(false);
+    const later = printedChecks(rows, () => false, { offSince: "2026-10-01" });
+    expect(later.has("k6|q|2026-09-30")).toBe(false);
+    expect(later.get("k6|q|2026-06-30")?.ok).toBe(true);
   });
 });

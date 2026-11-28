@@ -122,3 +122,47 @@ describe("sentenceCase", () => {
     expect(keep.has("CCB")).toBe(true);
   });
 });
+
+// Stamps and one-cell titles, as printed in the stored documents.
+describe("tableCaptions: stamps and titles sharing a cell with the company's name", () => {
+  // NextEra Energy, third quarter 2026 exhibit: "Preliminary" in the table's first row.
+  const NEE = `<p>NextEra Energy, Inc.</p><p>Condensed Consolidated Statements of Income</p><p>(millions, except per share amounts)</p><p>(unaudited)</p>
+<table><tr><td>Preliminary</td></tr><tr><td>Three Months Ended September 30, 2026</td><td>FPL</td><td>NEER</td></tr>
+<tr><td>Operating Revenues</td><td>$</td><td>5,421</td><td>$</td><td>2,516</td></tr><tr><td>Fuel, purchased power and interchange</td><td>1,277</td><td>422</td></tr></table>`;
+  // Merck, third quarter 2026 exhibit 99.2: the title broken over lines, then "Table" and "1a".
+  const MRK = `<p>MERCK &amp; CO., INC., RAHWAY, N.J., USA</p><p>CONSOLIDATED<br>STATEMENT OF OPERATIONS - GAAP</p><p>(AMOUNTS<br>IN MILLIONS, EXCEPT PER SHARE FIGURES)</p><p>(UNAUDITED)</p><p>Table</p><p>1a</p>
+<table><tr><td></td><td>3Q 2026</td><td>3Q 2025</td></tr><tr><td>Sales</td><td>$</td><td>18,085</td><td>$</td><td>17,276</td></tr><tr><td>Cost of sales</td><td>4,892</td><td>3,855</td></tr></table>`;
+  // Procter & Gamble, fiscal 2026 fourth quarter release: company, scale and title in one cell.
+  const PG = `<table><tr><td></td></tr><tr><td>THE PROCTER &amp; GAMBLE COMPANY AND SUBSIDIARIES (Amounts in Millions Except Per Share Amounts) Condensed Consolidated Balance Sheets</td></tr>
+<tr><td></td><td>June 30, 2026</td><td>June 30, 2025</td></tr><tr><td>Cash and cash equivalents</td><td>$</td><td>9,942</td><td>$</td><td>9,556</td></tr>
+<tr><td>Accounts receivable</td><td>6,056</td><td>6,185</td></tr></table>`;
+  const PG_RECON = `<table><tr><td>THE PROCTER &amp; GAMBLE COMPANY AND SUBSIDIARIES Reconciliation of Non-GAAP Measures</td></tr>
+<tr><td>Three Months Ended September 30, 2026</td></tr><tr><td>Cost of products sold</td><td>$</td><td>11,678</td><td>$</td><td>(44)</td></tr><tr><td>Gross profit</td><td>11,598</td><td>44</td></tr></table>`;
+  // Costco, fiscal 2026 fourth quarter release: a status line between the title and the table.
+  const COST = `<p>COSTCO WHOLESALE CORPORATION</p><p>CONSOLIDATED BALANCE SHEETS</p><p>(amounts in millions, except par value and share data) (unaudited)</p><p>Subject to Reclassification</p>
+<table><tr><td></td><td>August 30, 2026</td><td>August 31, 2025</td></tr><tr><td>Cash and cash equivalents</td><td>$</td><td>20,207</td><td>$</td><td>14,161</td></tr><tr><td>Short-term investments</td><td>1,094</td><td>1,123</td></tr></table>`;
+
+  it("a status stamp in the table's first row is not its title", () => {
+    expect(tableCaptions(NEE, "NextEra Energy")[0].title).toBe("Condensed Consolidated Statements of Income");
+  });
+  it("a table number is not a title", () => {
+    expect(tableCaptions(MRK, "Merck")[0].title).toBe("STATEMENT OF OPERATIONS - GAAP");
+  });
+  it("a title printed after the company's name and the scale line in one cell is read out of it", () => {
+    const [c] = tableCaptions(PG, "Procter & Gamble");
+    expect(c.title).toBe("Condensed Consolidated Balance Sheets");
+    expect(c.unit).toBe("(Amounts in Millions Except Per Share Amounts)");
+    expect(tableCaptions(PG_RECON, "Procter & Gamble")[0].title).toBe("Reconciliation of Non-GAAP Measures");
+  });
+  it("a status line printed after the title is skipped", () => {
+    const [c] = tableCaptions(COST, "Costco");
+    expect(c.title).toBe("CONSOLIDATED BALANCE SHEETS");
+    expect(c.unit).toBe("(amounts in millions, except par value and share data)");
+  });
+  it("tags, exhibit numbers and footnote legends name nothing", () => {
+    for (const stamp of ["Exhibit 99.1", "Category: PG-IR", "N/A Not applicable.", "Document", "each segment."]) {
+      const html = `<p>Consolidated Statements of Income</p><p>${stamp}</p><table><tr><td></td><td>2026</td><td>2025</td></tr><tr><td>Revenue</td><td>100</td><td>90</td></tr></table>`;
+      expect(tableCaptions(html)[0].title, stamp).toBe("Consolidated Statements of Income");
+    }
+  });
+});

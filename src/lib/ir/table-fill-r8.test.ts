@@ -302,7 +302,7 @@ describe("AppLovin 3Q26 release: no stored fact", () => {
     // Printed rows of a statement that became no section count as missing.
     expect(q.main.printed).toBe(fill.statements.reduce((n, s) => n + s.rows, 0));
     expect(q.main.after).toBeLessThan(q.main.printed);
-    expect(BUILD_FORMAT).toBe(5);
+    expect(BUILD_FORMAT).toBe(6);
   });
   it("chooses the company's table documents by their rows", () => {
     const row = (

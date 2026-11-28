@@ -30,6 +30,29 @@ const ENTITY =
 const SUBSIDIARIES =
   /\b(inc|corp|corporation|co|company|incorporated|ltd|plc|llc|n\.v|s\.a|ag|se)\.?,?\s+(and|&)\s+(its\s+)?(consolidated\s+)?subsidiaries\s*$/i;
 const NOISE = /^\(?(unaudited|continued|in \w+)\)?$/i;
+/**
+ * Stamps and tags printed near a table that name nothing: a status ("Preliminary", "Subject to
+ * reclassification"), a table or exhibit number ("Table", "Table 1a", "Exhibit 99.1"), an export's own words
+ * ("Document", "Category: PG-IR"), a footnote legend ("N/A Not applicable."). NextEra's statements read
+ * "Preliminary", Merck's "Table", Costco's balance sheet "Subject to reclassification".
+ */
+const STAMP =
+  /^\(?(preliminary|draft|subject to reclassification|document|table(\s+\d+[a-z]?)?|exhibit(\s+\d+(\.\d+)?)?|category\s*:.*|(n\/a|n\.?m\.?)\b.*)\)?\.?$/i;
+/** The company's legal name printed in one cell with the title after it ("THE PROCTER & GAMBLE COMPANY AND SUBSIDIARIES Consolidated Balance Sheets"). */
+const COMPANY_PREFIX =
+  /^.{2,80}?\b(inc|corp|corporation|co|company|incorporated|ltd|plc|llc|n\.v|s\.a|ag|se)\.?,?\s+(and|&)\s+(its\s+)?(consolidated\s+)?subsidiaries\b[.,:]?\s+(?=\S)/i;
+/** A parenthesised scale line inside a longer cell. */
+const SCALE_GROUP = /\(\s*(\$\s*)?(in|amounts in|dollars in|\$ in)\s+(millions|thousands|billions)\b[^)]*\)/i;
+
+/**
+ * A title cell without the company's name before it and the scale line inside it: Procter & Gamble prints
+ * "THE PROCTER & GAMBLE COMPANY AND SUBSIDIARIES (Amounts in Millions Except Per Share Amounts) Consolidated
+ * Statements of Cash Flows" in one cell. The text as it is when it holds neither.
+ */
+export function titleCore(s: string): string {
+  const rest = s.replace(COMPANY_PREFIX, "").replace(SCALE_GROUP, " ").replace(/\s+/g, " ").trim();
+  return rest.length >= 4 ? rest : s;
+}
 
 const text = (s: string) =>
   decodeHtml(
@@ -59,7 +82,9 @@ function titleLike(s: string, company?: string) {
   )
     return false;
   if (!/[a-z]{3,}/i.test(s)) return false;
-  if (NOISE.test(s) || SCALE.test(s)) return false;
+  if (NOISE.test(s) || STAMP.test(s) || SCALE.test(s)) return false;
+  // The tail of a sentence broken over two lines ("each segment.").
+  if (/^[a-z]/.test(s) && /[.,;]$/.test(s)) return false;
   if (ENTITY.test(s) || SUBSIDIARIES.test(s)) return false;
   // A sentence introducing the table ("The following table summarizes our financial results ...").
   if (/^(the following|below|the table below|this table)\b/i.test(s) || /\b(summarizes|sets forth|presents|shows)\b/i.test(s)) return false;
@@ -110,10 +135,17 @@ function captionOf(t: ParsedTable, before: string[], company?: string): TableCap
     const f = filled(r);
     if (f.length !== 1) continue;
     const s = f[0];
-    if (!out.unit && SCALE.test(s)) out.unit = s.match(SCALE)![0].trim();
+    // The company's name and the scale line printed in the title's own cell are taken off it.
+    const core = titleCore(s);
+    const inFirst = r.findIndex((c) => c.trim()) <= 1;
+    if (core !== s) {
+      const scale = s.match(SCALE_GROUP)?.[0].trim();
+      if (!out.unit && scale) out.unit = scale;
+      if (!out.title && inFirst && titleLike(core, company)) out.title = core;
+    } else if (!out.unit && SCALE.test(s)) out.unit = s.match(SCALE)![0].trim();
     // A title sits in the first columns (the label column, or the one after an empty spacer); a lone cell over the figure columns is a
     // column head (Citigroup's "3Q26 Increase/" over "(Decrease) from").
-    else if (!out.title && r.findIndex((c) => c.trim()) <= 1 && titleLike(s, company)) out.title = s;
+    else if (!out.title && inFirst && titleLike(s, company)) out.title = s;
   }
   // A title printed in the label cell of the period-heads row (Texas Instruments: "Consolidated Statements of
   // Income" beside "For Three Months Ended September 30,").

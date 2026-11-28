@@ -42,6 +42,8 @@ const ADDITIVE = new Set(["usd", "count"]);
 /** Lines above a result tried with signs (2^n sign sets), and as a plain sum. */
 export const SIGNED_RUN = 6;
 export const SUM_RUN = 15;
+/** Lines above a result's terms looked at to explain a period that does not tie. */
+export const BESIDE = 6;
 
 export interface CheckFigures {
   cells: Record<string, PayloadCell>;
@@ -172,6 +174,28 @@ function solve(
 const either = (result: CheckRow, terms: CheckRow[], signed: boolean, parts: boolean, changed: ReadonlySet<string>) =>
   solve(result, terms, signed, parts) ?? (changed.size ? solve(result, terms, signed, parts, changed) : null);
 
+/** Whether figures of some of the lines beside the terms (at most six, as printed) add up to the difference. */
+function explains(beside: CheckRow[], p: Period, diff: number, tol: number): boolean {
+  const vs = beside
+    .map((r) => {
+      const c = figures(r, p.f).cells[p.e];
+      return c && c.m === p.cell.m && c.v !== 0 ? { v: c.v, slack: slack(r, c) } : null;
+    })
+    .filter((x): x is { v: number; slack: number } => !!x)
+    .slice(-BESIDE);
+  for (let mask = 1; mask < 1 << vs.length; mask++) {
+    let sum = 0;
+    let room = tol;
+    vs.forEach((x, i) => {
+      if (!((mask >> i) & 1)) return;
+      sum += x.v;
+      room += x.slack;
+    });
+    if (Math.abs(sum - diff) <= room || Math.abs(sum + diff) <= room) return true;
+  }
+  return false;
+}
+
 const words = (terms: Term[]) =>
   terms.map((t, i) => `${i === 0 ? (t.sign < 0 ? "−" : "") : t.sign < 0 ? " − " : " + "}${t.row.label}`).join("");
 
@@ -185,9 +209,11 @@ function emit(
   taken: (key: string) => boolean,
   /** "<q|y>|<period end>" in which the section shows a line only earlier documents print */
   changed: Set<string>,
-  /** lines were left out of the payload (see `printedChecks`) */
-  partial: boolean,
+  opts: CheckOptions,
+  /** lines printed straight above the terms, at the result's level: a figure of theirs can explain a period off */
+  beside: CheckRow[] = [],
 ) {
+  const partial = !!opts.partial;
   const signed: Term[] = terms.map((row, i) => ({ row, sign: solved.signs[i] }));
   const sub = signed.filter((t) => t.sign < 0).map((t) => t.row.label);
   const f = by === "formula" ? `${result.label} = ${words(signed)}` : undefined;
@@ -206,6 +232,10 @@ function emit(
     // With lines left out of the payload, the lines a table printed then are not all known: a period is off
     // only when one document prints the result and every term, and they do not add up there.
     if (!ok && partial && p.parts.some((c) => c!.d == null || c!.d !== p.cell.d)) continue;
+    if (!ok && opts.offSince && p.e < opts.offSince) continue;
+    // A line printed straight above the terms that carries the difference in that period was a term then (a
+    // debt issue in one quarter above the lines of every quarter): the period says nothing against the rest.
+    if (!ok && explains(beside, p, p.cell.v - sum, tolOf(result, terms, p))) continue;
     out.set(key, {
       k: owner,
       e: p.e,
@@ -225,14 +255,25 @@ function emit(
  * Checks the section's rows prove for totals and results that have none yet (`taken` says a key already carries
  * a check, which then stands). See the module comment for the rules.
  */
-export function printedChecks(
-  rows: CheckRow[],
-  taken: (key: string) => boolean,
+export interface CheckOptions {
   /**
    * The payload left lines out to fit the page (payload-budget.ts): which lines a table printed in an earlier
    * period is then not fully known, and a period is marked as not adding up only within one document.
    */
-  partial = false,
+  partial?: boolean;
+  /**
+   * The first period end ("YYYY-MM-DD") in which a period may be marked as not adding up. The section's rows
+   * are the newest document's; a release of years ago may have printed a line between them that no stored
+   * figure shows (Disney's discontinued operations of 2019 to 2022), so before this date only the periods
+   * that tie are marked. Unset: every period (the audit).
+   */
+  offSince?: string;
+}
+
+export function printedChecks(
+  rows: CheckRow[],
+  taken: (key: string) => boolean,
+  opts: CheckOptions = {},
 ): Map<string, PayloadCheck> {
   const out = new Map<string, PayloadCheck>();
   const byIndex = new Map(rows.map((r) => [r.i, r]));
@@ -260,7 +301,7 @@ export function printedChecks(
       either(t, parts, false, true, changed) ??
       (parts.length <= SIGNED_RUN + 2 ? either(t, parts, true, false, changed) : null);
     if (!solved) continue;
-    emit(out, t, parts, solved, "block", taken, changed, partial);
+    emit(out, t, parts, solved, "block", taken, changed, opts);
     settled.add(t.i);
   }
 
@@ -276,7 +317,7 @@ export function printedChecks(
       const run = above.slice(above.length - k);
       const solved = either(r, run, k <= SIGNED_RUN, false, changed);
       if (!solved) continue;
-      emit(out, r, run, solved, "formula", taken, changed, partial);
+      emit(out, r, run, solved, "formula", taken, changed, opts, above.slice(0, above.length - k));
       return;
     }
   });

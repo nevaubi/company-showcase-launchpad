@@ -107,7 +107,7 @@ import {
   scaleNote,
   unplacedLines,
   sectionChecks,
-  linesLeftOut,
+  checkOptions,
   visibleRows,
   type Statement,
   type StatementRow,
@@ -288,7 +288,7 @@ function sectionView(
   const headMap = printedYtd
     ? new Map(cols.map((k) => [k, ytdHead(k)]))
     : uniqueHeads(cols, o.freq, o.fy);
-  const tableChecks = sectionChecks(sec, byKey, checks, linesLeftOut(p));
+  const tableChecks = sectionChecks(sec, byKey, checks, checkOptions(p));
   let tieOk = 0;
   let tieN = 0;
   const visibleChecks: VisibleStatementCheck[] = [];
