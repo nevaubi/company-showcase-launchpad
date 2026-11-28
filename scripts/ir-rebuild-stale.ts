@@ -2,8 +2,10 @@
  * One bounded pass of the stale IR payload lane (rules in scripts/lib/ir-rebuild-stale.ts): rebuilds
  * companies whose ir_company_series stats lack the current BUILD_FORMAT, banks first, one at a time,
  * from stored facts, label maps and document text. No model or paid API is called.
- *   bun scripts/ir-rebuild-stale.ts [--max=20] [--minutes=15] [--parallel=1] [--skip=JPM,NVDA] [--dry]
+ *   bun scripts/ir-rebuild-stale.ts [--max=20] [--minutes=15] [--parallel=1] [--skip=JPM,NVDA] [--first] [--dry]
  * --skip: companies a reading lane holds now (the loop passes them); left for a later pass.
+ * --first: after the stale payloads, covered companies with no payload at all that have a release or
+ *   supplement stored as HTML: their statements are read straight from those documents (`firstBuildTickers`).
  * --parallel: companies rebuilt side by side (1 to 8), each in a process of its own (`--one=T`, used
  *   only by the pass itself), so one company's memory is given back when it ends and a crash loses
  *   one company. For a catch-up run by hand on an idle machine; the worker keeps one at a time.
@@ -13,7 +15,7 @@
 import { COVERAGE } from "@/lib/coverage";
 import { BUILD_FORMAT } from "@/lib/ir/payload";
 import { rebuildCompany } from "@/lib/ir/rebuild.server";
-import { emptyState, passRunRow, REBUILD_JOB, REBUILD_STATE, rebuildOrder, rebuildSettings, runPass, staleTickers, type RebuildState, type SeriesRow } from "./lib/ir-rebuild-stale";
+import { emptyState, firstBuildTickers, passRunRow, REBUILD_JOB, REBUILD_STATE, rebuildOrder, rebuildSettings, runPass, staleTickers, type RebuildState, type SeriesRow } from "./lib/ir-rebuild-stale";
 import { loadRank, pageAll } from "./lib/rank";
 import { args, dbGate, log, sb } from "./lib/supa";
 
@@ -116,7 +118,29 @@ if (import.meta.main && !args.one) {
     const rows = await pageAll<SeriesRow>((a, b) => sb.from("ir_company_series").select("ticker, build:stats->build, fill:stats->quality->fill, built_at").order("ticker").range(a, b));
     const { stale: staleOn, repairBefore } = settings;
     const stale = staleTickers(rows, BUILD_FORMAT, Date.now(), { stale: staleOn, repairBefore });
-    const order = rebuildOrder(stale, COVERAGE, await loadRank());
+    const rank = await loadRank();
+    // First builds (--first): one small count per covered company without a payload, eight at a time.
+    const firsts: string[] = [];
+    if (args.first !== undefined) {
+      const have = new Set(rows.map((r) => r.ticker));
+      const todo = COVERAGE.map((c) => c.ticker).filter((t) => !have.has(t));
+      const counts = new Map<string, number>();
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: 8 }, async () => {
+          while (next < todo.length) {
+            const t = todo[next++]!;
+            const { count, error } = await sb.from("ir_documents").select("id", { count: "exact", head: true })
+              .eq("ticker", t).in("kind", ["press-release", "supplement"]).in("ext", ["htm", "html"]).or('extract_status.is.null,extract_status.neq."no tables"');
+            if (error) throw new Error(`counting documents of ${t}: ${error.message}`);
+            counts.set(t, count ?? 0);
+          }
+        }),
+      );
+      firsts.push(...firstBuildTickers(COVERAGE, have, counts));
+      log(`${firsts.length} of ${todo.length} companies without a payload have releases stored as HTML (first builds)`);
+    }
+    const order = [...rebuildOrder(stale, COVERAGE, rank), ...rebuildOrder(firsts, COVERAGE, rank)];
     const state = await loadState();
     if (repairBefore !== null) {
       const before = new Date(repairBefore).toISOString();

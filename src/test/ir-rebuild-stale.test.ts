@@ -356,3 +356,12 @@ describe("side by side", () => {
     expect(rebuildSettings({ IR_REBUILD_PARALLEL: "0" }).parallel).toBe(1);
   });
 });
+
+describe("first builds", () => {
+  it("takes covered companies with no payload that have a release stored as HTML, in coverage order", async () => {
+    const { firstBuildTickers } = await import("../../scripts/lib/ir-rebuild-stale");
+    const coverage = [{ ticker: "ENTG" }, { ticker: "SWKS" }, { ticker: "AAPL" }, { ticker: "NODOC" }, { ticker: "ZERO" }];
+    const got = firstBuildTickers(coverage, new Set(["AAPL"]), new Map([["ENTG", 61], ["SWKS", 68], ["AAPL", 90], ["ZERO", 0]]));
+    expect(got).toEqual(["ENTG", "SWKS"]);
+  });
+});

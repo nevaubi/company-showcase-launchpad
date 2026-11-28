@@ -129,6 +129,20 @@ export function staleTickers(
   return [...out];
 }
 
+/**
+ * Covered companies with no stored payload at all whose stored documents can give one without a model: at
+ * least one release or supplement kept as HTML (`withDocs`, the count per ticker). The table fill reads
+ * their statement tables straight from those documents (`--first` of the script); a company whose documents
+ * print no statement the fill can read ends as "no stored facts" and waits like any failure.
+ */
+export function firstBuildTickers(
+  coverage: readonly { ticker: string }[],
+  haveSeries: ReadonlySet<string>,
+  withDocs: ReadonlyMap<string, number>,
+): string[] {
+  return coverage.map((c) => c.ticker).filter((t) => !haveSeries.has(t) && (withDocs.get(t) ?? 0) > 0);
+}
+
 /** Banks first (largest first), then the rest by rank, unranked ones after in ticker order. */
 export function rebuildOrder(stale: readonly string[], coverage: readonly PriorityCompany[], rank: Map<string, number>): string[] {
   const want = new Set(stale);
